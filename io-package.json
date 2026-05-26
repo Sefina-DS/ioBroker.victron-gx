@@ -1,0 +1,113 @@
+{
+    "common": {
+        "name": "victron-gx",
+        "version": "0.0.1",
+        "news": {
+            "0.0.1": {
+                "en": "initial release",
+                "de": "Erstveröffentlichung",
+                "ru": "Начальная версия",
+                "pt": "lançamento inicial",
+                "nl": "Eerste uitgave",
+                "fr": "Première version",
+                "it": "Versione iniziale",
+                "es": "Versión inicial",
+                "pl": "Pierwsze wydanie",
+                "uk": "Початкова версія",
+                "zh-cn": "首次出版"
+            }
+        },
+        "titleLang": {
+            "en": "Victron GX",
+            "de": "Victron GX",
+            "ru": "Виктрон ГХ",
+            "pt": "Victron GX",
+            "nl": "Victron GX",
+            "fr": "Victron GX",
+            "it": "Victron GX",
+            "es": "Victron GX",
+            "pl": "Victron GX",
+            "uk": "Victron GX",
+            "zh-cn": "Victron GX"
+        },
+        "desc": {
+            "en": "ioBroker adapter for Victron GX devices via local MQTT and Modbus",
+            "de": "ioBroker-Adapter für Victron GX-Geräte über lokales MQTT und Modbus",
+            "ru": "Адаптер ioBroker для устройств Victron GX, работающий через локальные протоколы MQTT и Modbus.",
+            "pt": "Adaptador ioBroker para dispositivos Victron GX via MQTT e Modbus locais",
+            "nl": "ioBroker-adapter voor Victron GX-apparaten via lokale MQTT en Modbus.",
+            "fr": "Adaptateur ioBroker pour appareils Victron GX via MQTT et Modbus locaux",
+            "it": "Adattatore ioBroker per dispositivi Victron GX tramite MQTT e Modbus locali.",
+            "es": "Adaptador ioBroker para dispositivos Victron GX a través de MQTT y Modbus locales.",
+            "pl": "Adapter ioBroker dla urządzeń Victron GX przez lokalny MQTT i Modbus",
+            "uk": "Адаптер ioBroker для пристроїв Victron GX через локальний MQTT та Modbus",
+            "zh-cn": "ioBroker适配器，用于通过本地MQTT和Modbus连接Victron GX设备"
+        },
+        "authors": [
+            "Sefina-DS <ds.sefina@googlemail.com>"
+        ],
+        "keywords": [
+            "energy"
+        ],
+        "licenseInformation": {
+            "type": "free",
+            "license": "MIT"
+        },
+        "platform": "Javascript/Node.js",
+        "icon": "victron-gx.png",
+        "enabled": true,
+        "extIcon": "https://raw.githubusercontent.com/Sefina-DS/ioBroker.victron-gx/main/admin/victron-gx.png",
+        "readme": "https://github.com/Sefina-DS/ioBroker.victron-gx/blob/main/README.md",
+        "loglevel": "info",
+        "tier": 3,
+        "mode": "daemon",
+        "type": "energy",
+        "compact": true,
+        "connectionType": "local",
+        "dataSource": "push",
+        "adminUI": {
+            "config": "json"
+        },
+        "dependencies": [
+            {
+                "js-controller": ">=6.0.11"
+            }
+        ],
+        "globalDependencies": [
+            {
+                "admin": ">=7.0.23"
+            }
+        ]
+    },
+    "native": {
+        "host": "192.168.1.x",
+        "port": "1883",
+        "mqttUsername": "",
+        "mqttPassword": "",
+        "pollingInterval": "5000"
+    },
+    "objects": [],
+    "instanceObjects": [
+        {
+            "_id": "info",
+            "type": "channel",
+            "common": {
+                "name": "Information"
+            },
+            "native": {}
+        },
+        {
+            "_id": "info.connection",
+            "type": "state",
+            "common": {
+                "role": "indicator.connected",
+                "name": "Device or service connected",
+                "type": "boolean",
+                "read": true,
+                "write": false,
+                "def": false
+            },
+            "native": {}
+        }
+    ]
+}

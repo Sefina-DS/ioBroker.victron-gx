@@ -1,0 +1,8 @@
+{
+    "victron-gx adapter settings": "Налаштування адаптера для victron-gx",
+    "IP Address of GX Device": "IP-адреса пристрою GX",
+    "MQTT Port": "Порт MQTT",
+    "MQTT Username": "Ім'я користувача MQTT",
+    "MQTT Password": "Пароль MQTT",
+    "Modbus Polling Interval (ms)": "Інтервал опитування Modbus (мс)"
+}

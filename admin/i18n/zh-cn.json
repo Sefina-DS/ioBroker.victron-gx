@@ -1,0 +1,8 @@
+{
+    "victron-gx adapter settings": "victron-gx的适配器设置",
+    "IP Address of GX Device": "GX设备的IP地址",
+    "MQTT Port": "MQTT 端口",
+    "MQTT Username": "MQTT 用户名",
+    "MQTT Password": "MQTT密码",
+    "Modbus Polling Interval (ms)": "Modbus轮询间隔（毫秒）"
+}

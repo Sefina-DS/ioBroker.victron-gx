@@ -1,0 +1,69 @@
+{
+    "expert": "yes",
+    "cli": false,
+    "adapterName": "victron-gx",
+    "title": "Victron GX",
+    "description": "ioBroker adapter for Victron GX devices via local MQTT and Modbus",
+    "keywords": [
+        "energy"
+    ],
+    "features": [
+        "adapter"
+    ],
+    "adminFeatures": [],
+    "type": "energy",
+    "startMode": "daemon",
+    "connectionType": "local",
+    "dataSource": "push",
+    "connectionIndicator": "yes",
+    "adapterSettings": [
+        {
+            "key": "host",
+            "label": "IP Address of GX Device",
+            "inputType": "text",
+            "defaultValue": "192.168.1.x"
+        },
+        {
+            "key": "port",
+            "label": "MQTT Port",
+            "inputType": "number",
+            "defaultValue": "1883"
+        },
+        {
+            "key": "mqttUsername",
+            "label": "MQTT Username",
+            "inputType": "text",
+            "defaultValue": ""
+        },
+        {
+            "key": "mqttPassword",
+            "label": "MQTT Password",
+            "inputType": "text",
+            "defaultValue": ""
+        },
+        {
+            "key": "pollingInterval",
+            "label": "Modbus Polling Interval (ms)",
+            "inputType": "number",
+            "defaultValue": "5000"
+        }
+    ],
+    "language": "TypeScript",
+    "nodeVersion": "20",
+    "adminUi": "json",
+    "releaseScript": "yes",
+    "indentation": "Space (4)",
+    "quotes": "single",
+    "tools": [
+        "ESLint"
+    ],
+    "eslintConfig": "official",
+    "authorName": "Sefina-DS",
+    "authorGithub": "Sefina-DS",
+    "authorEmail": "ds.sefina@googlemail.com",
+    "gitRemoteProtocol": "SSH",
+    "license": "MIT License",
+    "dependabot": "yes",
+    "target": "github",
+    "creatorVersion": "3.1.5"
+}
