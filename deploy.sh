@@ -22,6 +22,22 @@ echo "║   Victron GX Adapter Deploy              ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
+# ── Sicherheitscheck ──────────────────────────────────────
+if [ ! -f "$SCRIPT_DIR/io-package.json" ]; then
+    echo "❌ FEHLER: Falsches Verzeichnis!"
+    echo "   Script muss aus dem Victron Adapter Ordner gestartet werden."
+    exit 1
+fi
+
+ADAPTER_NAME=$(grep '"name"' "$SCRIPT_DIR/io-package.json" | head -1 | sed 's/.*"name": "\(.*\)".*/\1/')
+if [ "$ADAPTER_NAME" != "victron-gx" ]; then
+    echo "❌ FEHLER: Falscher Adapter! Gefunden: $ADAPTER_NAME"
+    exit 1
+fi
+
+echo "✓ Verzeichnis: $SCRIPT_DIR"
+echo ""
+
 # ── 1. TypeScript bauen ───────────────────────────────────
 if [ "$NO_BUILD" = false ]; then
     echo "▶ Baue TypeScript..."
