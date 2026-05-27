@@ -50,7 +50,7 @@ const RELEVANT_PATHS = {
     "Alarms.LowSoc",
     "Info.ChargeMode",
     "Info.ChargeRequest",
-    // Zellenspannungen
+    // Zellenspannungen (LiFePO4 BMS)
     "Voltages.Cell1",
     "Voltages.Cell2",
     "Voltages.Cell3",
@@ -69,7 +69,6 @@ const RELEVANT_PATHS = {
     "Voltages.Cell16",
     "Voltages.Sum",
     "Voltages.Diff",
-    // Registrierung
     "Serial",
     "ProductName",
     "CustomName"
@@ -122,7 +121,6 @@ const RELEVANT_PATHS = {
     "Ac.L3.Current",
     "Ac.Energy.Forward",
     "Ac.Energy.Reverse",
-    // grid hat keine Serial → ProductName für Erkennung
     "ProductName",
     "CustomName"
   ],
@@ -159,18 +157,20 @@ const RELEVANT_PATHS = {
     "Mgmt.Connection",
     "Mgmt.ProcessName"
   ],
-  // Virtuelle Schalter: über Node-RED auf dem GX angelegt
-  // State ist schreibbar → ioBroker → MQTT Write → GX → Node-RED → Relais
+  // Virtuelle Schalter via Node-RED
+  // Struktur: devices.switch.<Gruppe>.<Serial>.*
+  // State ist schreibbar → ioBroker → MQTT W/ → GX → Node-RED → Relais
   switch: [
-    "SwitchableOutput.output_1.State",
-    "SwitchableOutput.output_1.Status",
+    "State",
+    // schreibbarer Schaltzustand (0=Aus, 1=Ein)
+    "Status",
+    // Rückmeldung Hardware-Status
     "Connected",
     "Serial",
     "ProductName",
     "CustomName",
     "Mgmt.Connection",
     "Mgmt.ProcessName",
-    // Einstellungen für Channel-Name und Gruppierung
     "SwitchableOutput.output_1.Settings.CustomName",
     "SwitchableOutput.output_1.Settings.Group"
   ],
@@ -199,11 +199,18 @@ const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
   "Serial",
   "ProductName",
   "CustomName",
+  "Connected",
   "Mgmt.Connection",
   "Mgmt.ProcessName",
   "SwitchableOutput.output_1.Settings.CustomName",
   "SwitchableOutput.output_1.Settings.Group"
 ]);
+const PATH_REMAP = {
+  switch: {
+    "SwitchableOutput.output_1.State": "State",
+    "SwitchableOutput.output_1.Status": "Status"
+  }
+};
 const UNITS = {
   Soc: "%",
   Voltage: "V",
@@ -221,8 +228,13 @@ const UNITS = {
   "Voltages.Diff": "V"
 };
 const WRITABLE_PATHS = {
-  switch: ["SwitchableOutput.output_1.State"],
+  switch: ["State"],
   vebus: ["Mode", "Ac.In1.CurrentLimit"]
+};
+const WRITE_PATH_REMAP = {
+  switch: {
+    State: "SwitchableOutput/output_1/State"
+  }
 };
 const STALE_TIMEOUT_MS = 5 * 60 * 1e3;
 const PHASE_POWER_PATHS = {
@@ -241,9 +253,7 @@ class VictronGx extends utils.Adapter {
   vrmId = "";
   deviceMap = /* @__PURE__ */ new Map();
   serialMap = /* @__PURE__ */ new Map();
-  // Bereits geloggte Geräte → verhindert Log-Spam beim Keepalive-Refresh
   loggedDevices = /* @__PURE__ */ new Set();
-  // Channels die vollständig angelegt wurden → touchDevice schreibt erst danach
   channelReady = /* @__PURE__ */ new Set();
   constructor(options = {}) {
     super({ ...options, name: "victron-gx" });
@@ -253,7 +263,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── Adapter-Start ────────────────────────────────────────────────────────
   onReady() {
-    void void this.setState("info.connection", false, true);
+    void this.setState("info.connection", false, true);
     const host = this.config.host;
     const port = this.config.port || 1883;
     const username = this.config.mqttUsername;
@@ -265,7 +275,7 @@ class VictronGx extends utils.Adapter {
     this.log.info(`Verbinde mit Victron GX unter ${host}:${port}...`);
     this.connectMqtt(host, port, username, password);
   }
-  // ── MQTT Verbindung ──────────────────────────────────────────────────────
+  // ── MQTT ─────────────────────────────────────────────────────────────────
   connectMqtt(host, port, username, password) {
     const options = {
       port,
@@ -294,11 +304,11 @@ class VictronGx extends utils.Adapter {
     });
     this.mqttClient.on("error", (err) => {
       this.log.error(`MQTT Fehler: ${err.message}`);
-      void void this.setState("info.connection", false, true);
+      void this.setState("info.connection", false, true);
     });
     this.mqttClient.on("offline", () => {
       this.log.warn("MQTT Verbindung getrennt");
-      void void this.setState("info.connection", false, true);
+      void this.setState("info.connection", false, true);
     });
     this.mqttClient.on("reconnect", () => {
       this.log.info("MQTT verbindet neu...");
@@ -323,7 +333,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── Haupt-Message-Handler ────────────────────────────────────────────────
   async handleMessage(topic, payload) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     try {
       const raw = payload.toString();
       if (!raw) {
@@ -349,10 +359,7 @@ class VictronGx extends utils.Adapter {
       const instance = parseInt(instanceStr, 10);
       const path = parts.slice(4).join("/");
       const normalizedPath = path.replace(/\//g, ".");
-      if (!path) {
-        return;
-      }
-      if (!RELEVANT_PATHS[deviceType]) {
+      if (!path || !RELEVANT_PATHS[deviceType]) {
         return;
       }
       const rawValue = "value" in parsed ? parsed.value : parsed;
@@ -366,67 +373,83 @@ class VictronGx extends utils.Adapter {
         }
         return;
       }
+      const remappedPath = (_b = (_a = PATH_REMAP[deviceType]) == null ? void 0 : _a[normalizedPath]) != null ? _b : normalizedPath;
+      const relevantPaths = RELEVANT_PATHS[deviceType];
+      const isRelevant = relevantPaths.some((rp) => remappedPath === rp.replace(/\//g, "."));
+      if (!isRelevant) {
+        return;
+      }
       const deviceKey = `${deviceType}/${instance}`;
       const device = this.deviceMap.get(deviceKey);
       const serial = this.serialMap.get(deviceKey);
-      const baseId = serial ? `devices.${deviceType}.${serial}` : `devices.${deviceType}.${instanceStr}`;
+      if (!serial && deviceType !== "grid") {
+        return;
+      }
+      const baseId = this.getBaseId(deviceType, instance, serial, device);
+      if (!baseId) {
+        return;
+      }
       if ((device == null ? void 0 : device.virtual) && PHASE_VOLTAGE_PATHS[deviceType]) {
         const voltageMatch = normalizedPath.match(/^Ac\.(L[123])\.Voltage$/);
         if (voltageMatch) {
-          const phase = voltageMatch[1];
-          device.phaseVoltage[phase] = typeof value === "number" ? value : 0;
+          device.phaseVoltage[voltageMatch[1]] = typeof value === "number" ? value : 0;
         }
         const phaseMatch = normalizedPath.match(/^Ac\.(L[123])\./);
         if (phaseMatch) {
-          const phase = phaseMatch[1];
-          const voltage = (_a = device.phaseVoltage[phase]) != null ? _a : 0;
-          if (voltage === 0) {
+          if (((_c = device.phaseVoltage[phaseMatch[1]]) != null ? _c : 0) === 0) {
             return;
           }
         }
       }
-      if (value === null || value === void 0) {
-        return;
-      }
-      const relevantPaths = RELEVANT_PATHS[deviceType];
-      const isRelevant = relevantPaths.some((rp) => normalizedPath === rp.replace(/\//g, "."));
-      if (!isRelevant) {
-        return;
-      }
       if (device) {
         this.touchDevice(device, baseId);
       }
-      const isWritable = (WRITABLE_PATHS[deviceType] || []).some((wp) => normalizedPath === wp.replace(/\//g, "."));
-      const stateId = `${baseId}.${normalizedPath}`;
+      const isWritable = (WRITABLE_PATHS[deviceType] || []).some((wp) => remappedPath === wp);
+      const stateId = `${baseId}.${remappedPath}`;
+      const isSwitchBool = deviceType === "switch" && (remappedPath === "State" || remappedPath === "Status");
+      const storeValue = isSwitchBool ? value !== 0 : value;
+      const storeType = isSwitchBool ? "boolean" : typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string";
       await this.setObjectNotExistsAsync(stateId, {
         type: "state",
         common: {
-          name: this.getFriendlyName(normalizedPath),
-          type: typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string",
-          role: this.getRole(normalizedPath),
-          unit: this.getUnit(normalizedPath),
+          name: this.getFriendlyName(remappedPath),
+          type: storeType,
+          role: this.getRole(remappedPath),
+          unit: this.getUnit(remappedPath),
           read: true,
           write: isWritable
         },
         native: {}
       });
-      await this.setState(stateId, { val: value, ack: true });
-      if ((_b = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _b.includes(normalizedPath)) {
-        if (this.channelReady.has(baseId)) {
-          void this.updateActivePhase(deviceType, baseId, deviceKey);
-        }
+      await this.setState(stateId, { val: storeValue, ack: true });
+      if (((_d = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _d.includes(remappedPath)) && this.channelReady.has(baseId)) {
+        void this.updateActivePhase(deviceType, baseId);
       }
     } catch (err) {
       this.log.debug(`Fehler bei Topic ${topic}: ${err.message}`);
     }
   }
-  // ── Geräte-Metadaten sammeln und Channel anlegen ─────────────────────────
-  //
-  // Reihenfolge der MQTT-Nachrichten ist nicht garantiert:
-  // ProductName kann vor oder nach Serial kommen, CustomName ebenso.
-  // Wir sammeln alles in DeviceInfo und legen den Channel erst an
-  // wenn wir Serial ODER bei Geräten ohne Serial (grid) ProductName haben.
-  //
+  // ── baseId berechnen ─────────────────────────────────────────────────────
+  // Switch:  devices.switch.<gruppe>.<serial>
+  //          Gruppe darf nicht leer sein (Victron-Pflicht)
+  // Andere:  devices.<type>.<serial>  (grid: <instanz>)
+  getBaseId(type, instance, serial, device) {
+    if (type === "switch") {
+      if (!serial || !(device == null ? void 0 : device.group)) {
+        return null;
+      }
+      const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, "_");
+      return `devices.switch.${groupKey}.${serial}`;
+    }
+    if (serial) {
+      return `devices.${type}.${serial}`;
+    }
+    if (type === "grid") {
+      return `devices.${type}.${instance}`;
+    }
+    return null;
+  }
+  // ── Metadaten sammeln und Channel anlegen ────────────────────────────────
   updateDeviceMeta(type, instance, field, value) {
     const deviceKey = `${type}/${instance}`;
     if (!this.deviceMap.has(deviceKey)) {
@@ -449,12 +472,10 @@ class VictronGx extends utils.Adapter {
       case "Serial": {
         device.serial = value;
         this.serialMap.set(deviceKey, value);
-        const serialLogKey = `serial:${deviceKey}`;
-        if (!this.loggedDevices.has(serialLogKey)) {
-          this.loggedDevices.add(serialLogKey);
+        const key = `serial:${deviceKey}`;
+        if (!this.loggedDevices.has(key)) {
+          this.loggedDevices.add(key);
           this.log.info(`Ger\xE4t erkannt: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 Serial: ${value}`);
-        } else {
-          this.log.debug(`Ger\xE4t bekannt: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 Serial: ${value}`);
         }
         break;
       }
@@ -462,12 +483,10 @@ class VictronGx extends utils.Adapter {
         device.productName = value;
         device.virtual = value.toLowerCase().includes("virtual");
         if (device.virtual) {
-          const virtualLogKey = `virtual:${deviceKey}`;
-          if (!this.loggedDevices.has(virtualLogKey)) {
-            this.loggedDevices.add(virtualLogKey);
+          const key = `virtual:${deviceKey}`;
+          if (!this.loggedDevices.has(key)) {
+            this.loggedDevices.add(key);
             this.log.info(`Virtuelles Ger\xE4t: ${type}/${instance} \u2192 "${value}"`);
-          } else {
-            this.log.debug(`Virtuelles Ger\xE4t (bekannt): ${type}/${instance} \u2192 "${value}"`);
           }
         }
         break;
@@ -480,12 +499,10 @@ class VictronGx extends utils.Adapter {
       case "Mgmt.Connection":
         if (value === "Node-RED") {
           device.source = "node-red";
-          const nodeRedLogKey = `nodered:${deviceKey}`;
-          if (!this.loggedDevices.has(nodeRedLogKey)) {
-            this.loggedDevices.add(nodeRedLogKey);
+          const key = `nodered:${deviceKey}`;
+          if (!this.loggedDevices.has(key)) {
+            this.loggedDevices.add(key);
             this.log.info(`Node-RED Ger\xE4t: ${type}/${instance}`);
-          } else {
-            this.log.debug(`Node-RED Ger\xE4t (bekannt): ${type}/${instance}`);
           }
         }
         break;
@@ -494,14 +511,43 @@ class VictronGx extends utils.Adapter {
           device.virtual = true;
         }
         break;
+      case "Connected": {
+        const baseId = this.getBaseId(device.type, device.instance, device.serial || void 0, device);
+        if (baseId) {
+          const connected = value === "1" || value === "true";
+          void this.setObjectNotExistsAsync(`${baseId}.info.connected`, {
+            type: "state",
+            common: {
+              name: "Verbunden",
+              type: "boolean",
+              role: "indicator.connected",
+              read: true,
+              write: false
+            },
+            native: {}
+          }).then(() => {
+            void this.setState(`${baseId}.info.connected`, { val: connected, ack: true });
+          });
+        }
+        break;
+      }
       case "SwitchableOutput.output_1.Settings.Group":
         device.group = value;
+        {
+          const groupKey = value.replace(/[^a-zA-Z0-9_]/g, "_");
+          const groupId = `devices.switch.${groupKey}`;
+          void this.setObjectNotExistsAsync(groupId, {
+            type: "folder",
+            common: { name: value },
+            native: {}
+          });
+        }
         break;
       case "SwitchableOutput.output_1.Settings.CustomName":
         device.customName = value;
-        {
-          const channelKey = device.serial || device.instance.toString();
-          const channelId = `devices.${device.type}.${channelKey}`;
+        if (device.serial && device.group) {
+          const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, "_");
+          const channelId = `devices.switch.${groupKey}.${device.serial}`;
           const suffix = device.source === "node-red" ? " [Node-RED]" : device.virtual ? " [Virtual]" : "";
           void this.extendObjectAsync(channelId, {
             common: { name: `${value}${suffix}` }
@@ -511,25 +557,20 @@ class VictronGx extends utils.Adapter {
     }
     void this.ensureDeviceChannel(device);
   }
-  // ── Channel in ioBroker anlegen / aktualisieren ──────────────────────────
+  // ── Channel anlegen ──────────────────────────────────────────────────────
   async ensureDeviceChannel(device) {
-    const hasSerial = !!device.serial;
-    const hasProduct = !!device.productName;
-    if (!hasSerial && !hasProduct) {
+    const baseId = this.getBaseId(device.type, device.instance, device.serial || void 0, device);
+    if (!baseId) {
       return;
     }
-    if (device.type === "switch" && !hasSerial) {
+    if (this.channelReady.has(baseId)) {
       return;
     }
-    const channelKey = device.serial || device.instance.toString();
-    const channelId = `devices.${device.type}.${channelKey}`;
     const displayName = device.customName || device.productName || KNOWN_DEVICE_TYPES[device.type] || device.type;
     const suffix = device.virtual ? device.source === "node-red" ? " [Node-RED]" : " [Virtual]" : "";
-    await this.setObjectNotExistsAsync(channelId, {
+    await this.setObjectNotExistsAsync(baseId, {
       type: "channel",
-      common: {
-        name: `${displayName}${suffix}`
-      },
+      common: { name: `${displayName}${suffix}` },
       native: {
         type: device.type,
         instance: device.instance,
@@ -547,7 +588,7 @@ class VictronGx extends utils.Adapter {
       { id: "info.source", name: "Quelle", val: device.source }
     ];
     for (const dp of infoDps) {
-      await this.setObjectNotExistsAsync(`${channelId}.${dp.id}`, {
+      await this.setObjectNotExistsAsync(`${baseId}.${dp.id}`, {
         type: "state",
         common: {
           name: dp.name,
@@ -559,21 +600,21 @@ class VictronGx extends utils.Adapter {
         native: {}
       });
       if (dp.val !== "" && dp.val !== false) {
-        await this.setState(`${channelId}.${dp.id}`, { val: dp.val, ack: true });
+        await this.setState(`${baseId}.${dp.id}`, { val: dp.val, ack: true });
       }
     }
-    await this.setObjectNotExistsAsync(`${channelId}.info.lastUpdate`, {
+    await this.setObjectNotExistsAsync(`${baseId}.info.lastUpdate`, {
       type: "state",
       common: { name: "Letztes Update", type: "number", role: "value.time", read: true, write: false },
       native: {}
     });
-    await this.setObjectNotExistsAsync(`${channelId}.info.stale`, {
+    await this.setObjectNotExistsAsync(`${baseId}.info.stale`, {
       type: "state",
       common: { name: "Keine Daten", type: "boolean", role: "indicator.maintenance", read: true, write: false },
       native: {}
     });
     if (PHASE_POWER_PATHS[device.type]) {
-      await this.setObjectNotExistsAsync(`${channelId}.info.activePhase`, {
+      await this.setObjectNotExistsAsync(`${baseId}.info.activePhase`, {
         type: "state",
         common: {
           name: "Aktive Phase(n)",
@@ -587,30 +628,20 @@ class VictronGx extends utils.Adapter {
       });
     }
     if (device.type === "switch") {
-      const stateId = `${channelId}.SwitchableOutput.output_1.State`;
-      await this.setObjectNotExistsAsync(stateId, {
+      await this.setObjectNotExistsAsync(`${baseId}.State`, {
         type: "state",
         common: {
           name: device.customName || "Schalter",
-          type: "number",
+          type: "boolean",
           role: "switch",
-          states: { 0: "Aus", 1: "Ein" },
           read: true,
           write: true
-          // ← schreibbar!
         },
         native: {}
       });
     }
-    if (device.type === "switch" && device.group) {
-      const groupId = `devices.switch._groups.${device.group.replace(/[^a-zA-Z0-9_]/g, "_")}`;
-      await this.setObjectNotExistsAsync(groupId, {
-        type: "folder",
-        common: { name: device.group },
-        native: {}
-      });
-    }
-    this.channelReady.add(channelId);
+    this.channelReady.add(baseId);
+    this.log.debug(`Channel angelegt: ${baseId}`);
   }
   // ── Stale-Erkennung ──────────────────────────────────────────────────────
   touchDevice(device, baseId) {
@@ -618,8 +649,7 @@ class VictronGx extends utils.Adapter {
     if (device.staleTimer) {
       clearTimeout(device.staleTimer);
     }
-    const channelId = baseId;
-    if (!this.channelReady.has(channelId)) {
+    if (!this.channelReady.has(baseId)) {
       return;
     }
     void this.setState(`${baseId}.info.lastUpdate`, { val: device.lastUpdate, ack: true });
@@ -629,14 +659,12 @@ class VictronGx extends utils.Adapter {
       void this.setState(`${baseId}.info.stale`, { val: true, ack: true });
     }, STALE_TIMEOUT_MS);
   }
-  // ── activePhase berechnen und schreiben ──────────────────────────────────
-  async updateActivePhase(deviceType, baseId, _deviceKey) {
-    const phases = ["L1", "L2", "L3"];
+  // ── activePhase berechnen ────────────────────────────────────────────────
+  async updateActivePhase(deviceType, baseId) {
     const active = [];
-    for (const phase of phases) {
-      const stateId = `${baseId}.Ac.${phase}.Power`;
+    for (const phase of ["L1", "L2", "L3"]) {
       try {
-        const state = await this.getStateAsync(stateId);
+        const state = await this.getStateAsync(`${baseId}.Ac.${phase}.Power`);
         if (state && typeof state.val === "number" && state.val !== 0) {
           active.push(phase);
         }
@@ -652,11 +680,10 @@ class VictronGx extends utils.Adapter {
     await this.setState(`${baseId}.info.activePhase`, { val: activePhase, ack: true });
   }
   // ── MQTT Write: ioBroker → GX ────────────────────────────────────────────
-  //
-  // Steuerfluss: ioBroker State (ack=false) → MQTT W/-Topic → GX
-  // GX bestätigt → MQTT N/-Topic kommt zurück → ack=true
-  //
+  // ID-Format switch:  victron-gx.0.devices.switch.<gruppe>.<serial>.State
+  // ID-Format andere:  victron-gx.0.devices.<type>.<serial>.<path>
   onStateChange(id, state) {
+    var _a, _b;
     if (!state || state.ack) {
       return;
     }
@@ -668,8 +695,19 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const deviceType = parts[3];
-    const serial = parts[4];
-    const dpPath = parts.slice(5).join("/");
+    let serial;
+    let dpPath;
+    if (deviceType === "switch") {
+      if (parts.length < 7) {
+        return;
+      }
+      serial = parts[5];
+      const remapped = parts.slice(6).join(".");
+      dpPath = (_b = (_a = WRITE_PATH_REMAP[deviceType]) == null ? void 0 : _a[remapped]) != null ? _b : remapped.replace(/\./g, "/");
+    } else {
+      serial = parts[4];
+      dpPath = parts.slice(5).join("/");
+    }
     let instance = null;
     for (const [key, ser] of this.serialMap.entries()) {
       if (ser === serial) {
@@ -688,7 +726,8 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
-    const payload = JSON.stringify({ value: state.val });
+    const writeVal = deviceType === "switch" && (dpPath.endsWith("State") || dpPath.endsWith("Status")) ? state.val ? 1 : 0 : state.val;
+    const payload = JSON.stringify({ value: writeVal });
     this.log.info(`Schreibe: ${mqttTopic} = ${payload}`);
     this.mqttClient.publish(mqttTopic, payload);
   }
@@ -711,7 +750,9 @@ class VictronGx extends utils.Adapter {
       "Ac.L3.Current": "L3 Strom",
       "Ac.Energy.Forward": "Bezug gesamt",
       "Ac.Energy.Reverse": "Einspeisung gesamt",
-      State: "Status",
+      State: "Schaltzustand",
+      Status: "Hardware-Status",
+      Connected: "Verbunden",
       Mode: "Betriebsart",
       Temperature: "Temperatur",
       "Voltages.Sum": "Zellspannung gesamt",
@@ -719,10 +760,7 @@ class VictronGx extends utils.Adapter {
       TimeToGo: "Restlaufzeit",
       "Yield.Power": "PV Leistung",
       "Yield.Today": "Ertrag heute",
-      "Yield.Total": "Ertrag gesamt",
-      "SwitchableOutput.output_1.State": "Schaltzustand",
-      "SwitchableOutput.output_1.Status": "Schaltstatus",
-      Connected: "Verbunden"
+      "Yield.Total": "Ertrag gesamt"
     };
     return names[path] || path;
   }
@@ -756,6 +794,9 @@ class VictronGx extends utils.Adapter {
     return "";
   }
   getRole(path) {
+    if (path === "State" || path === "switch") {
+      return "switch";
+    }
     if (path.includes("Power")) {
       return "value.power";
     }
@@ -773,9 +814,6 @@ class VictronGx extends utils.Adapter {
     }
     if (path.includes("Temperature")) {
       return "value.temperature";
-    }
-    if (path === "SwitchableOutput.output_1.State") {
-      return "switch";
     }
     if (path.includes("State") || path.includes("Mode")) {
       return "value";
