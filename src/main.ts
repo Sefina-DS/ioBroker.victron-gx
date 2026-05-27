@@ -264,6 +264,10 @@ class VictronGx extends utils.Adapter {
     private vrmId: string = '';
     private deviceMap: Map<string, DeviceInfo> = new Map();
     private serialMap: Map<string, string> = new Map();
+    // Bereits geloggte Geräte → verhindert Log-Spam beim Keepalive-Refresh
+    private loggedDevices: Set<string> = new Set();
+    // Channels die vollständig angelegt wurden → touchDevice schreibt erst danach
+    private channelReady: Set<string> = new Set();
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'victron-gx' });
@@ -395,7 +399,13 @@ class VictronGx extends utils.Adapter {
                 return;
             }
 
-            const value = parsed?.value ?? parsed;
+            // 'value' aus dem Victron-MQTT-Payload extrahieren
+            // Wichtig: ?? greift nicht bei null → explizit auf null prüfen
+            const rawValue = 'value' in parsed ? parsed.value : parsed;
+            if (rawValue === null || rawValue === undefined) {
+                return;
+            }
+            const value = rawValue;
 
             // ── Registrierungspfade → Metadaten sammeln ──────────────────
             if (REGISTRATION_PATHS.has(normalizedPath)) {
@@ -470,7 +480,10 @@ class VictronGx extends utils.Adapter {
 
             // ── activePhase aktualisieren ─────────────────────────────────
             if (PHASE_POWER_PATHS[deviceType]?.includes(normalizedPath)) {
-                void this.updateActivePhase(deviceType, baseId, deviceKey);
+                // Nur wenn Channel bereits vollständig angelegt
+                if (this.channelReady.has(baseId)) {
+                    void this.updateActivePhase(deviceType, baseId, deviceKey);
+                }
             }
         } catch (err) {
             this.log.debug(`Fehler bei Topic ${topic}: ${(err as Error).message}`);
@@ -506,20 +519,34 @@ class VictronGx extends utils.Adapter {
         const device = this.deviceMap.get(deviceKey)!;
 
         switch (field) {
-            case 'Serial':
+            case 'Serial': {
                 device.serial = value;
                 this.serialMap.set(deviceKey, value);
-                this.log.info(`Gerät erkannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
+                const serialLogKey = `serial:${deviceKey}`;
+                if (!this.loggedDevices.has(serialLogKey)) {
+                    this.loggedDevices.add(serialLogKey);
+                    this.log.info(`Gerät erkannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
+                } else {
+                    this.log.debug(`Gerät bekannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
+                }
                 break;
+            }
 
-            case 'ProductName':
+            case 'ProductName': {
                 device.productName = value;
                 // Virtual-Flag: Victron kennzeichnet virtuelle Geräte im ProductName
                 device.virtual = value.toLowerCase().includes('virtual');
                 if (device.virtual) {
-                    this.log.info(`Virtuelles Gerät: ${type}/${instance} → "${value}"`);
+                    const virtualLogKey = `virtual:${deviceKey}`;
+                    if (!this.loggedDevices.has(virtualLogKey)) {
+                        this.loggedDevices.add(virtualLogKey);
+                        this.log.info(`Virtuelles Gerät: ${type}/${instance} → "${value}"`);
+                    } else {
+                        this.log.debug(`Virtuelles Gerät (bekannt): ${type}/${instance} → "${value}"`);
+                    }
                 }
                 break;
+            }
 
             case 'CustomName':
                 if (!device.customName) {
@@ -530,7 +557,13 @@ class VictronGx extends utils.Adapter {
             case 'Mgmt.Connection':
                 if (value === 'Node-RED') {
                     device.source = 'node-red';
-                    this.log.info(`Node-RED Gerät: ${type}/${instance}`);
+                    const nodeRedLogKey = `nodered:${deviceKey}`;
+                    if (!this.loggedDevices.has(nodeRedLogKey)) {
+                        this.loggedDevices.add(nodeRedLogKey);
+                        this.log.info(`Node-RED Gerät: ${type}/${instance}`);
+                    } else {
+                        this.log.debug(`Node-RED Gerät (bekannt): ${type}/${instance}`);
+                    }
                 }
                 break;
 
@@ -568,6 +601,13 @@ class VictronGx extends utils.Adapter {
         const hasSerial = !!device.serial;
         const hasProduct = !!device.productName;
         if (!hasSerial && !hasProduct) {
+            return;
+        }
+
+        // switch-Geräte bekommen ihre Serial immer via MQTT → ohne Serial
+        // würde der Channel mit der Instanznummer angelegt (switch.100 etc.)
+        // und bleibt dann als Leiche. Daher: warten bis Serial bekannt ist.
+        if (device.type === 'switch' && !hasSerial) {
             return;
         }
 
@@ -676,6 +716,9 @@ class VictronGx extends utils.Adapter {
                 native: {},
             });
         }
+
+        // Channel ist jetzt vollständig angelegt
+        this.channelReady.add(channelId);
     }
 
     // ── Stale-Erkennung ──────────────────────────────────────────────────────
@@ -685,6 +728,12 @@ class VictronGx extends utils.Adapter {
         // Stale-Timer zurücksetzen
         if (device.staleTimer) {
             clearTimeout(device.staleTimer);
+        }
+
+        // Nur schreiben wenn Channel bereits vollständig angelegt wurde
+        const channelId = baseId;
+        if (!this.channelReady.has(channelId)) {
+            return;
         }
 
         // lastUpdate und stale=false sofort schreiben

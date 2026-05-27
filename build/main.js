@@ -241,6 +241,10 @@ class VictronGx extends utils.Adapter {
   vrmId = "";
   deviceMap = /* @__PURE__ */ new Map();
   serialMap = /* @__PURE__ */ new Map();
+  // Bereits geloggte Geräte → verhindert Log-Spam beim Keepalive-Refresh
+  loggedDevices = /* @__PURE__ */ new Set();
+  // Channels die vollständig angelegt wurden → touchDevice schreibt erst danach
+  channelReady = /* @__PURE__ */ new Set();
   constructor(options = {}) {
     super({ ...options, name: "victron-gx" });
     this.on("ready", this.onReady.bind(this));
@@ -319,7 +323,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── Haupt-Message-Handler ────────────────────────────────────────────────
   async handleMessage(topic, payload) {
-    var _a, _b, _c;
+    var _a, _b;
     try {
       const raw = payload.toString();
       if (!raw) {
@@ -351,7 +355,11 @@ class VictronGx extends utils.Adapter {
       if (!RELEVANT_PATHS[deviceType]) {
         return;
       }
-      const value = (_a = parsed == null ? void 0 : parsed.value) != null ? _a : parsed;
+      const rawValue = "value" in parsed ? parsed.value : parsed;
+      if (rawValue === null || rawValue === void 0) {
+        return;
+      }
+      const value = rawValue;
       if (REGISTRATION_PATHS.has(normalizedPath)) {
         if (typeof value === "string" || typeof value === "number") {
           this.updateDeviceMeta(deviceType, instance, normalizedPath, String(value));
@@ -371,7 +379,7 @@ class VictronGx extends utils.Adapter {
         const phaseMatch = normalizedPath.match(/^Ac\.(L[123])\./);
         if (phaseMatch) {
           const phase = phaseMatch[1];
-          const voltage = (_b = device.phaseVoltage[phase]) != null ? _b : 0;
+          const voltage = (_a = device.phaseVoltage[phase]) != null ? _a : 0;
           if (voltage === 0) {
             return;
           }
@@ -403,8 +411,10 @@ class VictronGx extends utils.Adapter {
         native: {}
       });
       await this.setState(stateId, { val: value, ack: true });
-      if ((_c = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _c.includes(normalizedPath)) {
-        void this.updateActivePhase(deviceType, baseId, deviceKey);
+      if ((_b = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _b.includes(normalizedPath)) {
+        if (this.channelReady.has(baseId)) {
+          void this.updateActivePhase(deviceType, baseId, deviceKey);
+        }
       }
     } catch (err) {
       this.log.debug(`Fehler bei Topic ${topic}: ${err.message}`);
@@ -436,18 +446,32 @@ class VictronGx extends utils.Adapter {
     }
     const device = this.deviceMap.get(deviceKey);
     switch (field) {
-      case "Serial":
+      case "Serial": {
         device.serial = value;
         this.serialMap.set(deviceKey, value);
-        this.log.info(`Ger\xE4t erkannt: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 Serial: ${value}`);
+        const serialLogKey = `serial:${deviceKey}`;
+        if (!this.loggedDevices.has(serialLogKey)) {
+          this.loggedDevices.add(serialLogKey);
+          this.log.info(`Ger\xE4t erkannt: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 Serial: ${value}`);
+        } else {
+          this.log.debug(`Ger\xE4t bekannt: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 Serial: ${value}`);
+        }
         break;
-      case "ProductName":
+      }
+      case "ProductName": {
         device.productName = value;
         device.virtual = value.toLowerCase().includes("virtual");
         if (device.virtual) {
-          this.log.info(`Virtuelles Ger\xE4t: ${type}/${instance} \u2192 "${value}"`);
+          const virtualLogKey = `virtual:${deviceKey}`;
+          if (!this.loggedDevices.has(virtualLogKey)) {
+            this.loggedDevices.add(virtualLogKey);
+            this.log.info(`Virtuelles Ger\xE4t: ${type}/${instance} \u2192 "${value}"`);
+          } else {
+            this.log.debug(`Virtuelles Ger\xE4t (bekannt): ${type}/${instance} \u2192 "${value}"`);
+          }
         }
         break;
+      }
       case "CustomName":
         if (!device.customName) {
           device.customName = value;
@@ -456,7 +480,13 @@ class VictronGx extends utils.Adapter {
       case "Mgmt.Connection":
         if (value === "Node-RED") {
           device.source = "node-red";
-          this.log.info(`Node-RED Ger\xE4t: ${type}/${instance}`);
+          const nodeRedLogKey = `nodered:${deviceKey}`;
+          if (!this.loggedDevices.has(nodeRedLogKey)) {
+            this.loggedDevices.add(nodeRedLogKey);
+            this.log.info(`Node-RED Ger\xE4t: ${type}/${instance}`);
+          } else {
+            this.log.debug(`Node-RED Ger\xE4t (bekannt): ${type}/${instance}`);
+          }
         }
         break;
       case "Mgmt.ProcessName":
@@ -486,6 +516,9 @@ class VictronGx extends utils.Adapter {
     const hasSerial = !!device.serial;
     const hasProduct = !!device.productName;
     if (!hasSerial && !hasProduct) {
+      return;
+    }
+    if (device.type === "switch" && !hasSerial) {
       return;
     }
     const channelKey = device.serial || device.instance.toString();
@@ -577,12 +610,17 @@ class VictronGx extends utils.Adapter {
         native: {}
       });
     }
+    this.channelReady.add(channelId);
   }
   // ── Stale-Erkennung ──────────────────────────────────────────────────────
   touchDevice(device, baseId) {
     device.lastUpdate = Date.now();
     if (device.staleTimer) {
       clearTimeout(device.staleTimer);
+    }
+    const channelId = baseId;
+    if (!this.channelReady.has(channelId)) {
+      return;
     }
     void this.setState(`${baseId}.info.lastUpdate`, { val: device.lastUpdate, ack: true });
     void this.setState(`${baseId}.info.stale`, { val: false, ack: true });
