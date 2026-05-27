@@ -15,7 +15,7 @@ const KNOWN_DEVICE_TYPES: Record<string, string> = {
     grid: 'Netzanschluss',
     pvinverter: 'PV Wechselrichter',
     switch: 'Virtueller Schalter',
-    system: 'System',
+    overview: 'Übersicht',
     platform: 'GX Gerät',
     temperature: 'Temperatursensor',
     tank: 'Tanksensor',
@@ -24,25 +24,38 @@ const KNOWN_DEVICE_TYPES: Record<string, string> = {
 // ── Relevante MQTT-Pfade pro Gerätetyp ──────────────────────────────────────
 //
 // Phasen-Regel:
-//   virtual=false → alle Phasen immer anlegen (echte Messung, Spannung liegt an)
-//   virtual=true  → Phase nur anlegen wenn Voltage > 0 (virtuelle Geräte
-//                   setzen Voltage=0 für nicht genutzte Phasen)
+//   virtual=false → alle Phasen immer anlegen (Spannung liegt an)
+//   virtual=true  → Phase nur wenn Voltage > 0
 //
 const RELEVANT_PATHS: Record<string, string[]> = {
     battery: [
+        // Hauptwerte
         'Soc',
         'Dc.0.Voltage',
         'Dc.0.Current',
         'Dc.0.Power',
-        'Temperature',
+        'Dc.0.Temperature', // Haupt-Temperatur vom BMS
         'ConsumedAmphours',
         'TimeToGo',
+        'Capacity',
+        'CurrentAvg',
+        // Temperaturen (via System.*)
+        'System.Temperature1',
+        'System.Temperature2',
+        'System.Temperature3',
+        'System.Temperature4',
+        'System.MinCellTemperature',
+        'System.MaxCellTemperature',
+        // Zell-Aggregatwerte von Victron (kein eigenes Berechnen nötig)
+        'System.MinCellVoltage',
+        'System.MaxCellVoltage',
+        'System.MinVoltageCellId',
+        'System.MaxVoltageCellId',
+        // Alarme
         'Alarms.LowVoltage',
         'Alarms.HighVoltage',
         'Alarms.LowSoc',
-        'Info.ChargeMode',
-        'Info.ChargeRequest',
-        // Zellenspannungen (LiFePO4 BMS)
+        // Zellenspannungen (dynamisch bis Cell32)
         'Voltages.Cell1',
         'Voltages.Cell2',
         'Voltages.Cell3',
@@ -59,31 +72,62 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'Voltages.Cell14',
         'Voltages.Cell15',
         'Voltages.Cell16',
-        'Voltages.Sum',
+        'Voltages.Cell17',
+        'Voltages.Cell18',
+        'Voltages.Cell19',
+        'Voltages.Cell20',
+        'Voltages.Cell21',
+        'Voltages.Cell22',
+        'Voltages.Cell23',
+        'Voltages.Cell24',
+        'Voltages.Cell25',
+        'Voltages.Cell26',
+        'Voltages.Cell27',
+        'Voltages.Cell28',
+        'Voltages.Cell29',
+        'Voltages.Cell30',
+        'Voltages.Cell31',
+        'Voltages.Cell32',
         'Voltages.Diff',
         'Serial',
         'ProductName',
         'CustomName',
     ],
     vebus: [
+        // Status (kommen nur bei Änderung)
         'Soc',
         'State',
         'Mode',
         'VebusError',
         'VebusChargeState',
+        // AC Eingang (L1 = aktiv, L2/L3 bei 3-Phasen-MP)
         'Ac.ActiveIn.L1.P',
+        'Ac.ActiveIn.L1.S',
+        'Ac.ActiveIn.L1.I',
+        'Ac.ActiveIn.L1.V',
         'Ac.ActiveIn.L2.P',
         'Ac.ActiveIn.L3.P',
+        'Ac.ActiveIn.P',
+        'Ac.ActiveIn.S',
+        'Ac.In1.CurrentLimit', // schreibbar: Eingangsstrombegrenzung
+        // AC Ausgang
         'Ac.Out.L1.P',
+        'Ac.Out.L1.S',
+        'Ac.Out.L1.I',
+        'Ac.Out.L1.V',
+        'Ac.Out.L1.F',
         'Ac.Out.L2.P',
         'Ac.Out.L3.P',
-        'Ac.Out.L1.V',
-        'Ac.Out.L2.V',
-        'Ac.Out.L3.V',
-        'Ac.In1.CurrentLimit',
+        'Ac.Out.P',
+        'Ac.Out.S',
+        // DC
         'Dc.0.Voltage',
         'Dc.0.Current',
         'Dc.0.Power',
+        'BatterySense.Voltage', // MP-seitige Batteriespannung
+        // ESS Steuerung (schreibbar!)
+        'Hub4.L1.AcPowerSetpoint', // ESS Sollwert W (negativ = einspeisen)
+        // Registrierung
         'Serial',
         'ProductName',
         'CustomName',
@@ -102,6 +146,7 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'CustomName',
     ],
     grid: [
+        'Ac.Power',
         'Ac.L1.Power',
         'Ac.L2.Power',
         'Ac.L3.Power',
@@ -113,22 +158,35 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'Ac.L3.Current',
         'Ac.Energy.Forward',
         'Ac.Energy.Reverse',
+        'Serial',
         'ProductName',
         'CustomName',
+        'Connected',
+        'Position',
     ],
     acload: [
+        'Ac.Power',
         'Ac.L1.Power',
         'Ac.L2.Power',
         'Ac.L3.Power',
         'Ac.L1.Voltage',
         'Ac.L2.Voltage',
         'Ac.L3.Voltage',
+        'Ac.L1.Current',
+        'Ac.L2.Current',
+        'Ac.L3.Current',
+        'Ac.L1.Energy.Forward',
+        'Ac.L2.Energy.Forward',
+        'Ac.L3.Energy.Forward',
         'Ac.Energy.Forward',
         'Serial',
         'ProductName',
         'CustomName',
         'Mgmt.Connection',
         'Mgmt.ProcessName',
+        'Connected',
+        'Position',
+        'NrOfPhases',
     ],
     pvinverter: [
         'Ac.Power',
@@ -141,20 +199,28 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'Ac.L1.Current',
         'Ac.L2.Current',
         'Ac.L3.Current',
+        'Ac.L1.Energy.Forward',
+        'Ac.L2.Energy.Forward',
+        'Ac.L3.Energy.Forward',
         'Ac.Energy.Forward',
+        'Ac.Energy.Reverse',
+        'Ac.Frequency',
+        'Ac.MaxPower',
+        'Ac.PowerLimit',
         'StatusCode',
+        'ErrorCode',
         'Serial',
         'ProductName',
         'CustomName',
         'Mgmt.Connection',
         'Mgmt.ProcessName',
+        'Connected',
+        'Position',
+        'NrOfPhases',
     ],
-    // Virtuelle Schalter via Node-RED
-    // Struktur: devices.switch.<Gruppe>.<Serial>.*
-    // State ist schreibbar → ioBroker → MQTT W/ → GX → Node-RED → Relais
     switch: [
-        'State', // schreibbarer Schaltzustand (0=Aus, 1=Ein)
-        'Status', // Rückmeldung Hardware-Status
+        'SwitchableOutput.output_1.State',
+        'SwitchableOutput.output_1.Status',
         'Connected',
         'Serial',
         'ProductName',
@@ -164,20 +230,64 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'SwitchableOutput.output_1.Settings.CustomName',
         'SwitchableOutput.output_1.Settings.Group',
     ],
+    // system/0 wird als "overview" Channel angelegt
     system: [
-        'Soc',
+        // Batterie
+        'Dc.Battery.Soc',
         'Dc.Battery.Voltage',
         'Dc.Battery.Current',
         'Dc.Battery.Power',
-        'Dc.Pv.Power',
-        'Dc.Pv.Current',
+        'Dc.Battery.ConsumedAmphours',
+        // DC System
+        'Dc.System.Power',
+        'Dc.System.Current',
+        'Dc.Vebus.Power',
+        'Dc.Vebus.Current',
+        'Dc.InverterCharger.Power',
+        'Dc.InverterCharger.Current',
+        // AC Verbrauch gesamt
+        'Ac.Consumption.L1.Power',
+        'Ac.Consumption.L2.Power',
+        'Ac.Consumption.L3.Power',
+        'Ac.Consumption.L1.Current',
+        'Ac.Consumption.L2.Current',
+        'Ac.Consumption.L3.Current',
+        // AC Verbrauch aufgeteilt
         'Ac.ConsumptionOnOutput.L1.Power',
         'Ac.ConsumptionOnOutput.L2.Power',
         'Ac.ConsumptionOnOutput.L3.Power',
+        'Ac.ConsumptionOnOutput.L1.Current',
+        'Ac.ConsumptionOnOutput.L2.Current',
+        'Ac.ConsumptionOnOutput.L3.Current',
+        'Ac.ConsumptionOnInput.L1.Power',
+        'Ac.ConsumptionOnInput.L2.Power',
+        'Ac.ConsumptionOnInput.L3.Power',
+        'Ac.ConsumptionOnInput.L1.Current',
+        'Ac.ConsumptionOnInput.L2.Current',
+        'Ac.ConsumptionOnInput.L3.Current',
+        // Netz
         'Ac.Grid.L1.Power',
         'Ac.Grid.L2.Power',
         'Ac.Grid.L3.Power',
+        'Ac.Grid.L1.Current',
+        'Ac.Grid.L2.Current',
+        'Ac.Grid.L3.Current',
+        // PV am Netz
+        'Ac.PvOnGrid.L1.Power',
+        'Ac.PvOnGrid.L2.Power',
+        'Ac.PvOnGrid.L3.Power',
+        'Ac.PvOnGrid.L1.Current',
+        'Ac.PvOnGrid.L2.Current',
+        'Ac.PvOnGrid.L3.Current',
+        // AC Eingang
+        'Ac.ActiveIn.L1.Power',
+        'Ac.ActiveIn.L2.Power',
+        'Ac.ActiveIn.L3.Power',
+        'Ac.ActiveIn.L1.Current',
+        'Ac.ActiveIn.L2.Current',
+        'Ac.ActiveIn.L3.Current',
         'Ac.ActiveIn.Source',
+        // System
         'TimeToGo',
         'SystemState.State',
         'Serial',
@@ -186,61 +296,111 @@ const RELEVANT_PATHS: Record<string, string[]> = {
     tank: ['Level', 'Remaining', 'Status', 'ProductName', 'CustomName'],
 };
 
-// ── Pfade die Metadaten liefern, keine Datenpunkte ───────────────────────────
+// ── Pfade die nur Metadaten liefern ─────────────────────────────────────────
 const REGISTRATION_PATHS = new Set([
     'Serial',
     'ProductName',
     'CustomName',
     'Connected',
+    'Position',
+    'NrOfPhases',
     'Mgmt.Connection',
     'Mgmt.ProcessName',
     'SwitchableOutput.output_1.Settings.CustomName',
     'SwitchableOutput.output_1.Settings.Group',
 ]);
 
-// ── Victron-interne Pfade die wir umbenennen ─────────────────────────────────
-// Switches liefern SwitchableOutput/output_1/State → wir speichern als "State"
+// ── Victron-Pfade → ioBroker-Pfade ──────────────────────────────────────────
 const PATH_REMAP: Record<string, Record<string, string>> = {
     switch: {
         'SwitchableOutput.output_1.State': 'State',
         'SwitchableOutput.output_1.Status': 'Status',
     },
+    battery: {
+        // Temperaturen
+        'Dc.0.Temperature': 'temperatures.main',
+        'System.Temperature1': 'temperatures.temp1',
+        'System.Temperature2': 'temperatures.temp2',
+        'System.Temperature3': 'temperatures.temp3',
+        'System.Temperature4': 'temperatures.temp4',
+        'System.MinCellTemperature': 'temperatures.min',
+        'System.MaxCellTemperature': 'temperatures.max',
+        // Zell-Aggregate (direkt von Victron)
+        'System.MinCellVoltage': 'cells.min',
+        'System.MaxCellVoltage': 'cells.max',
+        'System.MinVoltageCellId': 'cells.minId',
+        'System.MaxVoltageCellId': 'cells.maxId',
+        // Zellspannungen
+        'Voltages.Cell1': 'cells.cell01',
+        'Voltages.Cell2': 'cells.cell02',
+        'Voltages.Cell3': 'cells.cell03',
+        'Voltages.Cell4': 'cells.cell04',
+        'Voltages.Cell5': 'cells.cell05',
+        'Voltages.Cell6': 'cells.cell06',
+        'Voltages.Cell7': 'cells.cell07',
+        'Voltages.Cell8': 'cells.cell08',
+        'Voltages.Cell9': 'cells.cell09',
+        'Voltages.Cell10': 'cells.cell10',
+        'Voltages.Cell11': 'cells.cell11',
+        'Voltages.Cell12': 'cells.cell12',
+        'Voltages.Cell13': 'cells.cell13',
+        'Voltages.Cell14': 'cells.cell14',
+        'Voltages.Cell15': 'cells.cell15',
+        'Voltages.Cell16': 'cells.cell16',
+        'Voltages.Cell17': 'cells.cell17',
+        'Voltages.Cell18': 'cells.cell18',
+        'Voltages.Cell19': 'cells.cell19',
+        'Voltages.Cell20': 'cells.cell20',
+        'Voltages.Cell21': 'cells.cell21',
+        'Voltages.Cell22': 'cells.cell22',
+        'Voltages.Cell23': 'cells.cell23',
+        'Voltages.Cell24': 'cells.cell24',
+        'Voltages.Cell25': 'cells.cell25',
+        'Voltages.Cell26': 'cells.cell26',
+        'Voltages.Cell27': 'cells.cell27',
+        'Voltages.Cell28': 'cells.cell28',
+        'Voltages.Cell29': 'cells.cell29',
+        'Voltages.Cell30': 'cells.cell30',
+        'Voltages.Cell31': 'cells.cell31',
+        'Voltages.Cell32': 'cells.cell32',
+        'Voltages.Diff': 'cells.diff',
+        Temperature: 'temperatures.temp1',
+        Temperature2: 'temperatures.temp2',
+        Temperature3: 'temperatures.temp3',
+        Temperature4: 'temperatures.temp4',
+        'Alarms.LowVoltage': 'alarms.lowVoltage',
+        'Alarms.HighVoltage': 'alarms.highVoltage',
+        'Alarms.LowSoc': 'alarms.lowSoc',
+    },
 };
 
-// ── Einheiten ────────────────────────────────────────────────────────────────
-const UNITS: Record<string, string> = {
-    Soc: '%',
-    Voltage: 'V',
-    Current: 'A',
-    Power: 'W',
-    Temperature: '°C',
-    Humidity: '%',
-    Pressure: 'hPa',
-    'Yield.Today': 'kWh',
-    'Yield.Total': 'kWh',
-    'Yield.Power': 'W',
-    Level: '%',
-    Remaining: 'm³',
-    'Voltages.Sum': 'V',
-    'Voltages.Diff': 'V',
-};
-
-// ── Schreibbare Datenpunkte ──────────────────────────────────────────────────
-const WRITABLE_PATHS: Record<string, string[]> = {
-    switch: ['State'],
-    vebus: ['Mode', 'Ac.In1.CurrentLimit'],
-};
-
-// ── MQTT-Pfad für Schreiben (remappt zurück) ─────────────────────────────────
-// State im ioBroker → SwitchableOutput/output_1/State im MQTT
+// ── ioBroker Write → MQTT Topic Pfad ────────────────────────────────────────
 const WRITE_PATH_REMAP: Record<string, Record<string, string>> = {
     switch: {
         State: 'SwitchableOutput/output_1/State',
     },
 };
 
+// ── Schreibbare Datenpunkte ──────────────────────────────────────────────────
+const WRITABLE_PATHS: Record<string, string[]> = {
+    switch: ['State'],
+    vebus: ['Mode', 'Ac.In1.CurrentLimit', 'Hub4.L1.AcPowerSetpoint'],
+};
+
+// ── StatusCode Bedeutungen (pvinverter) ──────────────────────────────────────
+const PVINVERTER_STATUS: Record<number, string> = {
+    0: 'Aus',
+    1: 'Keine Verbindung',
+    2: 'Fehler',
+    3: 'Aus (Nacht)',
+    7: 'In Betrieb',
+    8: 'Normalbetrieb',
+    9: 'Temporäre Last-Reduzierung',
+    10: 'Maximale Ausgangsleistung',
+};
+
 // ── Stale-Timeout ────────────────────────────────────────────────────────────
-const STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 Minuten
+const STALE_TIMEOUT_MS = 5 * 60 * 1000;
 
 // ── Phasenpfade ──────────────────────────────────────────────────────────────
 const PHASE_POWER_PATHS: Record<string, string[]> = {
@@ -255,6 +415,9 @@ const PHASE_VOLTAGE_PATHS: Record<string, string[]> = {
     grid: ['Ac.L1.Voltage', 'Ac.L2.Voltage', 'Ac.L3.Voltage'],
 };
 
+// ── Zellpfade für min/max Berechnung ────────────────────────────────────────
+const CELL_PATH_RE = /^cells\.cell\d+$/;
+
 // ── DeviceInfo ───────────────────────────────────────────────────────────────
 interface DeviceInfo {
     type: string;
@@ -264,7 +427,7 @@ interface DeviceInfo {
     customName: string;
     virtual: boolean;
     source: string;
-    group: string; // Settings.Group → Ordner-Ebene bei switches
+    group: string;
     phaseVoltage: Record<string, number>;
     lastUpdate: number;
     staleTimer: ReturnType<typeof setTimeout> | null;
@@ -315,6 +478,7 @@ class VictronGx extends utils.Adapter {
         if (password) {
             options.password = password;
         }
+
         this.mqttClient = mqtt.connect(`mqtt://${host}`, options);
 
         this.mqttClient.on('connect', () => {
@@ -379,6 +543,7 @@ class VictronGx extends utils.Adapter {
             if (parts[0] !== 'N' || parts.length < 4) {
                 return;
             }
+
             if (!this.vrmId && parts[1]) {
                 this.vrmId = parts[1];
                 this.log.info(`VRM ID gefunden: ${this.vrmId}`);
@@ -389,7 +554,7 @@ class VictronGx extends utils.Adapter {
             const instanceStr = parts[3];
             const instance = parseInt(instanceStr, 10);
             const path = parts.slice(4).join('/');
-            const normalizedPath = path.replace(/\//g, '.');
+            const normPath = path.replace(/\//g, '.');
 
             if (!path || !RELEVANT_PATHS[deviceType]) {
                 return;
@@ -399,39 +564,37 @@ class VictronGx extends utils.Adapter {
             if (rawValue === null || rawValue === undefined) {
                 return;
             }
-            const value = rawValue;
 
             // ── Registrierungspfade → Metadaten ──────────────────────────
-            if (REGISTRATION_PATHS.has(normalizedPath)) {
-                if (typeof value === 'string' || typeof value === 'number') {
-                    this.updateDeviceMeta(deviceType, instance, normalizedPath, String(value));
+            if (REGISTRATION_PATHS.has(normPath)) {
+                if (typeof rawValue === 'string' || typeof rawValue === 'number') {
+                    this.updateDeviceMeta(deviceType, instance, normPath, String(rawValue));
                 }
                 return;
             }
 
-            // ── Pfad remappen (z.B. SwitchableOutput.output_1.State → State)
-            const remappedPath = PATH_REMAP[deviceType]?.[normalizedPath] ?? normalizedPath;
+            // ── Pfad remappen ─────────────────────────────────────────────
+            const remappedPath = PATH_REMAP[deviceType]?.[normPath] ?? normPath;
 
-            // ── Relevanzprüfung mit remapptem Pfad ───────────────────────
-            const relevantPaths = RELEVANT_PATHS[deviceType];
-            const isRelevant = relevantPaths.some(rp => remappedPath === rp.replace(/\//g, '.'));
+            // ── Relevanzprüfung ───────────────────────────────────────────
+            const isRelevant = RELEVANT_PATHS[deviceType].some(rp => normPath === rp.replace(/\//g, '.'));
             if (!isRelevant) {
                 return;
             }
 
-            // ── Gerät muss Serial haben (kein temporäres Instanz-Objekt) ──
+            // ── Serial oder Instanz-Fallback ──────────────────────────
             const deviceKey = `${deviceType}/${instance}`;
             const device = this.deviceMap.get(deviceKey);
             const serial = this.serialMap.get(deviceKey);
 
-            // Ohne Serial noch nicht speichern → verhindert doppelte Objekte
-            if (!serial && deviceType !== 'grid') {
+            // Geräte ohne Serial → Instanznummer als stabile ID verwenden
+            // vebus und grid liefern Serial nicht im MQTT-Stream
+            const NO_SERIAL_TYPES = new Set(['vebus', 'grid', 'system', 'platform']);
+            if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
                 return;
             }
 
             // ── baseId berechnen ──────────────────────────────────────────
-            // Switch:  devices.switch.<gruppe>.<serial>
-            // Andere:  devices.<type>.<serial|instanz>
             const baseId = this.getBaseId(deviceType, instance, serial, device);
             if (!baseId) {
                 return;
@@ -439,15 +602,13 @@ class VictronGx extends utils.Adapter {
 
             // ── Phasen-Filterung für virtuelle Geräte ─────────────────────
             if (device?.virtual && PHASE_VOLTAGE_PATHS[deviceType]) {
-                const voltageMatch = normalizedPath.match(/^Ac\.(L[123])\.Voltage$/);
-                if (voltageMatch) {
-                    device.phaseVoltage[voltageMatch[1]] = typeof value === 'number' ? value : 0;
+                const vMatch = normPath.match(/^Ac\.(L[123])\.Voltage$/);
+                if (vMatch) {
+                    device.phaseVoltage[vMatch[1]] = typeof rawValue === 'number' ? rawValue : 0;
                 }
-                const phaseMatch = normalizedPath.match(/^Ac\.(L[123])\./);
-                if (phaseMatch) {
-                    if ((device.phaseVoltage[phaseMatch[1]] ?? 0) === 0) {
-                        return;
-                    }
+                const pMatch = normPath.match(/^Ac\.(L[123])\./);
+                if (pMatch && (device.phaseVoltage[pMatch[1]] ?? 0) === 0) {
+                    return;
                 }
             }
 
@@ -456,37 +617,49 @@ class VictronGx extends utils.Adapter {
                 this.touchDevice(device, baseId);
             }
 
+            // ── Wert konvertieren ─────────────────────────────────────────
+            const isSwitchBool = deviceType === 'switch' && (remappedPath === 'State' || remappedPath === 'Status');
+            const storeValue = isSwitchBool ? rawValue !== 0 : rawValue;
+            const storeType = isSwitchBool
+                ? 'boolean'
+                : typeof rawValue === 'number'
+                  ? 'number'
+                  : typeof rawValue === 'boolean'
+                    ? 'boolean'
+                    : 'string';
+
             // ── Datenpunkt anlegen ────────────────────────────────────────
             const isWritable = (WRITABLE_PATHS[deviceType] || []).some(wp => remappedPath === wp);
             const stateId = `${baseId}.${remappedPath}`;
 
-            // Switch State + Status: Victron liefert 0/1 → ioBroker speichert boolean
-            const isSwitchBool = deviceType === 'switch' && (remappedPath === 'State' || remappedPath === 'Status');
-            const storeValue = isSwitchBool ? value !== 0 : value;
-            const storeType = isSwitchBool
-                ? 'boolean'
-                : typeof value === 'number'
-                  ? 'number'
-                  : typeof value === 'boolean'
-                    ? 'boolean'
-                    : 'string';
+            const commonBase: ioBroker.StateCommon = {
+                name: this.getFriendlyName(remappedPath),
+                type: storeType,
+                role: this.getRole(remappedPath),
+                unit: this.getUnit(remappedPath),
+                read: true,
+                write: isWritable,
+            };
+
+            // StatusCode → states Map
+            if (deviceType === 'pvinverter' && remappedPath === 'StatusCode') {
+                (commonBase as any).states = PVINVERTER_STATUS;
+            }
 
             await this.setObjectNotExistsAsync(stateId, {
                 type: 'state',
-                common: {
-                    name: this.getFriendlyName(remappedPath),
-                    type: storeType,
-                    role: this.getRole(remappedPath),
-                    unit: this.getUnit(remappedPath),
-                    read: true,
-                    write: isWritable,
-                },
+                common: commonBase,
                 native: {},
             });
             await this.setState(stateId, { val: storeValue, ack: true });
 
+            // ── Batterie: cells min/max nach jedem Zellwert neu berechnen ─
+            if (deviceType === 'battery' && CELL_PATH_RE.test(remappedPath)) {
+                void this.updateBatteryCellMinMax(baseId);
+            }
+
             // ── activePhase ───────────────────────────────────────────────
-            if (PHASE_POWER_PATHS[deviceType]?.includes(remappedPath) && this.channelReady.has(baseId)) {
+            if (PHASE_POWER_PATHS[deviceType]?.includes(normPath) && this.channelReady.has(baseId)) {
                 void this.updateActivePhase(deviceType, baseId);
             }
         } catch (err) {
@@ -495,18 +668,21 @@ class VictronGx extends utils.Adapter {
     }
 
     // ── baseId berechnen ─────────────────────────────────────────────────────
-    // Switch:  devices.switch.<gruppe>.<serial>
-    //          Gruppe darf nicht leer sein (Victron-Pflicht)
-    // Andere:  devices.<type>.<serial>  (grid: <instanz>)
+    // system/0 → overview.system (einzelner Channel, keine Geräte-Instanz)
+    // switch   → devices.switch.<gruppe>.<serial>
+    // andere   → devices.<type>.<serial>
     private getBaseId(
         type: string,
         instance: number,
         serial: string | undefined,
         device: DeviceInfo | undefined,
     ): string | null {
+        if (type === 'system') {
+            return 'overview';
+        }
         if (type === 'switch') {
             if (!serial || !device?.group) {
-                return null; // Noch nicht alle Metadaten bekannt
+                return null;
             }
             const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, '_');
             return `devices.switch.${groupKey}.${serial}`;
@@ -514,13 +690,11 @@ class VictronGx extends utils.Adapter {
         if (serial) {
             return `devices.${type}.${serial}`;
         }
-        if (type === 'grid') {
-            return `devices.${type}.${instance}`;
-        }
-        return null;
+        // Fallback für Geräte ohne Serial (vebus, grid, platform)
+        return `devices.${type}.${instance}`;
     }
 
-    // ── Metadaten sammeln und Channel anlegen ────────────────────────────────
+    // ── Metadaten sammeln ────────────────────────────────────────────────────
     private updateDeviceMeta(type: string, instance: number, field: string, value: string): void {
         const deviceKey = `${type}/${instance}`;
         if (!this.deviceMap.has(deviceKey)) {
@@ -544,9 +718,9 @@ class VictronGx extends utils.Adapter {
             case 'Serial': {
                 device.serial = value;
                 this.serialMap.set(deviceKey, value);
-                const key = `serial:${deviceKey}`;
-                if (!this.loggedDevices.has(key)) {
-                    this.loggedDevices.add(key);
+                const k = `serial:${deviceKey}`;
+                if (!this.loggedDevices.has(k)) {
+                    this.loggedDevices.add(k);
                     this.log.info(`Gerät erkannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
                 }
                 break;
@@ -555,41 +729,23 @@ class VictronGx extends utils.Adapter {
                 device.productName = value;
                 device.virtual = value.toLowerCase().includes('virtual');
                 if (device.virtual) {
-                    const key = `virtual:${deviceKey}`;
-                    if (!this.loggedDevices.has(key)) {
-                        this.loggedDevices.add(key);
+                    const k = `virtual:${deviceKey}`;
+                    if (!this.loggedDevices.has(k)) {
+                        this.loggedDevices.add(k);
                         this.log.info(`Virtuelles Gerät: ${type}/${instance} → "${value}"`);
                     }
                 }
                 break;
             }
             case 'CustomName':
-                // Nur setzen wenn noch kein spezifischerer Name vorhanden
                 if (!device.customName) {
                     device.customName = value;
                 }
                 break;
 
-            case 'Mgmt.Connection':
-                if (value === 'Node-RED') {
-                    device.source = 'node-red';
-                    const key = `nodered:${deviceKey}`;
-                    if (!this.loggedDevices.has(key)) {
-                        this.loggedDevices.add(key);
-                        this.log.info(`Node-RED Gerät: ${type}/${instance}`);
-                    }
-                }
-                break;
-
-            case 'Mgmt.ProcessName':
-                if (value === 'dbus-victron-virtual') {
-                    device.virtual = true;
-                }
-                break;
-
             case 'Connected': {
-                // Connected = Node-RED Flow aktiv → info.connected als boolean
-                const baseId = this.getBaseId(device.type, device.instance, device.serial || undefined, device);
+                // Verbindungsstatus → info.connected boolean
+                const baseId = this.getBaseId(type, instance, device.serial || undefined, device);
                 if (baseId) {
                     const connected = value === '1' || value === 'true';
                     void this.setObjectNotExistsAsync(`${baseId}.info.connected`, {
@@ -608,48 +764,101 @@ class VictronGx extends utils.Adapter {
                 }
                 break;
             }
-
-            case 'SwitchableOutput.output_1.Settings.Group':
-                device.group = value;
-                // Gruppenordner anlegen
-                {
-                    const groupKey = value.replace(/[^a-zA-Z0-9_]/g, '_');
-                    const groupId = `devices.switch.${groupKey}`;
-                    void this.setObjectNotExistsAsync(groupId, {
-                        type: 'folder',
-                        common: { name: value },
-                        native: {},
-                    });
+            case 'Mgmt.Connection':
+                if (value === 'Node-RED') {
+                    device.source = 'node-red';
+                    const k = `nodered:${deviceKey}`;
+                    if (!this.loggedDevices.has(k)) {
+                        this.loggedDevices.add(k);
+                        this.log.info(`Node-RED Gerät: ${type}/${instance}`);
+                    }
                 }
                 break;
 
-            case 'SwitchableOutput.output_1.Settings.CustomName':
-                // Spezifischer Name hat immer Priorität → überschreibt generischen
+            case 'Mgmt.ProcessName':
+                if (value === 'dbus-victron-virtual') {
+                    device.virtual = true;
+                }
+                break;
+
+            case 'Position': {
+                // Position des Geräts: 0=AC Ausgang, 1=AC Eingang, 2=AC Eingang 2
+                const posNames: Record<string, string> = {
+                    0: 'AC Ausgang (hinter MultiPlus)',
+                    1: 'AC Eingang (Netz)',
+                    2: 'AC Eingang 2',
+                };
+                const baseId = this.getBaseId(type, instance, device.serial || undefined, device);
+                if (baseId) {
+                    void this.setObjectNotExistsAsync(`${baseId}.info.position`, {
+                        type: 'state',
+                        common: {
+                            name: 'Position',
+                            type: 'number',
+                            role: 'value',
+                            states: { 0: 'AC Ausgang (hinter MultiPlus)', 1: 'AC Eingang (Netz)', 2: 'AC Eingang 2' },
+                            read: true,
+                            write: false,
+                        },
+                        native: {},
+                    }).then(() => {
+                        void this.setState(`${baseId}.info.position`, { val: parseInt(value, 10), ack: true });
+                        const k = `position:${deviceKey}`;
+                        if (!this.loggedDevices.has(k)) {
+                            this.loggedDevices.add(k);
+                            this.log.info(`${type}/${instance}: Position = ${posNames[value] || value}`);
+                        }
+                    });
+                }
+                break;
+            }
+
+            case 'NrOfPhases': {
+                const baseId = this.getBaseId(type, instance, device.serial || undefined, device);
+                if (baseId) {
+                    void this.setObjectNotExistsAsync(`${baseId}.info.nrOfPhases`, {
+                        type: 'state',
+                        common: { name: 'Anzahl Phasen', type: 'number', role: 'value', read: true, write: false },
+                        native: {},
+                    }).then(() => {
+                        void this.setState(`${baseId}.info.nrOfPhases`, { val: parseInt(value, 10), ack: true });
+                    });
+                }
+                break;
+            }
+
+            case 'SwitchableOutput.output_1.Settings.Group': {
+                device.group = value;
+                const groupKey = value.replace(/[^a-zA-Z0-9_]/g, '_');
+                void this.setObjectNotExistsAsync(`devices.switch.${groupKey}`, {
+                    type: 'folder',
+                    common: { name: value },
+                    native: {},
+                });
+                break;
+            }
+            case 'SwitchableOutput.output_1.Settings.CustomName': {
                 device.customName = value;
-                // Channel-Name nachträglich aktualisieren
                 if (device.serial && device.group) {
                     const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, '_');
                     const channelId = `devices.switch.${groupKey}.${device.serial}`;
                     const suffix = device.source === 'node-red' ? ' [Node-RED]' : device.virtual ? ' [Virtual]' : '';
-                    void this.extendObjectAsync(channelId, {
-                        common: { name: `${value}${suffix}` },
-                    });
+                    void this.extendObjectAsync(channelId, { common: { name: `${value}${suffix}` } });
                 }
                 break;
+            }
         }
 
-        // Channel anlegen sobald alle nötigen Metadaten vorhanden
         void this.ensureDeviceChannel(device);
     }
 
     // ── Channel anlegen ──────────────────────────────────────────────────────
     private async ensureDeviceChannel(device: DeviceInfo): Promise<void> {
-        // baseId berechnen — gibt null zurück wenn noch nicht alle Metadaten da
-        const baseId = this.getBaseId(device.type, device.instance, device.serial || undefined, device);
+        const serial = device.serial || undefined;
+        const baseId = this.getBaseId(device.type, device.instance, serial, device);
         if (!baseId) {
             return;
         }
-        // Bereits vollständig angelegt
         if (this.channelReady.has(baseId)) {
             return;
         }
@@ -657,9 +866,12 @@ class VictronGx extends utils.Adapter {
         const displayName = device.customName || device.productName || KNOWN_DEVICE_TYPES[device.type] || device.type;
         const suffix = device.virtual ? (device.source === 'node-red' ? ' [Node-RED]' : ' [Virtual]') : '';
 
+        // overview ist ein eigener Channel ohne Geräte-Typ-Prefix
+        const objType = baseId === 'overview' ? 'channel' : 'channel';
+
         await this.setObjectNotExistsAsync(baseId, {
-            type: 'channel',
-            common: { name: `${displayName}${suffix}` },
+            type: objType,
+            common: { name: baseId === 'overview' ? 'Übersicht' : `${displayName}${suffix}` },
             native: {
                 type: device.type,
                 instance: device.instance,
@@ -670,42 +882,62 @@ class VictronGx extends utils.Adapter {
             },
         });
 
-        // Info-Datenpunkte
-        const infoDps: Array<{ id: string; name: string; val: string | boolean }> = [
-            { id: 'info.serial', name: 'Seriennummer', val: device.serial },
-            { id: 'info.productName', name: 'Produktname', val: device.productName },
-            { id: 'info.customName', name: 'Anzeigename', val: device.customName },
-            { id: 'info.virtual', name: 'Virtuell', val: device.virtual },
-            { id: 'info.source', name: 'Quelle', val: device.source },
-        ];
-        for (const dp of infoDps) {
-            await this.setObjectNotExistsAsync(`${baseId}.${dp.id}`, {
+        // ── info.* Datenpunkte ────────────────────────────────────────────
+        if (baseId !== 'overview') {
+            // deviceId = der ioBroker Pfad-Schlüssel (Serial oder Gruppe.Serial)
+            const deviceId =
+                device.type === 'switch'
+                    ? `${device.group.replace(/[^a-zA-Z0-9_]/g, '_')}.${device.serial}`
+                    : device.serial || device.instance.toString();
+
+            const infoDps: Array<{ id: string; name: string; val: string | boolean }> = [
+                { id: 'info.deviceId', name: 'Geräte-ID', val: deviceId },
+                { id: 'info.serial', name: 'Seriennummer', val: device.serial },
+                { id: 'info.productName', name: 'Produktname', val: device.productName },
+                { id: 'info.customName', name: 'Anzeigename', val: device.customName },
+                { id: 'info.virtual', name: 'Virtuell', val: device.virtual },
+                { id: 'info.source', name: 'Quelle', val: device.source },
+            ];
+            for (const dp of infoDps) {
+                await this.setObjectNotExistsAsync(`${baseId}.${dp.id}`, {
+                    type: 'state',
+                    common: {
+                        name: dp.name,
+                        type: typeof dp.val === 'boolean' ? 'boolean' : 'string',
+                        role:
+                            dp.id === 'info.serial'
+                                ? 'info.serial'
+                                : dp.id === 'info.deviceId'
+                                  ? 'info.address'
+                                  : 'info.name',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                if (dp.val !== '' && dp.val !== false) {
+                    await this.setState(`${baseId}.${dp.id}`, { val: dp.val, ack: true });
+                }
+            }
+
+            // Stale
+            await this.setObjectNotExistsAsync(`${baseId}.info.lastUpdate`, {
+                type: 'state',
+                common: { name: 'Letztes Update', type: 'number', role: 'value.time', read: true, write: false },
+                native: {},
+            });
+            await this.setObjectNotExistsAsync(`${baseId}.info.stale`, {
                 type: 'state',
                 common: {
-                    name: dp.name,
-                    type: typeof dp.val === 'boolean' ? 'boolean' : 'string',
-                    role: dp.id === 'info.serial' ? 'info.serial' : 'info.name',
+                    name: 'Keine Daten',
+                    type: 'boolean',
+                    role: 'indicator.maintenance',
                     read: true,
                     write: false,
                 },
                 native: {},
             });
-            if (dp.val !== '' && dp.val !== false) {
-                await this.setState(`${baseId}.${dp.id}`, { val: dp.val, ack: true });
-            }
         }
-
-        // Stale-Datenpunkte
-        await this.setObjectNotExistsAsync(`${baseId}.info.lastUpdate`, {
-            type: 'state',
-            common: { name: 'Letztes Update', type: 'number', role: 'value.time', read: true, write: false },
-            native: {},
-        });
-        await this.setObjectNotExistsAsync(`${baseId}.info.stale`, {
-            type: 'state',
-            common: { name: 'Keine Daten', type: 'boolean', role: 'indicator.maintenance', read: true, write: false },
-            native: {},
-        });
 
         // activePhase für AC-Geräte
         if (PHASE_POWER_PATHS[device.type]) {
@@ -723,7 +955,7 @@ class VictronGx extends utils.Adapter {
             });
         }
 
-        // Switch: schreibbaren State-Datenpunkt anlegen
+        // Switch State
         if (device.type === 'switch') {
             await this.setObjectNotExistsAsync(`${baseId}.State`, {
                 type: 'state',
@@ -738,8 +970,86 @@ class VictronGx extends utils.Adapter {
             });
         }
 
+        // Batterie: cells + temperatures Ordner anlegen
+        if (device.type === 'battery') {
+            await this.setObjectNotExistsAsync(`${baseId}.cells`, {
+                type: 'folder',
+                common: { name: 'Zellspannungen' },
+                native: {},
+            });
+            await this.setObjectNotExistsAsync(`${baseId}.cells.min`, {
+                type: 'state',
+                common: {
+                    name: 'Zelle Min',
+                    type: 'number',
+                    role: 'value.voltage',
+                    unit: 'V',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
+            await this.setObjectNotExistsAsync(`${baseId}.cells.max`, {
+                type: 'state',
+                common: {
+                    name: 'Zelle Max',
+                    type: 'number',
+                    role: 'value.voltage',
+                    unit: 'V',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
+            await this.setObjectNotExistsAsync(`${baseId}.cells.diff`, {
+                type: 'state',
+                common: {
+                    name: 'Zelle Differenz',
+                    type: 'number',
+                    role: 'value.voltage',
+                    unit: 'V',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
+            await this.setObjectNotExistsAsync(`${baseId}.temperatures`, {
+                type: 'folder',
+                common: { name: 'Temperaturen' },
+                native: {},
+            });
+            await this.setObjectNotExistsAsync(`${baseId}.alarms`, {
+                type: 'folder',
+                common: { name: 'Alarme' },
+                native: {},
+            });
+        }
+
         this.channelReady.add(baseId);
         this.log.debug(`Channel angelegt: ${baseId}`);
+    }
+
+    // ── Batterie Zell-Min/Max berechnen ─────────────────────────────────────
+    private async updateBatteryCellMinMax(baseId: string): Promise<void> {
+        const vals: number[] = [];
+        for (let i = 1; i <= 32; i++) {
+            const id = `${baseId}.cells.cell${String(i).padStart(2, '0')}`;
+            try {
+                const s = await this.getStateAsync(id);
+                if (s && typeof s.val === 'number' && s.val > 0) {
+                    vals.push(s.val);
+                }
+            } catch {
+                /* noch nicht angelegt */
+            }
+        }
+        if (vals.length === 0) {
+            return;
+        }
+        const min = Math.min(...vals);
+        const max = Math.max(...vals);
+        await this.setState(`${baseId}.cells.min`, { val: Math.round(min * 1000) / 1000, ack: true });
+        await this.setState(`${baseId}.cells.max`, { val: Math.round(max * 1000) / 1000, ack: true });
     }
 
     // ── Stale-Erkennung ──────────────────────────────────────────────────────
@@ -748,7 +1058,7 @@ class VictronGx extends utils.Adapter {
         if (device.staleTimer) {
             clearTimeout(device.staleTimer);
         }
-        if (!this.channelReady.has(baseId)) {
+        if (!this.channelReady.has(baseId) || baseId === 'overview') {
             return;
         }
         void this.setState(`${baseId}.info.lastUpdate`, { val: device.lastUpdate, ack: true });
@@ -760,30 +1070,23 @@ class VictronGx extends utils.Adapter {
     }
 
     // ── activePhase berechnen ────────────────────────────────────────────────
-    private async updateActivePhase(deviceType: string, baseId: string): Promise<void> {
+    private async updateActivePhase(_deviceType: string, baseId: string): Promise<void> {
         const active: string[] = [];
         for (const phase of ['L1', 'L2', 'L3']) {
             try {
-                const state = await this.getStateAsync(`${baseId}.Ac.${phase}.Power`);
-                if (state && typeof state.val === 'number' && state.val !== 0) {
+                const s = await this.getStateAsync(`${baseId}.Ac.${phase}.Power`);
+                if (s && typeof s.val === 'number' && s.val !== 0) {
                     active.push(phase);
                 }
             } catch {
                 /* noch nicht angelegt */
             }
         }
-        let activePhase = '';
-        if (active.length === 1) {
-            activePhase = active[0];
-        } else if (active.length > 1) {
-            activePhase = 'multi';
-        }
+        const activePhase = active.length === 1 ? active[0] : active.length > 1 ? 'multi' : '';
         await this.setState(`${baseId}.info.activePhase`, { val: activePhase, ack: true });
     }
 
     // ── MQTT Write: ioBroker → GX ────────────────────────────────────────────
-    // ID-Format switch:  victron-gx.0.devices.switch.<gruppe>.<serial>.State
-    // ID-Format andere:  victron-gx.0.devices.<type>.<serial>.<path>
     private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
         if (!state || state.ack) {
             return;
@@ -792,9 +1095,9 @@ class VictronGx extends utils.Adapter {
             return;
         }
 
+        // victron-gx.0.devices.<type>...  oder  victron-gx.0.overview.*
         const parts = id.split('.');
-        // victron-gx.0.devices.<type>...
-        if (parts[2] !== 'devices' || parts.length < 6) {
+        if (parts.length < 5) {
             return;
         }
 
@@ -834,14 +1137,10 @@ class VictronGx extends utils.Adapter {
             return;
         }
 
+        // boolean → 0/1 für Victron
+        const writeVal = deviceType === 'switch' ? (state.val ? 1 : 0) : state.val;
+
         const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
-        // Switch State: boolean → 0/1 für Victron MQTT
-        const writeVal =
-            deviceType === 'switch' && (dpPath.endsWith('State') || dpPath.endsWith('Status'))
-                ? state.val
-                    ? 1
-                    : 0
-                : state.val;
         const payload = JSON.stringify({ value: writeVal });
         this.log.info(`Schreibe: ${mqttTopic} = ${payload}`);
         this.mqttClient.publish(mqttTopic, payload);
@@ -854,6 +1153,11 @@ class VictronGx extends utils.Adapter {
             'Dc.0.Voltage': 'DC Spannung',
             'Dc.0.Current': 'DC Strom',
             'Dc.0.Power': 'DC Leistung',
+            'Dc.Battery.Voltage': 'Batterie Spannung',
+            'Dc.Battery.Current': 'Batterie Strom',
+            'Dc.Battery.Power': 'Batterie Leistung',
+            'Dc.Pv.Power': 'PV Leistung gesamt',
+            'Dc.Pv.Current': 'PV Strom gesamt',
             'Ac.Power': 'AC Gesamtleistung',
             'Ac.L1.Power': 'L1 Leistung',
             'Ac.L2.Power': 'L2 Leistung',
@@ -866,34 +1170,105 @@ class VictronGx extends utils.Adapter {
             'Ac.L3.Current': 'L3 Strom',
             'Ac.Energy.Forward': 'Bezug gesamt',
             'Ac.Energy.Reverse': 'Einspeisung gesamt',
+            'Ac.Grid.L1.Power': 'Netz L1 Leistung',
+            'Ac.Grid.L2.Power': 'Netz L2 Leistung',
+            'Ac.Grid.L3.Power': 'Netz L3 Leistung',
+            'Ac.ActiveIn.Source': 'Aktive Eingangsquelle',
             State: 'Schaltzustand',
             Status: 'Hardware-Status',
             Connected: 'Verbunden',
+            StatusCode: 'Status',
             Mode: 'Betriebsart',
-            Temperature: 'Temperatur',
-            'Voltages.Sum': 'Zellspannung gesamt',
-            'Voltages.Diff': 'Zellspannung Differenz',
+            'SystemState.State': 'Systemzustand',
             TimeToGo: 'Restlaufzeit',
             'Yield.Power': 'PV Leistung',
             'Yield.Today': 'Ertrag heute',
             'Yield.Total': 'Ertrag gesamt',
+            'cells.min': 'Zelle Min',
+            'cells.max': 'Zelle Max',
+            'cells.diff': 'Zelle Differenz',
+            'cells.minId': 'Zelle Min ID',
+            'cells.maxId': 'Zelle Max ID',
+            'temperatures.main': 'Temperatur (BMS)',
+            'temperatures.temp1': 'Temperatur 1',
+            'temperatures.temp2': 'Temperatur 2',
+            'temperatures.temp3': 'Temperatur 3',
+            'temperatures.temp4': 'Temperatur 4',
+            'temperatures.min': 'Temperatur Min',
+            'temperatures.max': 'Temperatur Max',
+            'alarms.lowVoltage': 'Alarm: Unterspannung',
+            'alarms.highVoltage': 'Alarm: Überspannung',
+            'alarms.lowSoc': 'Alarm: SOC niedrig',
+            // Overview/System
+            'Dc.Battery.Soc': 'Batterie Ladezustand',
+            'Dc.Battery.ConsumedAmphours': 'Batterie Verbrauch',
+            'Dc.System.Power': 'DC System Leistung',
+            'Dc.System.Current': 'DC System Strom',
+            'Dc.Vebus.Power': 'MultiPlus DC Leistung',
+            'Dc.Vebus.Current': 'MultiPlus DC Strom',
+            'Dc.InverterCharger.Power': 'Wechselrichter DC Leistung',
+            'Dc.InverterCharger.Current': 'Wechselrichter DC Strom',
+            'Ac.Consumption.L1.Power': 'Verbrauch L1',
+            'Ac.Consumption.L2.Power': 'Verbrauch L2',
+            'Ac.Consumption.L3.Power': 'Verbrauch L3',
+            'Ac.ConsumptionOnOutput.L1.Power': 'Verbrauch Ausgang L1',
+            'Ac.ConsumptionOnOutput.L2.Power': 'Verbrauch Ausgang L2',
+            'Ac.ConsumptionOnOutput.L3.Power': 'Verbrauch Ausgang L3',
+            'Ac.ConsumptionOnInput.L1.Power': 'Verbrauch Eingang L1',
+            'Ac.ConsumptionOnInput.L2.Power': 'Verbrauch Eingang L2',
+            'Ac.ConsumptionOnInput.L3.Power': 'Verbrauch Eingang L3',
+            'Ac.PvOnGrid.L1.Power': 'PV Netz L1',
+            'Ac.PvOnGrid.L2.Power': 'PV Netz L2',
+            'Ac.PvOnGrid.L3.Power': 'PV Netz L3',
+            // PVInverter/ACLoad extras
+            'Ac.L1.Energy.Forward': 'L1 Energie Bezug',
+            'Ac.L2.Energy.Forward': 'L2 Energie Bezug',
+            'Ac.L3.Energy.Forward': 'L3 Energie Bezug',
+            'Ac.Frequency': 'Frequenz',
+            'Ac.MaxPower': 'Max. Leistung',
+            'Ac.PowerLimit': 'Leistungsbegrenzung',
+            ErrorCode: 'Fehlercode',
+            NrOfPhases: 'Anzahl Phasen',
+            Position: 'Position',
+            'BatterySense.Voltage': 'Batterie Spannung (MP)',
+            'Hub4.L1.AcPowerSetpoint': 'ESS Sollwert L1',
+            'Ac.ActiveIn.L1.I': 'L1 Eingangsstrom',
+            'Ac.ActiveIn.L1.V': 'L1 Eingangsspannung',
+            'Ac.ActiveIn.L1.S': 'L1 Eingang Scheinleistung',
+            'Ac.ActiveIn.P': 'Eingang Gesamtleistung',
+            'Ac.ActiveIn.S': 'Eingang Scheinleistung',
+            'Ac.Out.L1.F': 'L1 Ausgangsfrequenz',
+            'Ac.Out.L1.I': 'L1 Ausgangsstrom',
+            'Ac.Out.L1.S': 'L1 Ausgang Scheinleistung',
+            'Ac.Out.P': 'Ausgang Gesamtleistung',
+            'Ac.Out.S': 'Ausgang Scheinleistung',
+            Capacity: 'Kapazität',
+            CurrentAvg: 'Durchschnittsstrom',
         };
-        return names[path] || path;
+        if (names[path]) {
+            return names[path];
+        }
+        if (path.startsWith('cells.cell')) {
+            return `Zelle ${parseInt(path.replace('cells.cell', ''), 10)}`;
+        }
+        return path;
     }
 
     private getUnit(path: string): string {
-        for (const [key, unit] of Object.entries(UNITS)) {
-            if (path === key || path.endsWith(`.${key}`)) {
-                return unit;
-            }
-        }
-        if (path.includes('Power')) {
-            return 'W';
-        }
-        if (path.includes('Voltage') || path.endsWith('.V')) {
+        if (
+            path.startsWith('cells.cell') ||
+            path === 'cells.min' ||
+            path === 'cells.max' ||
+            path === 'cells.diff' ||
+            path.includes('Voltage') ||
+            path.endsWith('.V')
+        ) {
             return 'V';
         }
-        if (path.includes('Current')) {
+        if (path.includes('Power') || path === 'Hub4.L1.AcPowerSetpoint') {
+            return 'W';
+        }
+        if (path.includes('Current') || path.endsWith('.I')) {
             return 'A';
         }
         if (path.includes('Energy')) {
@@ -902,27 +1277,70 @@ class VictronGx extends utils.Adapter {
         if (path.includes('Soc')) {
             return '%';
         }
-        if (path.includes('Temperature')) {
+        if (path.startsWith('temperatures.')) {
             return '°C';
         }
-        if (path.startsWith('Voltages.Cell')) {
-            return 'V';
+        if (path.endsWith('.S')) {
+            return 'VA';
+        }
+        if (path.endsWith('.F')) {
+            return 'Hz';
+        }
+        if (path === 'Yield.Today' || path === 'Yield.Total') {
+            return 'kWh';
+        }
+        if (path === 'Yield.Power') {
+            return 'W';
+        }
+        if (path === 'Level') {
+            return '%';
+        }
+        if (path === 'Remaining') {
+            return 'm³';
+        }
+        if (path === 'Humidity') {
+            return '%';
+        }
+        if (path === 'Pressure') {
+            return 'hPa';
+        }
+        if (path === 'Capacity' || path.includes('ConsumedAmphours')) {
+            return 'Ah';
+        }
+        if (path === 'Ac.Frequency') {
+            return 'Hz';
+        }
+        if (path === 'Ac.MaxPower' || path === 'Ac.PowerLimit') {
+            return 'W';
         }
         return '';
     }
 
     private getRole(path: string): string {
-        if (path === 'State' || path === 'switch') {
+        if (path === 'State') {
             return 'switch';
         }
-        if (path.includes('Power')) {
-            return 'value.power';
-        }
-        if (path.includes('Voltage') || path.endsWith('.V')) {
+        if (
+            path.startsWith('cells.cell') ||
+            path === 'cells.min' ||
+            path === 'cells.max' ||
+            path === 'cells.diff' ||
+            path.includes('Voltage') ||
+            path.endsWith('.V')
+        ) {
             return 'value.voltage';
         }
-        if (path.includes('Current')) {
+        if (path.includes('Power') || path === 'Hub4.L1.AcPowerSetpoint') {
+            return 'value.power';
+        }
+        if (path.includes('Current') || path.endsWith('.I')) {
             return 'value.current';
+        }
+        if (path.endsWith('.S')) {
+            return 'value.power';
+        }
+        if (path.endsWith('.F')) {
+            return 'value.frequency';
         }
         if (path.includes('Energy')) {
             return 'value.energy.consumed';
@@ -930,8 +1348,14 @@ class VictronGx extends utils.Adapter {
         if (path.includes('Soc')) {
             return 'value.battery';
         }
-        if (path.includes('Temperature')) {
+        if (path.startsWith('temperatures.')) {
             return 'value.temperature';
+        }
+        if (path.startsWith('alarms.')) {
+            return 'indicator.alarm';
+        }
+        if (path === 'cells.minId' || path === 'cells.maxId') {
+            return 'text';
         }
         if (path.includes('State') || path.includes('Mode')) {
             return 'value';
