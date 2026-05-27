@@ -318,7 +318,7 @@ class VictronGx extends utils.Adapter {
         });
 
         this.mqttClient.on('message', (topic: string, payload: Buffer) => {
-            this.handleMessage(topic, payload);
+            void this.handleMessage(topic, payload);
         });
 
         this.mqttClient.on('error', err => {
@@ -522,7 +522,9 @@ class VictronGx extends utils.Adapter {
                 break;
 
             case 'CustomName':
-                device.customName = value;
+                if (!device.customName) {
+                    device.customName = value;
+                }
                 break;
 
             case 'Mgmt.Connection':
@@ -544,9 +546,14 @@ class VictronGx extends utils.Adapter {
                 break;
 
             case 'SwitchableOutput.output_1.Settings.CustomName':
-                // Switch-spezifischer CustomName (überschreibt generischen)
-                if (!device.customName) {
-                    device.customName = value;
+                device.customName = value; // immer überschreiben
+                {
+                    const channelKey = device.serial || device.instance.toString();
+                    const channelId = `devices.${device.type}.${channelKey}`;
+                    const suffix = device.source === 'node-red' ? ' [Node-RED]' : device.virtual ? ' [Virtual]' : '';
+                    void this.extendObjectAsync(channelId, {
+                        common: { name: `${value}${suffix}` },
+                    });
                 }
                 break;
         }
