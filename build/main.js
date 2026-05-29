@@ -551,7 +551,7 @@ class VictronGx extends utils.Adapter {
       const deviceKey = `${deviceType}/${instance}`;
       const device = this.deviceMap.get(deviceKey);
       const serial = this.serialMap.get(deviceKey);
-      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["grid", "system", "platform"]);
+      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["system", "platform"]);
       if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
         return;
       }
@@ -789,6 +789,7 @@ class VictronGx extends utils.Adapter {
       "acload",
       "pvinverter",
       "vebus",
+      "grid",
       "solarcharger",
       "temperature",
       "tank"

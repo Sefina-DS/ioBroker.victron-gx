@@ -593,7 +593,7 @@ class VictronGx extends utils.Adapter {
 
             // Geräte ohne Serial → Instanznummer als stabile ID verwenden
             // vebus und grid liefern Serial nicht im MQTT-Stream
-            const NO_SERIAL_TYPES = new Set(['grid', 'system', 'platform']);
+            const NO_SERIAL_TYPES = new Set(['system', 'platform']);
             if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
                 return;
             }
@@ -879,6 +879,7 @@ class VictronGx extends utils.Adapter {
             'acload',
             'pvinverter',
             'vebus',
+            'grid',
             'solarcharger',
             'temperature',
             'tank',
