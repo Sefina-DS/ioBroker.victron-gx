@@ -1,57 +1,76 @@
 {
-    "type": "panel",
-    "items": {
-        "host": {
-            "type": "text",
-            "label": "IP-Adresse des GX-Geräts",
-            "help": "z.B. 192.168.6.200",
-            "sm": 12,
-            "md": 6
-        },
-        "port": {
-            "type": "number",
-            "label": "MQTT-Port",
-            "default": 1883,
-            "sm": 12,
-            "md": 6
-        },
-        "mqttUsername": {
-            "type": "text",
-            "label": "MQTT-Benutzername",
-            "help": "Leer lassen wenn kein Auth konfiguriert",
-            "sm": 12,
-            "md": 6
-        },
-        "mqttPassword": {
-            "type": "password",
-            "label": "MQTT-Passwort",
-            "sm": 12,
-            "md": 6
-        },
-        "divider": {
-            "type": "divider"
-        },
-        "controlEnabled": {
-            "type": "checkbox",
-            "label": "Steuerung aktivieren (Modbus TCP)",
-            "default": false,
-            "sm": 12,
-            "md": 6
-        },
-        "modbusPort": {
-            "type": "number",
-            "label": "Modbus Port",
-            "default": 502,
-            "sm": 12,
-            "md": 6,
-            "visibleIf": "controlEnabled",
-            "visibleIfValue": true
-        },
-        "modbusHint": {
-            "type": "staticText",
-            "text": "⚠️  Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
-            "style": {"fontSize": "14px", "fontWeight": "bold"},
-            "sm": 12
-        }
+  "type": "panel",
+  "items": {
+    "host": {
+      "type": "text",
+      "label": "IP-Adresse des GX-Geräts",
+      "help": "z.B. 192.168.6.200",
+      "sm": 12,
+      "md": 6,
+      "xs": 12,
+      "lg": 6,
+      "xl": 6
+    },
+    "port": {
+      "type": "number",
+      "label": "MQTT-Port",
+      "default": 1883,
+      "sm": 12,
+      "md": 6,
+      "xs": 12,
+      "lg": 6,
+      "xl": 6
+    },
+    "mqttUsername": {
+      "type": "text",
+      "label": "MQTT-Benutzername",
+      "help": "Leer lassen wenn kein Auth konfiguriert",
+      "sm": 12,
+      "md": 6,
+      "xs": 12,
+      "lg": 6,
+      "xl": 6
+    },
+    "mqttPassword": {
+      "type": "password",
+      "label": "MQTT-Passwort",
+      "sm": 12,
+      "md": 6,
+      "xs": 12,
+      "lg": 6,
+      "xl": 6
+    },
+    "divider": {
+      "type": "divider"
+    },
+    "controlEnabled": {
+      "type": "checkbox",
+      "label": "Steuerung aktivieren (Modbus TCP)",
+      "default": false,
+      "sm": 12,
+      "md": 6,
+      "xs": 12,
+      "lg": 6,
+      "xl": 6
+    },
+    "modbusPort": {
+      "type": "number",
+      "label": "Modbus Port",
+      "default": 502,
+      "sm": 12,
+      "md": 6,
+      "xs": 12,
+      "lg": 4,
+      "xl": 4
+    },
+    "modbusHint": {
+      "type": "staticText",
+      "text": "⚠️  Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "bold"
+      },
+      "sm": 12
     }
+  }
 }
