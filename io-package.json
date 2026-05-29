@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.5.5",
+    "version": "0.5.6",
     "news": {
       "0.5.0": {
         "en": "ESS control via Modbus Unit 100 (BatteryLifeState, MinimumSoc, AcFeedInEnabled, MaxFeedInPower and more)",
@@ -71,6 +71,19 @@
       "0.5.5": {
         "en": "Fix: npm-token added to deploy workflow",
         "de": "Fix: npm-token zum Deploy-Workflow hinzugefügt",
+        "ru": "Исправление",
+        "pt": "Correção",
+        "nl": "Fix",
+        "fr": "Correction",
+        "it": "Correzione",
+        "es": "Corrección",
+        "pl": "Poprawka",
+        "uk": "Виправлення",
+        "zh-cn": "修复"
+      },
+      "0.5.6": {
+        "en": "Fix: switched to npm trusted publishing, removed npm-token",
+        "de": "Fix: auf npm Trusted Publishing umgestellt, npm-token entfernt",
         "ru": "Исправление",
         "pt": "Correção",
         "nl": "Fix",
