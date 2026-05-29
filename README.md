@@ -115,6 +115,9 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 
 ## Changelog
 
+### 0.5.2 (2026-05-29)
+- Fix: Node.js >= 22, admin >= 7.6.20, dependabot config, auto-merge workflow migrated
+
 ### 0.5.0 (2026-05-29)
 - ESS control via Modbus Unit 100 (all settings)
 - `ess.*` datapoints: BatteryLifeState, Mode, MinimumSoc, AcPowerSetPoint, AcFeedInEnabled, DcFeedInEnabled, MaxFeedInPower and more
