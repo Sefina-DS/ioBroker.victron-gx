@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "news": {
       "0.5.0": {
         "en": "ESS control via Modbus Unit 100 (BatteryLifeState, MinimumSoc, AcFeedInEnabled, MaxFeedInPower and more)",
@@ -28,6 +28,19 @@
         "pl": "Poprawki: Node.js >= 22, admin >= 7.6.20",
         "uk": "Виправлення: Node.js >= 22, admin >= 7.6.20",
         "zh-cn": "修复: Node.js >= 22, admin >= 7.6.20"
+      },
+      "0.5.2": {
+        "en": "Fix: dependabot config updated, auto-merge workflow migrated",
+        "de": "Fix: dependabot Konfiguration aktualisiert, auto-merge Workflow migriert",
+        "ru": "Исправление: обновление конфигурации dependabot",
+        "pt": "Correção: configuração dependabot atualizada",
+        "nl": "Fix: dependabot configuratie bijgewerkt",
+        "fr": "Correction: configuration dependabot mise à jour",
+        "it": "Correzione: configurazione dependabot aggiornata",
+        "es": "Corrección: configuración dependabot actualizada",
+        "pl": "Poprawka: konfiguracja dependabot zaktualizowana",
+        "uk": "Виправлення: конфігурацію dependabot оновлено",
+        "zh-cn": "修复: dependabot配置已更新"
       }
     },
     "titleLang": {
