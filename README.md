@@ -115,8 +115,14 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 
 ## Changelog
 
+### 0.5.4 (2026-05-29)
+- Fix: keywords in package.json, protectedNative/encryptedNative at root level
+
+### 0.5.3 (2026-05-29)
+- Fix: protectedNative/encryptedNative moved to root, tsconfig updated to node22, modbusHint size attributes
+
 ### 0.5.2 (2026-05-29)
-- Fix: Node.js >= 22, admin >= 7.6.20, dependabot config, auto-merge workflow migrated
+- Fix: Node.js >= 22, admin >= 7.6.20, English-only README, jsonConfig cleanup, dependabot config
 
 ### 0.5.0 (2026-05-29)
 - ESS control via Modbus Unit 100 (all settings)
@@ -124,20 +130,6 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 - Hub4.DisableFeedIn (Reg 39) added to vebus
 - MQTT feedback loop for ESS settings (ack=true on GX confirmation)
 - Corrected register scales based on live testing
-
-### 0.4.0 (2026-05-29)
-- Modbus TCP Discovery (automatic Unit ID detection)
-- `info.modbusId` and `info.instanceId` per device
-- `info.modbusConnected` and `info.modbusWritable`
-- Fixed: numeric ghost channels cleaned up on startup
-- Fixed: `ready` flag prevents premature channel creation
-- Fixed: Mode register corrected (33 instead of 4)
-
-### 0.3.1 (2026-05-29)
-- Fixed duplicate device IDs
-
-### 0.3.0 (2026-05-29)
-- Virtual switch control via MQTT working
 
 ### 0.1.0 (2026-05-27)
 - Complete read support for all device types
