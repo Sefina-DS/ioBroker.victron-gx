@@ -115,6 +115,9 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 
 ## Changelog
 
+### 0.5.5 (2026-05-29)
+- Fix: npm-token added to deploy workflow
+
 ### 0.5.4 (2026-05-29)
 - Fix: keywords in package.json, protectedNative/encryptedNative at root level
 
