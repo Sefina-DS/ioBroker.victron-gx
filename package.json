@@ -14,7 +14,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:Sefina-DS/ioBroker.victron-gx.git"
+    "url": "https://github.com/Sefina-DS/ioBroker.victron-gx"
   },
   "engines": {
     "node": ">= 20"
