@@ -454,6 +454,8 @@ class VictronGx extends utils.Adapter {
     // ── Adapter-Start ────────────────────────────────────────────────────────
     private onReady(): void {
         void this.setState('info.connection', false, true);
+        this.subscribeStates('devices.switch.*');
+        this.subscribeStates('devices.vebus.*');
         const host = this.config.host;
         const port = this.config.port || 1883;
         const username = this.config.mqttUsername;
