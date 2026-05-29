@@ -1,11 +1,27 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "news": {
+      "0.5.0": {
+        "en": "ESS control via Modbus Unit 100 (BatteryLifeState, MinimumSoc, AcFeedInEnabled, MaxFeedInPower and more)",
+        "de": "ESS-Steuerung über Modbus Unit 100 (BatteryLifeState, MinimumSoc, AcFeedInEnabled, MaxFeedInPower u.a.)"
+      },
+      "0.4.0": {
+        "en": "Modbus TCP discovery, modbusId per device, modbusConnected/modbusWritable indicators",
+        "de": "Modbus TCP Discovery, modbusId pro Gerät, modbusConnected/modbusWritable Indikatoren"
+      },
+      "0.3.1": {
+        "en": "Fixed duplicate device IDs",
+        "de": "Doppelte Geräte-IDs behoben"
+      },
+      "0.3.0": {
+        "en": "Virtual switch control via MQTT",
+        "de": "Virtuelle Schalter Steuerung über MQTT"
+      },
       "0.1.0": {
-        "en": "Modbus TCP control support added",
-        "de": "Modbus TCP Steuerung hinzugefügt"
+        "en": "Complete read support for all device types, Modbus TCP control support added",
+        "de": "Vollständige Lese-Unterstützung für alle Gerätetypen, Modbus TCP Steuerung hinzugefügt"
       },
       "0.0.1": {
         "en": "initial release",
@@ -51,6 +67,7 @@
       "Sefina-DS <ds.sefina@googlemail.com>"
     ],
     "keywords": [
+      "iobroker",
       "energy",
       "victron",
       "solar",
@@ -149,11 +166,10 @@
       {
         "admin": ">=7.0.23"
       }
-    ],
-    "installedFrom": "/opt/iobroker/dev/ioBroker.victron-gx"
+    ]
   },
   "native": {
-    "host": "192.168.1.x",
+    "host": "",
     "port": 1883,
     "mqttUsername": "",
     "mqttPassword": "",
