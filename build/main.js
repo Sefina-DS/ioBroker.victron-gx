@@ -143,7 +143,9 @@ const RELEVANT_PATHS = {
     // Registrierung
     "Serial",
     "ProductName",
-    "CustomName"
+    "CustomName",
+    "Devices.0.SerialNumber"
+    // echte Serial des MultiPlus
   ],
   solarcharger: [
     "Pv.V",
@@ -312,6 +314,7 @@ const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
   "Serial",
   "ProductName",
   "CustomName",
+  "Devices.0.SerialNumber",
   "Connected",
   "Position",
   "NrOfPhases",
@@ -546,7 +549,7 @@ class VictronGx extends utils.Adapter {
       const deviceKey = `${deviceType}/${instance}`;
       const device = this.deviceMap.get(deviceKey);
       const serial = this.serialMap.get(deviceKey);
-      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["vebus", "grid", "system", "platform"]);
+      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["grid", "system", "platform"]);
       if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
         return;
       }
@@ -639,13 +642,23 @@ class VictronGx extends utils.Adapter {
     }
     const device = this.deviceMap.get(deviceKey);
     switch (field) {
-      case "Serial": {
+      case "Serial":
+      case "Devices.0.SerialNumber": {
+        const wasUnknown = !device.serial;
         device.serial = value;
         this.serialMap.set(deviceKey, value);
         const k = `serial:${deviceKey}`;
         if (!this.loggedDevices.has(k)) {
           this.loggedDevices.add(k);
           this.log.info(`Ger\xE4t erkannt: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 Serial: ${value}`);
+        }
+        if (wasUnknown) {
+          const oldId = `devices.${type}.${instance}`;
+          const newId = `devices.${type}.${value}`;
+          if (oldId !== newId) {
+            this.delObjectAsync(oldId, { recursive: true }).then(() => this.log.debug(`Alten Channel gel\xF6scht: ${oldId}`)).catch(() => {
+            });
+          }
         }
         break;
       }
@@ -769,6 +782,18 @@ class VictronGx extends utils.Adapter {
   }
   // ── Channel anlegen ──────────────────────────────────────────────────────
   async ensureDeviceChannel(device) {
+    const NEEDS_SERIAL = /* @__PURE__ */ new Set([
+      "battery",
+      "acload",
+      "pvinverter",
+      "vebus",
+      "solarcharger",
+      "temperature",
+      "tank"
+    ]);
+    if (NEEDS_SERIAL.has(device.type) && !device.serial) {
+      return;
+    }
     const serial = device.serial || void 0;
     const baseId = this.getBaseId(device.type, device.instance, serial, device);
     if (!baseId) {

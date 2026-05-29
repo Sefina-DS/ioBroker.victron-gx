@@ -131,6 +131,7 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'Serial',
         'ProductName',
         'CustomName',
+        'Devices.0.SerialNumber', // echte Serial des MultiPlus
     ],
     solarcharger: [
         'Pv.V',
@@ -301,6 +302,7 @@ const REGISTRATION_PATHS = new Set([
     'Serial',
     'ProductName',
     'CustomName',
+    'Devices.0.SerialNumber',
     'Connected',
     'Position',
     'NrOfPhases',
@@ -589,7 +591,7 @@ class VictronGx extends utils.Adapter {
 
             // Geräte ohne Serial → Instanznummer als stabile ID verwenden
             // vebus und grid liefern Serial nicht im MQTT-Stream
-            const NO_SERIAL_TYPES = new Set(['vebus', 'grid', 'system', 'platform']);
+            const NO_SERIAL_TYPES = new Set(['grid', 'system', 'platform']);
             if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
                 return;
             }
@@ -715,13 +717,27 @@ class VictronGx extends utils.Adapter {
         const device = this.deviceMap.get(deviceKey)!;
 
         switch (field) {
-            case 'Serial': {
+            case 'Serial':
+            case 'Devices.0.SerialNumber': {
+                const wasUnknown = !device.serial;
                 device.serial = value;
                 this.serialMap.set(deviceKey, value);
                 const k = `serial:${deviceKey}`;
                 if (!this.loggedDevices.has(k)) {
                     this.loggedDevices.add(k);
                     this.log.info(`Gerät erkannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
+                }
+                // Alten Instanz-Channel löschen falls als Leiche vorhanden
+                if (wasUnknown) {
+                    const oldId = `devices.${type}.${instance}`;
+                    const newId = `devices.${type}.${value}`;
+                    if (oldId !== newId) {
+                        this.delObjectAsync(oldId, { recursive: true })
+                            .then(() => this.log.debug(`Alten Channel gelöscht: ${oldId}`))
+                            .catch(() => {
+                                /* existierte nicht */
+                            });
+                    }
                 }
                 break;
             }
@@ -854,6 +870,21 @@ class VictronGx extends utils.Adapter {
 
     // ── Channel anlegen ──────────────────────────────────────────────────────
     private async ensureDeviceChannel(device: DeviceInfo): Promise<void> {
+        // Typen die eine Serial liefern: erst anlegen wenn Serial bekannt
+        // Sonst entstehen Duplikate (Instanznummer + Serial)
+        const NEEDS_SERIAL = new Set([
+            'battery',
+            'acload',
+            'pvinverter',
+            'vebus',
+            'solarcharger',
+            'temperature',
+            'tank',
+        ]);
+        if (NEEDS_SERIAL.has(device.type) && !device.serial) {
+            return;
+        }
+
         const serial = device.serial || undefined;
         const baseId = this.getBaseId(device.type, device.instance, serial, device);
         if (!baseId) {
