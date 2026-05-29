@@ -1,6 +1,6 @@
 {
   "name": "iobroker.victron-gx",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "ioBroker adapter for Victron GX devices via local MQTT and Modbus",
   "author": {
     "name": "Sefina-DS",
@@ -10,7 +10,12 @@
   "homepage": "https://github.com/Sefina-DS/ioBroker.victron-gx",
   "license": "MIT",
   "keywords": [
-    "energy"
+    "iobroker",
+    "energy",
+    "victron",
+    "solar",
+    "mqtt",
+    "modbus"
   ],
   "repository": {
     "type": "git",
