@@ -13,7 +13,7 @@ Verbindet ioBroker **direkt und lokal** mit Victron GX Geräten (Cerbo GX, Venus
 
 ### Was macht dieser Adapter?
 
-Der Adapter liest alle relevanten Messwerte deiner Victron Anlage über das lokale MQTT-Protokoll und stellt sie als ioBroker Datenpunkte bereit. Zusätzlich können virtuelle Schalter (Node-RED) über MQTT und der MultiPlus/Quattro über Modbus TCP gesteuert werden.
+Der Adapter liest alle relevanten Messwerte deiner Victron Anlage über das lokale MQTT-Protokoll und stellt sie als ioBroker Datenpunkte bereit. Zusätzlich können virtuelle Schalter (Node-RED) über MQTT, der MultiPlus/Quattro über Modbus TCP und alle ESS-Einstellungen direkt gesteuert werden.
 
 ### Voraussetzungen
 
@@ -36,6 +36,7 @@ Der Adapter liest alle relevanten Messwerte deiner Victron Anlage über das loka
 |---|---|---|
 | Batterie / BMS (LiFePO4, AGM, ...) | ✅ | – |
 | MultiPlus / Quattro (VE.Bus) | ✅ | ✅ Modbus |
+| ESS Einstellungen | ✅ | ✅ Modbus |
 | Netzanschluss (Grid Meter) | ✅ | – |
 | AC Lasten (real + Node-RED virtuell) | ✅ | – |
 | PV Wechselrichter (real + Node-RED) | ✅ | – |
@@ -56,6 +57,18 @@ victron-gx.0
 │   ├── Ac.Consumption.*
 │   ├── Ac.PvOnGrid.*
 │   └── SystemState.State / TimeToGo
+├── ess.*                    ← ESS Steuerung (schreibbar)
+│   ├── BatteryLifeState     ← ESS Modus (10=ohne BatteryLife, 4=mit BatteryLife)
+│   ├── Mode                 ← Phasenmodus (1=mit Phase, 2=ohne Phase, 3=Extern)
+│   ├── MinimumSoc           ← Min SoC % (außer Netzausfall)
+│   ├── AcPowerSetPoint      ← Sollwert Netz W
+│   ├── AcFeedInEnabled      ← AC-Einspeisung (0=erlaubt, 1=gesperrt)
+│   ├── DcFeedInEnabled      ← DC-Einspeisung (0=aus, 1=an)
+│   ├── MaxFeedInPower       ← Max Einspeisung W (0=gesperrt)
+│   ├── MaxChargePercent     ← Max Laden % (veraltet)
+│   ├── MaxDischargePercent  ← Max Entladen % (veraltet)
+│   ├── BatteryLifeSocLimit  ← BL SoC Limit % (nur lesen)
+│   └── FeedInLimitActive    ← Begrenzung aktiv (nur lesen)
 └── devices
     ├── battery.<Serial>
     │   ├── Soc, Voltage, Current, Power, TimeToGo
@@ -66,7 +79,8 @@ victron-gx.0
     │   ├── Ac.ActiveIn.L1.P/I/V/S
     │   ├── Ac.Out.L1.P/I/V/F/S
     │   ├── Dc.0.Voltage/Current/Power
-    │   ├── Hub4.L1.AcPowerSetpoint  ← schreibbar
+    │   ├── Hub4.L1.AcPowerSetpoint  ← schreibbar (ESS Live-Sollwert)
+    │   ├── Hub4.DisableFeedIn       ← schreibbar (0=erlaubt, 1=gesperrt)
     │   ├── Ac.In1.CurrentLimit      ← schreibbar
     │   └── Mode                     ← schreibbar
     ├── grid.<Serial>
@@ -81,23 +95,6 @@ victron-gx.0
         └── Status ← Hardware-Rückmeldung
 ```
 
-### Pro Gerät – info Datenpunkte
-
-| Datenpunkt | Beschreibung |
-|---|---|
-| `info.serial` | Seriennummer |
-| `info.productName` | Produktname vom GX |
-| `info.customName` | Anzeigename |
-| `info.instanceId` | MQTT Instanz-ID |
-| `info.modbusId` | Modbus Unit ID |
-| `info.virtual` | Virtuelles Gerät (Node-RED) |
-| `info.source` | Quelle ("node-red" oder "") |
-| `info.connected` | Verbunden |
-| `info.lastUpdate` | Letztes Update |
-| `info.stale` | Keine Daten seit > 5 Min |
-| `info.position` | AC Ausgang / AC Eingang |
-| `info.activePhase` | Aktive Phase(n) |
-
 ### Steuerung
 
 **Virtuelle Schalter (Node-RED):**
@@ -108,8 +105,18 @@ State auf true/false setzen → MQTT Write → GX → Node-RED → Relais
 **MultiPlus/Quattro (Modbus TCP):**
 ```
 Mode setzen (1=Ladegerät, 2=Wechselrichter, 3=Ein, 4=APS)
-ESS Sollwert setzen (Watt, negativ=Einspeisung)
+ESS Live-Sollwert setzen (Watt, negativ=Einspeisung)
 Eingangsstrombegrenzung setzen (Ampere)
+Einspeisung deaktivieren (Hub4.DisableFeedIn)
+```
+
+**ESS Einstellungen (Modbus TCP):**
+```
+BatteryLifeState: 10=ohne BatteryLife, 4=mit BatteryLife
+Mode: 1=mit Phasenkompensation, 2=ohne, 3=Externe Steuerung
+MinimumSoc: Mindest-SoC in % (außer bei Netzausfall)
+AcFeedInEnabled: 0=Einspeisung erlaubt, 1=gesperrt
+MaxFeedInPower: Maximale Einspeisung in Watt (0=gesperrt)
 ```
 
 ---
@@ -118,7 +125,7 @@ Eingangsstrombegrenzung setzen (Ampere)
 
 ### What does this adapter do?
 
-Connects ioBroker directly and locally to Victron GX devices via the local MQTT protocol – without any detour through Home Assistant or the VRM Cloud. Additionally supports controlling virtual switches via MQTT and MultiPlus/Quattro via Modbus TCP.
+Connects ioBroker directly and locally to Victron GX devices via the local MQTT protocol – without any detour through Home Assistant or the VRM Cloud. Supports reading all device data and full ESS control via Modbus TCP.
 
 ### Requirements
 
@@ -133,6 +140,7 @@ Connects ioBroker directly and locally to Victron GX devices via the local MQTT 
 |---|---|---|
 | Battery / BMS (LiFePO4, AGM, ...) | ✅ | – |
 | MultiPlus / Quattro (VE.Bus) | ✅ | ✅ Modbus |
+| ESS Settings | ✅ | ✅ Modbus |
 | Grid Meter | ✅ | – |
 | AC Loads (real + Node-RED virtual) | ✅ | – |
 | PV Inverters (real + Node-RED) | ✅ | – |
@@ -155,12 +163,26 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 
 **MultiPlus/Quattro (Modbus TCP):**
 - Set Mode (1=Charger, 2=Inverter, 3=On, 4=APS)
-- Set ESS setpoint (Watts, negative=feed-in)
+- Set ESS live setpoint (Watts, negative=feed-in)
 - Set input current limit (Amperes)
+
+**ESS Settings (Modbus TCP):**
+- BatteryLifeState: 10=without BatteryLife, 4=with BatteryLife
+- Mode: 1=with phase compensation, 2=without, 3=External control
+- MinimumSoc: minimum SoC in % (except grid failure)
+- AcFeedInEnabled: 0=feed-in allowed, 1=blocked
+- MaxFeedInPower: maximum feed-in in Watts (0=blocked)
 
 ---
 
 ## Changelog
+
+### 0.5.0 (2026-05-29)
+- ESS control via Modbus Unit 100 (all settings)
+- `ess.*` datapoints: BatteryLifeState, Mode, MinimumSoc, AcPowerSetPoint, AcFeedInEnabled, DcFeedInEnabled, MaxFeedInPower and more
+- Hub4.DisableFeedIn (Reg 39) added to vebus
+- MQTT feedback loop for ESS settings (ack=true on GX confirmation)
+- Corrected register scales based on live testing
 
 ### 0.4.0 (2026-05-29)
 - Modbus TCP Discovery (automatic Unit ID detection)

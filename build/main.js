@@ -141,6 +141,8 @@ const RELEVANT_PATHS = {
     // ESS Steuerung (schreibbar!)
     "Hub4.L1.AcPowerSetpoint",
     // ESS Sollwert W (negativ = einspeisen)
+    "Hub4.DisableFeedIn",
+    // 0=Einspeisung erlaubt, 1=deaktiviert
     // Registrierung
     "Serial",
     "ProductName",
@@ -393,7 +395,27 @@ const WRITE_PATH_REMAP = {
 };
 const WRITABLE_PATHS = {
   switch: ["State"],
-  vebus: ["Mode", "Ac.In1.CurrentLimit", "Hub4.L1.AcPowerSetpoint"]
+  vebus: ["Mode", "Ac.In1.CurrentLimit", "Hub4.L1.AcPowerSetpoint", "Hub4.DisableFeedIn"],
+  ess: [
+    "Mode",
+    // Reg 2902: Phasenmodus (1=mit Phase, 2=ohne Phase, 3=Extern)
+    "BatteryLifeState",
+    // Reg 2900: BatteryLife (10=ohne BL, 4=mit BL, 3=Extern)
+    "MinimumSoc",
+    // Reg 2901: Minimum SoC [%]
+    "AcPowerSetPoint",
+    // Reg 2700: Sollwert Netz [W]
+    "MaxChargePercent",
+    // Reg 2701: Max Laden [%] (veraltet)
+    "MaxDischargePercent",
+    // Reg 2702: Max Entladen [%] (veraltet)
+    "MaxFeedInPower",
+    // Reg 2706: Max Einspeisung [W] (0=gesperrt)
+    "AcFeedInEnabled",
+    // Reg 2708: AC-Einspeisung (0=erlaubt, 1=gesperrt)
+    "DcFeedInEnabled"
+    // Reg 2707: DC-Einspeisung (0=aus, 1=an)
+  ]
 };
 const MODBUS_REGISTERS = {
   vebus: {
@@ -401,8 +423,33 @@ const MODBUS_REGISTERS = {
     // Betriebsmodus (1=Ladegerät, 2=Wechselrichter, 3=Ein, 4=APS)
     "Ac.In1.CurrentLimit": { register: 22, scale: 10, signed: false },
     // Eingangsstrombegrenzung
-    "Hub4.L1.AcPowerSetpoint": { register: 37, scale: 1, signed: true }
-    // ESS Sollwert W
+    "Hub4.L1.AcPowerSetpoint": { register: 37, scale: 1, signed: true },
+    // ESS Live-Sollwert W
+    "Hub4.DisableFeedIn": { register: 39, scale: 1, signed: false }
+    // 0=Einspeisung erlaubt, 1=deaktiviert
+  },
+  // ESS Einstellungen – alle Unit ID 100 (com.victronenergy.settings)
+  // scale = Schreibrichtung: register = val / scale
+  ess: {
+    BatteryLifeState: { register: 2900, scale: 1, signed: false },
+    // BL Modus: 10=ohne BL, 4=mit BL
+    MinimumSoc: { register: 2901, scale: 0.1, signed: false },
+    // 50% → 50/0.1=500 im Register
+    Mode: { register: 2902, scale: 1, signed: false },
+    // Phasenmodus: 1=mit, 2=ohne, 3=Extern
+    // 2903 = BatteryLife.SocLimit → read only
+    AcPowerSetPoint: { register: 2700, scale: 1, signed: true },
+    // Sollwert Netz W
+    MaxChargePercent: { register: 2701, scale: 1, signed: false },
+    // Max Laden % (veraltet)
+    MaxDischargePercent: { register: 2702, scale: 1, signed: false },
+    // Max Entladen % (veraltet)
+    DcFeedInEnabled: { register: 2707, scale: 1, signed: false },
+    // DC-Einspeisung: 0=aus, 1=an
+    AcFeedInEnabled: { register: 2708, scale: 1, signed: false },
+    // AC-Einspeisung: 0=erlaubt, 1=gesperrt
+    MaxFeedInPower: { register: 2706, scale: 100, signed: true }
+    // 1000W → 1000/100=10 im Register
   }
 };
 const PVINVERTER_STATUS = {
@@ -477,6 +524,7 @@ class VictronGx extends utils.Adapter {
     void this.setState("info.modbusWritable", false, true);
     this.subscribeStates("devices.switch.*");
     this.subscribeStates("devices.vebus.*");
+    this.subscribeStates("ess.*");
     void this.cleanupNumericChannels();
     const host = this.config.host;
     const port = this.config.port || 1883;
@@ -680,6 +728,237 @@ class VictronGx extends utils.Adapter {
       await new Promise((r) => setTimeout(r, 50));
     }
     this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Ger\xE4te gefunden.`);
+    if (this.config.controlEnabled) {
+      try {
+        if (this.modbusBusy) {
+          await this.waitModbus();
+        }
+        this.modbusBusy = true;
+        this.modbusClient.setID(100);
+        await this.modbusClient.readHoldingRegisters(2902, 1);
+        this.modbusBusy = false;
+        this.modbusUnitMap.set("ess/0", 100);
+        this.log.info("Modbus Discovery: ess/settings \u2192 Unit ID 100");
+        await this.initEssDatapoints();
+      } catch (err) {
+        this.modbusBusy = false;
+        this.log.warn(`ESS Unit 100 nicht erreichbar: ${err.message}`);
+      }
+    }
+  }
+  // ── ESS Datenpunkte anlegen und initial per Modbus lesen ─────────────────
+  async initEssDatapoints() {
+    if (!this.modbusClient) {
+      return;
+    }
+    await this.setObjectNotExistsAsync("ess", {
+      type: "channel",
+      common: { name: "ESS Steuerung" },
+      native: {}
+    });
+    const ESS_POINTS = [
+      // ── Reg 2902: Phasenkompensation (NICHT BatteryLife!) ──────────
+      {
+        id: "Mode",
+        name: "ESS Phasenmodus",
+        register: 2902,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: false,
+        unit: "",
+        write: true,
+        states: { 1: "Mit Phasenkompensation", 2: "Ohne Phasenkompensation", 3: "Externe Steuerung" }
+      },
+      // ── Reg 2900: BatteryLife Modus (ESS mit/ohne BatteryLife) ─────
+      // 4=Self-consumption MIT BatteryLife, 10=Ohne BatteryLife (BL Disabled)
+      // Schreiben: 2=Self-consumption aktiviert BL, 10=deaktiviert BL
+      {
+        id: "BatteryLifeState",
+        name: "BatteryLife Modus",
+        register: 2900,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: false,
+        unit: "",
+        write: true,
+        states: {
+          0: "Deaktiviert",
+          2: "Self-consumption",
+          3: "Self-consumption",
+          4: "Self-consumption (mit BatteryLife)",
+          5: "Entladung deaktiviert",
+          6: "Zwangsladen",
+          7: "Sustain",
+          8: "Low SoC Nachladen",
+          9: "Batterie geladen halten",
+          10: "Ohne BatteryLife",
+          11: "Ohne BatteryLife (Low SoC)",
+          12: "Ohne BatteryLife (Low SoC Nachladen)"
+        }
+      },
+      {
+        id: "MinimumSoc",
+        name: "Minimum SoC (au\xDFer Netzausfall)",
+        register: 2901,
+        scaleRead: 10,
+        scaleWrite: 0.1,
+        signed: false,
+        unit: "%",
+        write: true
+      },
+      {
+        id: "BatteryLifeSocLimit",
+        name: "BatteryLife SoC Limit (nur lesen)",
+        register: 2903,
+        scaleRead: 10,
+        scaleWrite: 1,
+        signed: false,
+        unit: "%",
+        write: false
+      },
+      {
+        id: "AcPowerSetPoint",
+        name: "Sollwert Netz",
+        register: 2700,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: true,
+        unit: "W",
+        write: true
+      },
+      {
+        id: "MaxChargePercent",
+        name: "Max Laden (veraltet)",
+        register: 2701,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: false,
+        unit: "%",
+        write: true
+      },
+      {
+        id: "MaxDischargePercent",
+        name: "Max Entladen (veraltet)",
+        register: 2702,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: false,
+        unit: "%",
+        write: true
+      },
+      {
+        id: "MaxFeedInPower",
+        name: "Max Einspeisung (0=gesperrt)",
+        register: 2706,
+        scaleRead: 100,
+        scaleWrite: 100,
+        signed: true,
+        unit: "W",
+        write: true
+      },
+      {
+        id: "AcFeedInEnabled",
+        name: "AC-Einspeisung aktiv",
+        register: 2708,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: false,
+        unit: "",
+        write: true,
+        states: { 0: "Einspeisung erlaubt", 1: "Einspeisung gesperrt" }
+      },
+      {
+        id: "DcFeedInEnabled",
+        name: "DC-Einspeisung aktiv",
+        register: 2707,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: false,
+        unit: "",
+        write: true,
+        states: { 0: "Deaktiviert", 1: "Aktiviert" }
+      },
+      {
+        id: "FeedInLimitActive",
+        name: "Einspeisebegrenzung aktiv",
+        register: 2709,
+        scaleRead: 1,
+        scaleWrite: 1,
+        signed: false,
+        unit: "",
+        write: false,
+        states: { 0: "Nein", 1: "Ja" }
+      }
+    ];
+    for (const dp of ESS_POINTS) {
+      const commonDef = {
+        name: dp.name,
+        type: "number",
+        role: dp.unit === "W" ? "value.power" : dp.unit === "%" ? "value" : "value",
+        unit: dp.unit,
+        read: true,
+        write: dp.write && this.config.controlEnabled
+      };
+      if (dp.states) {
+        commonDef.states = dp.states;
+      }
+      await this.setObjectNotExistsAsync(`ess.${dp.id}`, {
+        type: "state",
+        common: commonDef,
+        native: {}
+      });
+      try {
+        if (this.modbusBusy) {
+          await this.waitModbus();
+        }
+        this.modbusBusy = true;
+        this.modbusClient.setID(100);
+        const result = await this.modbusClient.readHoldingRegisters(dp.register, 1);
+        this.modbusBusy = false;
+        let raw = result.data[0];
+        if (dp.signed && raw > 32767) {
+          raw = raw - 65536;
+        }
+        const val = dp.scaleRead > 1 ? raw / dp.scaleRead : raw;
+        await this.setState(`ess.${dp.id}`, { val, ack: true });
+        this.log.info(`ESS Init: ${dp.id} = ${val}${dp.unit} (Reg ${dp.register})`);
+      } catch (err) {
+        this.modbusBusy = false;
+        this.log.warn(`ESS Init Reg ${dp.register} Fehler: ${err.message}`);
+      }
+    }
+  }
+  // ── ESS MQTT-Rücklesung (settings/0/Settings/CGwacs/...) ─────────────────
+  async handleEssMqttUpdate(normPath, parsed) {
+    const rawValue = "value" in parsed ? parsed.value : null;
+    if (rawValue === null || rawValue === void 0) {
+      return;
+    }
+    const ESS_MQTT_MAP = {
+      "Settings.CGwacs.Hub4Mode": { id: "Mode" },
+      "Settings.CGwacs.BatteryLife.MinimumSocLimit": { id: "MinimumSoc" },
+      "Settings.CGwacs.BatteryLife.State": { id: "BatteryLifeState" },
+      "Settings.CGwacs.BatteryLife.SocLimit": { id: "BatteryLifeSocLimit" },
+      "Settings.CGwacs.AcPowerSetPoint": { id: "AcPowerSetPoint" },
+      "Settings.CGwacs.MaxChargePercentage": { id: "MaxChargePercent" },
+      "Settings.CGwacs.MaxDischargePercentage": { id: "MaxDischargePercent" },
+      "Settings.CGwacs.MaxFeedInPower": { id: "MaxFeedInPower" },
+      "Settings.CGwacs.PreventFeedback": { id: "AcFeedInEnabled" },
+      // umbenannt
+      "Settings.CGwacs.OvervoltageFeedIn": { id: "DcFeedInEnabled" },
+      "Settings.CGwacs.PvPowerLimiterActive": { id: "FeedInLimitActive" }
+    };
+    const mapping = ESS_MQTT_MAP[normPath];
+    if (!mapping) {
+      return;
+    }
+    const val = typeof rawValue === "number" ? rawValue : parseFloat(rawValue);
+    const stateId = `ess.${mapping.id}`;
+    try {
+      await this.setState(stateId, { val, ack: true });
+      this.log.debug(`ESS MQTT Update: ${mapping.id} = ${val} (via ${normPath})`);
+    } catch {
+    }
   }
   // ── Modbus Write ─────────────────────────────────────────────────────────
   async writeModbus(deviceKey, path, value) {
@@ -698,7 +977,7 @@ class VictronGx extends utils.Adapter {
       this.log.warn(`Kein Modbus-Register f\xFCr ${deviceType}.${path}`);
       return;
     }
-    const regValue = Math.round(value * reg.scale);
+    const regValue = deviceType === "ess" ? Math.round(value / reg.scale) : Math.round(value * reg.scale);
     const writeValue = reg.signed && regValue < 0 ? regValue + 65536 : regValue;
     try {
       if (this.modbusBusy) {
@@ -762,6 +1041,9 @@ class VictronGx extends utils.Adapter {
       const path = parts.slice(4).join("/");
       const normPath = path.replace(/\//g, ".");
       if (!path || !RELEVANT_PATHS[deviceType]) {
+        if (deviceType === "settings") {
+          await this.handleEssMqttUpdate(normPath, parsed);
+        }
         return;
       }
       const rawValue = "value" in parsed ? parsed.value : parsed;
@@ -1265,6 +1547,15 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const parts = id.split(".");
+    if (parts[2] === "ess") {
+      const dpId = parts.slice(3).join(".");
+      if (!this.config.controlEnabled || !this.modbusClient) {
+        this.log.warn("ESS Steuerung: Modbus nicht aktiviert oder nicht verbunden");
+        return;
+      }
+      void this.writeModbus("ess/0", dpId, state.val);
+      return;
+    }
     if (parts.length < 5) {
       return;
     }
@@ -1406,6 +1697,7 @@ class VictronGx extends utils.Adapter {
       Position: "Position",
       "BatterySense.Voltage": "Batterie Spannung (MP)",
       "Hub4.L1.AcPowerSetpoint": "ESS Sollwert L1",
+      "Hub4.DisableFeedIn": "Netzeinspeisung deaktiviert",
       "Ac.ActiveIn.L1.I": "L1 Eingangsstrom",
       "Ac.ActiveIn.L1.V": "L1 Eingangsspannung",
       "Ac.ActiveIn.L1.S": "L1 Eingang Scheinleistung",
