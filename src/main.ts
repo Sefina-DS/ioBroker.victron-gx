@@ -618,52 +618,65 @@ class VictronGx extends utils.Adapter {
         if (!this.modbusClient) {
             return;
         }
-        this.log.info(`Starte Modbus Unit ID Discovery... deviceMap hat ${this.deviceMap.size} Einträge`);
+        this.log.info(`Starte Modbus Unit ID Discovery... (deviceMap: ${this.deviceMap.size} Geräte)`);
 
-        // Bekannte Gerätetypen mit Modbus-Registern
-        const MODBUS_TYPES = ['vebus', 'battery', 'grid'];
+        // Test-Register pro Gerätetyp (erstes gültiges Register laut Victron Doku)
+        const TYPE_TEST_REGISTER: Record<string, number> = {
+            vebus: 3, // AC Input Voltage L1
+            battery: 259, // SOC
+            grid: 2616, // AC L1 Power
+        };
 
-        for (const [deviceKey, device] of this.deviceMap.entries()) {
-            if (!MODBUS_TYPES.includes(device.type)) {
-                continue;
+        const neededTypes = new Set(['vebus', 'battery', 'grid']);
+
+        // Alle Unit IDs 1-247 durchprobieren
+        for (let unitId = 1; unitId <= 247; unitId++) {
+            if (neededTypes.size === 0) {
+                break;
             }
 
-            // Victron: dbus-Instanz = Modbus Unit ID
-            const unitId = device.instance;
-            if (!unitId) {
-                continue;
-            }
+            for (const type of Array.from(neededTypes)) {
+                const testReg = TYPE_TEST_REGISTER[type];
+                try {
+                    if (this.modbusBusy) {
+                        await this.waitModbus();
+                    }
+                    this.modbusBusy = true;
+                    this.modbusClient.setID(unitId);
+                    await this.modbusClient.readHoldingRegisters(testReg, 1);
+                    this.modbusBusy = false;
 
-            try {
-                if (this.modbusBusy) {
-                    await this.waitModbus();
+                    // Treffer - passendes Gerät in deviceMap suchen
+                    const matchingEntry = Array.from(this.deviceMap.entries()).find(([, d]) => d.type === type);
+                    if (matchingEntry) {
+                        const [deviceKey, device] = matchingEntry;
+                        this.modbusUnitMap.set(deviceKey, unitId);
+                        neededTypes.delete(type);
+                        this.log.info(`Modbus Discovery: ${type} → Unit ID ${unitId}`);
+
+                        const serial = this.serialMap.get(deviceKey);
+                        const baseId = this.getBaseId(device.type, device.instance, serial, device);
+                        if (baseId) {
+                            await this.extendObjectAsync(`${baseId}.info.modbusId`, {
+                                type: 'state',
+                                common: {
+                                    name: 'Modbus Unit ID',
+                                    type: 'number',
+                                    role: 'info',
+                                    read: true,
+                                    write: false,
+                                },
+                                native: {},
+                            });
+                            await this.setState(`${baseId}.info.modbusId`, { val: unitId, ack: true });
+                        }
+                    }
+                    break;
+                } catch {
+                    this.modbusBusy = false;
                 }
-                this.modbusBusy = true;
-                this.modbusClient.setID(unitId);
-                // Test-Read Register 0 (Produktname oder ähnliches)
-                await this.modbusClient.readHoldingRegisters(0, 1);
-                this.modbusBusy = false;
-
-                this.modbusUnitMap.set(deviceKey, unitId);
-                this.log.info(`Modbus Unit ID gefunden: ${device.type}/${device.instance} → Unit ID ${unitId}`);
-
-                // info.modbusId im ioBroker speichern
-                const serial = this.serialMap.get(deviceKey);
-                const baseId = this.getBaseId(device.type, device.instance, serial, device);
-                if (baseId) {
-                    await this.setObjectNotExistsAsync(`${baseId}.info.modbusId`, {
-                        type: 'state',
-                        common: { name: 'Modbus Unit ID', type: 'number', role: 'info', read: true, write: false },
-                        native: {},
-                    });
-                    await this.setState(`${baseId}.info.modbusId`, { val: unitId, ack: true });
-                }
-            } catch (err) {
-                this.modbusBusy = false;
-                this.log.warn(`Modbus Unit ID ${unitId} für ${deviceKey} nicht erreichbar: ${(err as Error).message}`);
             }
-            // Kurz warten zwischen den Abfragen
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 50));
         }
         this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Geräte gefunden.`);
     }
@@ -929,12 +942,14 @@ class VictronGx extends utils.Adapter {
                     this.loggedDevices.add(k);
                     this.log.info(`Gerät erkannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
                 }
-                // Alten numerischen Instanz-Channel immer löschen wenn Serial bekannt
+                // Alten numerischen Instanz-Channel löschen (nur einmal, nicht für system)
                 const oldId = `devices.${type}.${instance}`;
                 const newId = `devices.${type}.${value}`;
-                if (oldId !== newId) {
+                const deleteKey = `deleted:${oldId}`;
+                if (type !== 'system' && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
+                    this.loggedDevices.add(deleteKey);
                     void this.delObjectAsync(oldId, { recursive: true })
-                        .then(() => this.log.info(`Alter Channel gelöscht: ${oldId}`))
+                        .then(() => this.log.debug(`Alter Channel gelöscht: ${oldId}`))
                         .catch(() => {
                             /* existierte nicht */
                         });

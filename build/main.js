@@ -580,41 +580,59 @@ class VictronGx extends utils.Adapter {
     if (!this.modbusClient) {
       return;
     }
-    this.log.info(`Starte Modbus Unit ID Discovery... deviceMap hat ${this.deviceMap.size} Eintr\xE4ge`);
-    const MODBUS_TYPES = ["vebus", "battery", "grid"];
-    for (const [deviceKey, device] of this.deviceMap.entries()) {
-      if (!MODBUS_TYPES.includes(device.type)) {
-        continue;
+    this.log.info(`Starte Modbus Unit ID Discovery... (deviceMap: ${this.deviceMap.size} Ger\xE4te)`);
+    const TYPE_TEST_REGISTER = {
+      vebus: 3,
+      // AC Input Voltage L1
+      battery: 259,
+      // SOC
+      grid: 2616
+      // AC L1 Power
+    };
+    const neededTypes = /* @__PURE__ */ new Set(["vebus", "battery", "grid"]);
+    for (let unitId = 1; unitId <= 247; unitId++) {
+      if (neededTypes.size === 0) {
+        break;
       }
-      const unitId = device.instance;
-      if (!unitId) {
-        continue;
-      }
-      try {
-        if (this.modbusBusy) {
-          await this.waitModbus();
+      for (const type of Array.from(neededTypes)) {
+        const testReg = TYPE_TEST_REGISTER[type];
+        try {
+          if (this.modbusBusy) {
+            await this.waitModbus();
+          }
+          this.modbusBusy = true;
+          this.modbusClient.setID(unitId);
+          await this.modbusClient.readHoldingRegisters(testReg, 1);
+          this.modbusBusy = false;
+          const matchingEntry = Array.from(this.deviceMap.entries()).find(([, d]) => d.type === type);
+          if (matchingEntry) {
+            const [deviceKey, device] = matchingEntry;
+            this.modbusUnitMap.set(deviceKey, unitId);
+            neededTypes.delete(type);
+            this.log.info(`Modbus Discovery: ${type} \u2192 Unit ID ${unitId}`);
+            const serial = this.serialMap.get(deviceKey);
+            const baseId = this.getBaseId(device.type, device.instance, serial, device);
+            if (baseId) {
+              await this.extendObjectAsync(`${baseId}.info.modbusId`, {
+                type: "state",
+                common: {
+                  name: "Modbus Unit ID",
+                  type: "number",
+                  role: "info",
+                  read: true,
+                  write: false
+                },
+                native: {}
+              });
+              await this.setState(`${baseId}.info.modbusId`, { val: unitId, ack: true });
+            }
+          }
+          break;
+        } catch {
+          this.modbusBusy = false;
         }
-        this.modbusBusy = true;
-        this.modbusClient.setID(unitId);
-        await this.modbusClient.readHoldingRegisters(0, 1);
-        this.modbusBusy = false;
-        this.modbusUnitMap.set(deviceKey, unitId);
-        this.log.info(`Modbus Unit ID gefunden: ${device.type}/${device.instance} \u2192 Unit ID ${unitId}`);
-        const serial = this.serialMap.get(deviceKey);
-        const baseId = this.getBaseId(device.type, device.instance, serial, device);
-        if (baseId) {
-          await this.setObjectNotExistsAsync(`${baseId}.info.modbusId`, {
-            type: "state",
-            common: { name: "Modbus Unit ID", type: "number", role: "info", read: true, write: false },
-            native: {}
-          });
-          await this.setState(`${baseId}.info.modbusId`, { val: unitId, ack: true });
-        }
-      } catch (err) {
-        this.modbusBusy = false;
-        this.log.warn(`Modbus Unit ID ${unitId} f\xFCr ${deviceKey} nicht erreichbar: ${err.message}`);
       }
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 50));
     }
     this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Ger\xE4te gefunden.`);
   }
@@ -823,8 +841,10 @@ class VictronGx extends utils.Adapter {
         }
         const oldId = `devices.${type}.${instance}`;
         const newId = `devices.${type}.${value}`;
-        if (oldId !== newId) {
-          void this.delObjectAsync(oldId, { recursive: true }).then(() => this.log.info(`Alter Channel gel\xF6scht: ${oldId}`)).catch(() => {
+        const deleteKey = `deleted:${oldId}`;
+        if (type !== "system" && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
+          this.loggedDevices.add(deleteKey);
+          void this.delObjectAsync(oldId, { recursive: true }).then(() => this.log.debug(`Alter Channel gel\xF6scht: ${oldId}`)).catch(() => {
           });
         }
         break;
