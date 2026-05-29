@@ -3,6 +3,10 @@
     "name": "victron-gx",
     "version": "0.1.0",
     "news": {
+      "0.1.0": {
+        "en": "Modbus TCP control support added",
+        "de": "Modbus TCP Steuerung hinzugefügt"
+      },
       "0.0.1": {
         "en": "initial release",
         "de": "Erstveröffentlichung",
@@ -47,7 +51,11 @@
       "Sefina-DS <ds.sefina@googlemail.com>"
     ],
     "keywords": [
-      "energy"
+      "energy",
+      "victron",
+      "solar",
+      "mqtt",
+      "modbus"
     ],
     "licenseInformation": {
       "type": "free",
@@ -68,6 +76,70 @@
     "adminUI": {
       "config": "json"
     },
+    "jsonConfig": {
+      "type": "tabs",
+      "items": {
+        "tabConnection": {
+          "type": "tab",
+          "label": "Verbindung",
+          "items": {
+            "host": {
+              "type": "text",
+              "label": "IP-Adresse des GX-Geräts",
+              "help": "z.B. 192.168.1.100",
+              "sm": 12,
+              "md": 6
+            },
+            "port": {
+              "type": "number",
+              "label": "MQTT-Port",
+              "default": 1883,
+              "sm": 12,
+              "md": 6
+            },
+            "mqttUsername": {
+              "type": "text",
+              "label": "MQTT-Benutzername",
+              "help": "Leer lassen wenn kein Auth konfiguriert",
+              "sm": 12,
+              "md": 6
+            },
+            "mqttPassword": {
+              "type": "password",
+              "label": "MQTT-Passwort",
+              "sm": 12,
+              "md": 6
+            }
+          }
+        },
+        "tabControl": {
+          "type": "tab",
+          "label": "Steuerung",
+          "items": {
+            "controlEnabled": {
+              "type": "checkbox",
+              "label": "Steuerung aktivieren (Modbus TCP)",
+              "default": false,
+              "sm": 12
+            },
+            "modbusHint": {
+              "type": "staticText",
+              "text": "⚠️ Voraussetzung am GX-Gerät:\n1. Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert\n2. Zugriffsberechtigungen → Schreiben erlaubt\n\nVirtuelle Schalter werden weiterhin über MQTT gesteuert.\nAlle anderen Geräte (MultiPlus, Batterie, etc.) werden über Modbus TCP gesteuert.\nDie Modbus Unit IDs werden automatisch vom GX ermittelt und unter info.modbusId gespeichert.",
+              "sm": 12
+            },
+            "modbusPort": {
+              "type": "number",
+              "label": "Modbus Port",
+              "default": 502,
+              "sm": 12,
+              "md": 4,
+              "visibleIf": "controlEnabled",
+              "visibleIfValue": true
+            }
+          }
+        }
+      }
+    },
     "dependencies": [
       {
         "js-controller": ">=6.0.11"
@@ -82,10 +154,12 @@
   },
   "native": {
     "host": "192.168.1.x",
-    "port": "1883",
+    "port": 1883,
     "mqttUsername": "",
     "mqttPassword": "",
-    "pollingInterval": "5000"
+    "controlEnabled": false,
+    "modbusPort": 502,
+    "pollingInterval": 5000
   },
   "objects": [],
   "instanceObjects": [

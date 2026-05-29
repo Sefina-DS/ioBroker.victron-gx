@@ -5,6 +5,7 @@
  */
 import * as utils from '@iobroker/adapter-core';
 import * as mqtt from 'mqtt';
+import ModbusRTU from 'modbus-serial';
 
 // ── Gerätetypen ─────────────────────────────────────────────────────────────
 const KNOWN_DEVICE_TYPES: Record<string, string> = {
@@ -389,6 +390,17 @@ const WRITABLE_PATHS: Record<string, string[]> = {
     vebus: ['Mode', 'Ac.In1.CurrentLimit', 'Hub4.L1.AcPowerSetpoint'],
 };
 
+// ── Modbus Register-Mapping (vebus) ─────────────────────────────────────────
+// Register-Adressen lt. Victron CCGX-Modbus-TCP-register-list.xlsx
+// Skalierungsfaktor: Wert / scale = physikalischer Wert
+const MODBUS_REGISTERS: Record<string, Record<string, { register: number; scale: number; signed: boolean }>> = {
+    vebus: {
+        Mode: { register: 4, scale: 1, signed: false },
+        'Ac.In1.CurrentLimit': { register: 22, scale: 10, signed: false },
+        'Hub4.L1.AcPowerSetpoint': { register: 37, scale: 1, signed: true },
+    },
+};
+
 // ── StatusCode Bedeutungen (pvinverter) ──────────────────────────────────────
 const PVINVERTER_STATUS: Record<number, string> = {
     0: 'Aus',
@@ -443,6 +455,10 @@ class VictronGx extends utils.Adapter {
     private serialMap: Map<string, string> = new Map();
     private loggedDevices: Set<string> = new Set();
     private channelReady: Set<string> = new Set();
+    // Modbus
+    private modbusClient: ModbusRTU | null = null;
+    private modbusUnitMap: Map<string, number> = new Map(); // "type/instance" → Modbus Unit ID
+    private modbusBusy: boolean = false;
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'victron-gx' });
@@ -454,6 +470,33 @@ class VictronGx extends utils.Adapter {
     // ── Adapter-Start ────────────────────────────────────────────────────────
     private onReady(): void {
         void this.setState('info.connection', false, true);
+        // Modbus Status States anlegen
+        void this.setObjectNotExistsAsync('info.modbusConnected', {
+            type: 'state',
+            common: {
+                name: 'Modbus TCP verbunden',
+                type: 'boolean',
+                role: 'indicator.connected',
+                read: true,
+                write: false,
+                def: false,
+            },
+            native: {},
+        });
+        void this.setObjectNotExistsAsync('info.modbusWritable', {
+            type: 'state',
+            common: {
+                name: 'Modbus Schreibzugriff',
+                type: 'boolean',
+                role: 'indicator',
+                read: true,
+                write: false,
+                def: false,
+            },
+            native: {},
+        });
+        void this.setState('info.modbusConnected', false, true);
+        void this.setState('info.modbusWritable', false, true);
         this.subscribeStates('devices.switch.*');
         this.subscribeStates('devices.vebus.*');
         const host = this.config.host;
@@ -466,6 +509,12 @@ class VictronGx extends utils.Adapter {
         }
         this.log.info(`Verbinde mit Victron GX unter ${host}:${port}...`);
         this.connectMqtt(host, port, username, password);
+        // Modbus starten wenn Steuerung aktiviert
+        if (this.config.controlEnabled) {
+            const modbusPort = this.config.modbusPort || 502;
+            this.log.info(`Steuerung aktiviert – verbinde Modbus TCP ${host}:${modbusPort}...`);
+            void this.connectModbus(host, modbusPort);
+        }
     }
 
     // ── MQTT ─────────────────────────────────────────────────────────────────
@@ -511,6 +560,155 @@ class VictronGx extends utils.Adapter {
                 this.startKeepAlive();
             }
         });
+    }
+
+    // ── Modbus TCP Verbindung ────────────────────────────────────────────────
+    private async connectModbus(host: string, port: number): Promise<void> {
+        try {
+            this.modbusClient = new ModbusRTU();
+            await this.modbusClient.connectTCP(host, { port });
+            this.modbusClient.setTimeout(3000);
+            this.log.info('Modbus TCP verbunden!');
+            void this.setState('info.modbusConnected', true, true);
+            // Schreibzugriff testen: Test-Write auf ESS Sollwert mit aktuellem Wert
+            void this.testModbusWrite();
+            // Unit ID Discovery: 5s warten bis MQTT Geräte bekannt sind
+            setTimeout(() => void this.discoverModbusUnits(), 20000);
+        } catch (err) {
+            this.log.error(`Modbus Verbindungsfehler: ${(err as Error).message}`);
+            void this.setState('info.modbusConnected', false, true);
+            void this.setState('info.modbusWritable', false, true);
+            // Retry nach 30s
+            setTimeout(() => void this.connectModbus(host, port), 30000);
+        }
+    }
+
+    // ── Modbus Schreibzugriff testen ────────────────────────────────────────
+    private async testModbusWrite(): Promise<void> {
+        if (!this.modbusClient) {
+            return;
+        }
+        try {
+            // Warte kurz bis Verbindung stabil
+            await new Promise(r => setTimeout(r, 1000));
+            // Lese aktuellen ESS Sollwert (Register 37, Unit 100 = system)
+            // und schreibe ihn zurück — harmlos, ändert nichts
+            if (this.modbusBusy) {
+                await this.waitModbus();
+            }
+            this.modbusBusy = true;
+            this.modbusClient.setID(100); // system Unit ID
+            const result = await this.modbusClient.readHoldingRegisters(37, 1);
+            await this.modbusClient.writeRegister(37, result.data[0]);
+            this.modbusBusy = false;
+            this.log.info('Modbus Schreibzugriff bestätigt!');
+            void this.setState('info.modbusWritable', true, true);
+        } catch (err) {
+            this.modbusBusy = false;
+            this.log.warn(`Modbus Schreibzugriff nicht möglich: ${(err as Error).message}`);
+            void this.setState('info.modbusWritable', false, true);
+        }
+    }
+
+    // ── Modbus Unit ID Discovery ─────────────────────────────────────────────
+    // Liest bekannte deviceMap-Einträge und ermittelt die Modbus Unit ID
+    // indem wir die dbus-Instanz direkt als Unit ID verwenden (Victron Standard)
+    // und dann einen Test-Read machen ob die Unit ID antwortet.
+    private async discoverModbusUnits(): Promise<void> {
+        if (!this.modbusClient) {
+            return;
+        }
+        this.log.info(`Starte Modbus Unit ID Discovery... deviceMap hat ${this.deviceMap.size} Einträge`);
+
+        // Bekannte Gerätetypen mit Modbus-Registern
+        const MODBUS_TYPES = ['vebus', 'battery', 'grid'];
+
+        for (const [deviceKey, device] of this.deviceMap.entries()) {
+            if (!MODBUS_TYPES.includes(device.type)) {
+                continue;
+            }
+
+            // Victron: dbus-Instanz = Modbus Unit ID
+            const unitId = device.instance;
+            if (!unitId) {
+                continue;
+            }
+
+            try {
+                if (this.modbusBusy) {
+                    await this.waitModbus();
+                }
+                this.modbusBusy = true;
+                this.modbusClient.setID(unitId);
+                // Test-Read Register 0 (Produktname oder ähnliches)
+                await this.modbusClient.readHoldingRegisters(0, 1);
+                this.modbusBusy = false;
+
+                this.modbusUnitMap.set(deviceKey, unitId);
+                this.log.info(`Modbus Unit ID gefunden: ${device.type}/${device.instance} → Unit ID ${unitId}`);
+
+                // info.modbusId im ioBroker speichern
+                const serial = this.serialMap.get(deviceKey);
+                const baseId = this.getBaseId(device.type, device.instance, serial, device);
+                if (baseId) {
+                    await this.setObjectNotExistsAsync(`${baseId}.info.modbusId`, {
+                        type: 'state',
+                        common: { name: 'Modbus Unit ID', type: 'number', role: 'info', read: true, write: false },
+                        native: {},
+                    });
+                    await this.setState(`${baseId}.info.modbusId`, { val: unitId, ack: true });
+                }
+            } catch (err) {
+                this.modbusBusy = false;
+                this.log.warn(`Modbus Unit ID ${unitId} für ${deviceKey} nicht erreichbar: ${(err as Error).message}`);
+            }
+            // Kurz warten zwischen den Abfragen
+            await new Promise(r => setTimeout(r, 200));
+        }
+        this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Geräte gefunden.`);
+    }
+
+    // ── Modbus Write ─────────────────────────────────────────────────────────
+    private async writeModbus(deviceKey: string, path: string, value: number): Promise<void> {
+        if (!this.modbusClient) {
+            return;
+        }
+        const unitId = this.modbusUnitMap.get(deviceKey);
+        if (unitId === undefined) {
+            this.log.warn(`Keine Modbus Unit ID für ${deviceKey} – Discovery noch nicht abgeschlossen?`);
+            return;
+        }
+        const deviceType = deviceKey.split('/')[0];
+        const reg = MODBUS_REGISTERS[deviceType]?.[path];
+        if (!reg) {
+            this.log.warn(`Kein Modbus-Register für ${deviceType}.${path}`);
+            return;
+        }
+
+        // Skalierung: physikalischer Wert * scale = Register-Wert
+        const regValue = Math.round(value * reg.scale);
+        // Vorzeichenbehaftet: 16-bit signed (zwei's complement)
+        const writeValue = reg.signed && regValue < 0 ? regValue + 65536 : regValue;
+
+        try {
+            if (this.modbusBusy) {
+                await this.waitModbus();
+            }
+            this.modbusBusy = true;
+            this.modbusClient.setID(unitId);
+            await this.modbusClient.writeRegister(reg.register, writeValue);
+            this.modbusBusy = false;
+            this.log.info(
+                `Modbus Write: ${deviceKey} Unit ${unitId} Reg ${reg.register} = ${writeValue} (${path}=${value})`,
+            );
+        } catch (err) {
+            this.modbusBusy = false;
+            this.log.error(`Modbus Write Fehler: ${(err as Error).message}`);
+        }
+    }
+
+    private waitModbus(): Promise<void> {
+        return new Promise(r => setTimeout(r, 100));
     }
 
     private startKeepAlive(): void {
@@ -593,7 +791,7 @@ class VictronGx extends utils.Adapter {
 
             // Geräte ohne Serial → Instanznummer als stabile ID verwenden
             // vebus und grid liefern Serial nicht im MQTT-Stream
-            const NO_SERIAL_TYPES = new Set(['system', 'platform']);
+            const NO_SERIAL_TYPES = new Set(['grid', 'system', 'platform']);
             if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
                 return;
             }
@@ -633,7 +831,10 @@ class VictronGx extends utils.Adapter {
                     : 'string';
 
             // ── Datenpunkt anlegen ────────────────────────────────────────
-            const isWritable = (WRITABLE_PATHS[deviceType] || []).some(wp => remappedPath === wp);
+            const isWritable =
+                deviceType === 'switch'
+                    ? (WRITABLE_PATHS[deviceType] || []).some(wp => remappedPath === wp)
+                    : this.config.controlEnabled && (WRITABLE_PATHS[deviceType] || []).some(wp => remappedPath === wp);
             const stateId = `${baseId}.${remappedPath}`;
 
             const commonBase: ioBroker.StateCommon = {
@@ -721,7 +922,6 @@ class VictronGx extends utils.Adapter {
         switch (field) {
             case 'Serial':
             case 'Devices.0.SerialNumber': {
-                const wasUnknown = !device.serial;
                 device.serial = value;
                 this.serialMap.set(deviceKey, value);
                 const k = `serial:${deviceKey}`;
@@ -729,17 +929,15 @@ class VictronGx extends utils.Adapter {
                     this.loggedDevices.add(k);
                     this.log.info(`Gerät erkannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
                 }
-                // Alten Instanz-Channel löschen falls als Leiche vorhanden
-                if (wasUnknown) {
-                    const oldId = `devices.${type}.${instance}`;
-                    const newId = `devices.${type}.${value}`;
-                    if (oldId !== newId) {
-                        this.delObjectAsync(oldId, { recursive: true })
-                            .then(() => this.log.debug(`Alten Channel gelöscht: ${oldId}`))
-                            .catch(() => {
-                                /* existierte nicht */
-                            });
-                    }
+                // Alten numerischen Instanz-Channel immer löschen wenn Serial bekannt
+                const oldId = `devices.${type}.${instance}`;
+                const newId = `devices.${type}.${value}`;
+                if (oldId !== newId) {
+                    void this.delObjectAsync(oldId, { recursive: true })
+                        .then(() => this.log.info(`Alter Channel gelöscht: ${oldId}`))
+                        .catch(() => {
+                            /* existierte nicht */
+                        });
                 }
                 break;
             }
@@ -879,7 +1077,6 @@ class VictronGx extends utils.Adapter {
             'acload',
             'pvinverter',
             'vebus',
-            'grid',
             'solarcharger',
             'temperature',
             'tank',
@@ -896,6 +1093,14 @@ class VictronGx extends utils.Adapter {
         if (this.channelReady.has(baseId)) {
             return;
         }
+        // Instance ID (MQTT Instanznummer) speichern
+        void this.setObjectNotExistsAsync(`${baseId}.info.instanceId`, {
+            type: 'state',
+            common: { name: 'GX Instanz-ID', type: 'number', role: 'info', read: true, write: false },
+            native: {},
+        }).then(() => {
+            void this.setState(`${baseId}.info.instanceId`, { val: device.instance, ack: true });
+        });
 
         const displayName = device.customName || device.productName || KNOWN_DEVICE_TYPES[device.type] || device.type;
         const suffix = device.virtual ? (device.source === 'node-red' ? ' [Node-RED]' : ' [Virtual]') : '';
@@ -1171,13 +1376,30 @@ class VictronGx extends utils.Adapter {
             return;
         }
 
-        // boolean → 0/1 für Victron
-        const writeVal = deviceType === 'switch' ? (state.val ? 1 : 0) : state.val;
+        // ── Schalter → MQTT Write ─────────────────────────────────────────
+        if (deviceType === 'switch') {
+            const writeVal = state.val ? 1 : 0;
+            const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
+            const payload = JSON.stringify({ value: writeVal });
+            this.log.info(`MQTT Write: ${mqttTopic} = ${payload}`);
+            this.mqttClient.publish(mqttTopic, payload);
+            return;
+        }
 
-        const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
-        const payload = JSON.stringify({ value: writeVal });
-        this.log.info(`Schreibe: ${mqttTopic} = ${payload}`);
-        this.mqttClient.publish(mqttTopic, payload);
+        // ── Alle anderen → Modbus Write ───────────────────────────────────
+        if (this.config.controlEnabled && this.modbusClient) {
+            const deviceKey = `${deviceType}/${instance}`;
+            const modbusPath = dpPath.replace(/\//g, '.');
+            void this.writeModbus(deviceKey, modbusPath, state.val as number);
+        } else if (!this.config.controlEnabled) {
+            // Fallback: MQTT Write wenn Modbus nicht aktiviert
+            const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
+            const payload = JSON.stringify({ value: state.val });
+            this.log.info(`MQTT Write (Fallback): ${mqttTopic} = ${payload}`);
+            this.mqttClient.publish(mqttTopic, payload);
+        } else {
+            this.log.warn(`Modbus nicht verbunden – ${id} konnte nicht geschrieben werden`);
+        }
     }
 
     // ── Hilfsfunktionen ──────────────────────────────────────────────────────
@@ -1410,6 +1632,9 @@ class VictronGx extends utils.Adapter {
             }
             if (this.mqttClient) {
                 this.mqttClient.end();
+            }
+            if (this.modbusClient) {
+                this.modbusClient.close(() => {});
             }
             callback();
         } catch (error) {

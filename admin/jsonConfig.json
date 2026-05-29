@@ -1,56 +1,57 @@
 {
-    "i18n": true,
     "type": "panel",
     "items": {
         "host": {
             "type": "text",
-            "label": "IP Address of GX Device",
-            "newLine": true,
-            "xs": 12,
+            "label": "IP-Adresse des GX-Geräts",
+            "help": "z.B. 192.168.6.200",
             "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
+            "md": 6
         },
         "port": {
             "type": "number",
-            "label": "MQTT Port",
-            "newLine": true,
-            "xs": 12,
+            "label": "MQTT-Port",
+            "default": 1883,
             "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
+            "md": 6
         },
         "mqttUsername": {
             "type": "text",
-            "label": "MQTT Username",
-            "newLine": true,
-            "xs": 12,
+            "label": "MQTT-Benutzername",
+            "help": "Leer lassen wenn kein Auth konfiguriert",
             "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
+            "md": 6
         },
         "mqttPassword": {
-            "type": "text",
-            "label": "MQTT Password",
-            "newLine": true,
-            "xs": 12,
+            "type": "password",
+            "label": "MQTT-Passwort",
             "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
+            "md": 6
         },
-        "pollingInterval": {
+        "divider": {
+            "type": "divider"
+        },
+        "controlEnabled": {
+            "type": "checkbox",
+            "label": "Steuerung aktivieren (Modbus TCP)",
+            "default": false,
+            "sm": 12,
+            "md": 6
+        },
+        "modbusPort": {
             "type": "number",
-            "label": "Modbus Polling Interval (ms)",
-            "newLine": true,
-            "xs": 12,
+            "label": "Modbus Port",
+            "default": 502,
             "sm": 12,
             "md": 6,
-            "lg": 4,
-            "xl": 4
+            "visibleIf": "controlEnabled",
+            "visibleIfValue": true
+        },
+        "modbusHint": {
+            "type": "staticText",
+            "text": "⚠️  Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
+            "style": {"fontSize": "14px", "fontWeight": "bold"},
+            "sm": 12
         }
     }
 }
