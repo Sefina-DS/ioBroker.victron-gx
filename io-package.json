@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "news": {
       "0.5.0": {
         "en": "ESS control via Modbus Unit 100 (BatteryLifeState, MinimumSoc, AcFeedInEnabled, MaxFeedInPower and more)",
@@ -15,6 +15,19 @@
         "pl": "Sterowanie ESS przez Modbus Unit 100",
         "uk": "Керування ESS через Modbus Unit 100",
         "zh-cn": "通过Modbus Unit 100进行ESS控制"
+      },
+      "0.5.1": {
+        "en": "Fix: Node.js >= 22, admin >= 7.6.20, English-only README, jsonConfig cleanup",
+        "de": "Fix: Node.js >= 22, admin >= 7.6.20, README nur Englisch, jsonConfig bereinigt",
+        "ru": "Исправления: Node.js >= 22, admin >= 7.6.20",
+        "pt": "Correções: Node.js >= 22, admin >= 7.6.20",
+        "nl": "Fixes: Node.js >= 22, admin >= 7.6.20",
+        "fr": "Corrections: Node.js >= 22, admin >= 7.6.20",
+        "it": "Correzioni: Node.js >= 22, admin >= 7.6.20",
+        "es": "Correcciones: Node.js >= 22, admin >= 7.6.20",
+        "pl": "Poprawki: Node.js >= 22, admin >= 7.6.20",
+        "uk": "Виправлення: Node.js >= 22, admin >= 7.6.20",
+        "zh-cn": "修复: Node.js >= 22, admin >= 7.6.20"
       }
     },
     "titleLang": {
