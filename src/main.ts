@@ -395,9 +395,9 @@ const WRITABLE_PATHS: Record<string, string[]> = {
 // Skalierungsfaktor: Wert / scale = physikalischer Wert
 const MODBUS_REGISTERS: Record<string, Record<string, { register: number; scale: number; signed: boolean }>> = {
     vebus: {
-        Mode: { register: 4, scale: 1, signed: false },
-        'Ac.In1.CurrentLimit': { register: 22, scale: 10, signed: false },
-        'Hub4.L1.AcPowerSetpoint': { register: 37, scale: 1, signed: true },
+        Mode: { register: 33, scale: 1, signed: false }, // Betriebsmodus (1=Ladegerät, 2=Wechselrichter, 3=Ein, 4=APS)
+        'Ac.In1.CurrentLimit': { register: 22, scale: 10, signed: false }, // Eingangsstrombegrenzung
+        'Hub4.L1.AcPowerSetpoint': { register: 37, scale: 1, signed: true }, // ESS Sollwert W
     },
 };
 
@@ -445,6 +445,7 @@ interface DeviceInfo {
     phaseVoltage: Record<string, number>;
     lastUpdate: number;
     staleTimer: ReturnType<typeof setTimeout> | null;
+    ready: boolean; // true wenn Serial bekannt oder virtuelles Gerät vollständig erkannt
 }
 
 class VictronGx extends utils.Adapter {
@@ -499,6 +500,8 @@ class VictronGx extends utils.Adapter {
         void this.setState('info.modbusWritable', false, true);
         this.subscribeStates('devices.switch.*');
         this.subscribeStates('devices.vebus.*');
+        // Einmalige Bereinigung: numerische Leichen löschen
+        void this.cleanupNumericChannels();
         const host = this.config.host;
         const port = this.config.port || 1883;
         const username = this.config.mqttUsername;
@@ -514,6 +517,34 @@ class VictronGx extends utils.Adapter {
             const modbusPort = this.config.modbusPort || 502;
             this.log.info(`Steuerung aktiviert – verbinde Modbus TCP ${host}:${modbusPort}...`);
             void this.connectModbus(host, modbusPort);
+        }
+    }
+
+    // ── Einmalige Bereinigung numerischer Leichen ───────────────────────────
+    // Löscht Channel-Ordner die rein numerisch sind und max 3 Zeichen haben
+    // z.B. devices.pvinverter.101, devices.grid.31 — aber nicht devices.battery.57_280_0Ah
+    private async cleanupNumericChannels(): Promise<void> {
+        try {
+            const allObjects = await this.getObjectListAsync({
+                startkey: `${this.namespace}.devices.`,
+                endkey: `${this.namespace}.devices.香`,
+            });
+            for (const obj of allObjects.rows) {
+                const id = obj.id.replace(`${this.namespace}.`, '');
+                const parts = id.split('.');
+                // Nur direkte Channel-Ebene: devices.<type>.<id>
+                if (parts.length !== 3) {
+                    continue;
+                }
+                const channelId = parts[2];
+                // Rein numerisch UND max 3 Zeichen
+                if (/^\d{1,3}$/.test(channelId)) {
+                    this.log.debug(`Bereinige numerischen Channel: ${id}`);
+                    await this.delObjectAsync(id, { recursive: true }).catch(() => {});
+                }
+            }
+        } catch {
+            // ignorieren
         }
     }
 
@@ -588,20 +619,31 @@ class VictronGx extends utils.Adapter {
         if (!this.modbusClient) {
             return;
         }
-        try {
-            // Warte kurz bis Verbindung stabil
+        // Warte bis Discovery abgeschlossen und vebus Unit ID bekannt ist (max 60s)
+        let vebusEntry: [string, number] | undefined;
+        for (let i = 0; i < 60; i++) {
+            vebusEntry = Array.from(this.modbusUnitMap.entries()).find(([k]) => k.startsWith('vebus/'));
+            if (vebusEntry) {
+                break;
+            }
             await new Promise(r => setTimeout(r, 1000));
-            // Lese aktuellen ESS Sollwert (Register 37, Unit 100 = system)
-            // und schreibe ihn zurück — harmlos, ändert nichts
+        }
+        if (!vebusEntry) {
+            this.log.warn('Modbus Schreibtest: vebus Unit ID nicht bekannt, überspringe Test');
+            return;
+        }
+        const [, vebusUnitId] = vebusEntry;
+        try {
             if (this.modbusBusy) {
                 await this.waitModbus();
             }
             this.modbusBusy = true;
-            this.modbusClient.setID(100); // system Unit ID
+            this.modbusClient.setID(vebusUnitId);
+            // Register 37 = AcPowerSetpoint lesen und gleichen Wert zurückschreiben → harmlos
             const result = await this.modbusClient.readHoldingRegisters(37, 1);
             await this.modbusClient.writeRegister(37, result.data[0]);
             this.modbusBusy = false;
-            this.log.info('Modbus Schreibzugriff bestätigt!');
+            this.log.info(`Modbus Schreibzugriff bestätigt! (vebus Unit ID ${vebusUnitId})`);
             void this.setState('info.modbusWritable', true, true);
         } catch (err) {
             this.modbusBusy = false;
@@ -620,16 +662,16 @@ class VictronGx extends utils.Adapter {
         }
         this.log.info(`Starte Modbus Unit ID Discovery... (deviceMap: ${this.deviceMap.size} Geräte)`);
 
-        // Test-Register pro Gerätetyp (erstes gültiges Register laut Victron Doku)
         const TYPE_TEST_REGISTER: Record<string, number> = {
             vebus: 3, // AC Input Voltage L1
             battery: 259, // SOC
             grid: 2616, // AC L1 Power
+            pvinverter: 1026, // AC Power
+            solarcharger: 771, // PV Power
         };
 
-        const neededTypes = new Set(['vebus', 'battery', 'grid']);
+        const neededTypes = new Set(['vebus', 'battery', 'grid', 'pvinverter', 'solarcharger']);
 
-        // Alle Unit IDs 1-247 durchprobieren
         for (let unitId = 1; unitId <= 247; unitId++) {
             if (neededTypes.size === 0) {
                 break;
@@ -646,7 +688,6 @@ class VictronGx extends utils.Adapter {
                     await this.modbusClient.readHoldingRegisters(testReg, 1);
                     this.modbusBusy = false;
 
-                    // Treffer - passendes Gerät in deviceMap suchen
                     const matchingEntry = Array.from(this.deviceMap.entries()).find(([, d]) => d.type === type);
                     if (matchingEntry) {
                         const [deviceKey, device] = matchingEntry;
@@ -804,7 +845,7 @@ class VictronGx extends utils.Adapter {
 
             // Geräte ohne Serial → Instanznummer als stabile ID verwenden
             // vebus und grid liefern Serial nicht im MQTT-Stream
-            const NO_SERIAL_TYPES = new Set(['grid', 'system', 'platform']);
+            const NO_SERIAL_TYPES = new Set(['system', 'platform']);
             if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
                 return;
             }
@@ -916,6 +957,8 @@ class VictronGx extends utils.Adapter {
     private updateDeviceMeta(type: string, instance: number, field: string, value: string): void {
         const deviceKey = `${type}/${instance}`;
         if (!this.deviceMap.has(deviceKey)) {
+            // Typen die keine Serial brauchen sind sofort ready
+            const NO_SERIAL_TYPES = new Set(['system', 'platform', 'switch']);
             this.deviceMap.set(deviceKey, {
                 type,
                 instance,
@@ -928,6 +971,7 @@ class VictronGx extends utils.Adapter {
                 phaseVoltage: { L1: 0, L2: 0, L3: 0 },
                 lastUpdate: Date.now(),
                 staleTimer: null,
+                ready: NO_SERIAL_TYPES.has(type),
             });
         }
         const device = this.deviceMap.get(deviceKey)!;
@@ -936,6 +980,7 @@ class VictronGx extends utils.Adapter {
             case 'Serial':
             case 'Devices.0.SerialNumber': {
                 device.serial = value;
+                device.ready = true; // Serial bekannt → Gerät ist ready
                 this.serialMap.set(deviceKey, value);
                 const k = `serial:${deviceKey}`;
                 if (!this.loggedDevices.has(k)) {
@@ -960,10 +1005,19 @@ class VictronGx extends utils.Adapter {
                 device.productName = value;
                 device.virtual = value.toLowerCase().includes('virtual');
                 if (device.virtual) {
+                    device.ready = true; // Virtuelles Gerät ist ready ohne Serial
                     const k = `virtual:${deviceKey}`;
                     if (!this.loggedDevices.has(k)) {
                         this.loggedDevices.add(k);
                         this.log.info(`Virtuelles Gerät: ${type}/${instance} → "${value}"`);
+                    }
+                    // Virtuelles Gerät hat keine Serial → numerischen Channel sofort löschen
+                    const deleteKey = `deleted:devices.${type}.${instance}`;
+                    if (type !== 'system' && !this.loggedDevices.has(deleteKey)) {
+                        this.loggedDevices.add(deleteKey);
+                        void this.delObjectAsync(`devices.${type}.${instance}`, { recursive: true }).catch(() => {
+                            /* existierte nicht */
+                        });
                     }
                 }
                 break;
@@ -975,6 +1029,9 @@ class VictronGx extends utils.Adapter {
                 break;
 
             case 'Connected': {
+                if (!device.ready) {
+                    break;
+                }
                 // Verbindungsstatus → info.connected boolean
                 const baseId = this.getBaseId(type, instance, device.serial || undefined, device);
                 if (baseId) {
@@ -1013,6 +1070,9 @@ class VictronGx extends utils.Adapter {
                 break;
 
             case 'Position': {
+                if (!device.ready) {
+                    break;
+                }
                 // Position des Geräts: 0=AC Ausgang, 1=AC Eingang, 2=AC Eingang 2
                 const posNames: Record<string, string> = {
                     0: 'AC Ausgang (hinter MultiPlus)',
@@ -1045,6 +1105,9 @@ class VictronGx extends utils.Adapter {
             }
 
             case 'NrOfPhases': {
+                if (!device.ready) {
+                    break;
+                }
                 const baseId = this.getBaseId(type, instance, device.serial || undefined, device);
                 if (baseId) {
                     void this.setObjectNotExistsAsync(`${baseId}.info.nrOfPhases`, {
@@ -1080,7 +1143,10 @@ class VictronGx extends utils.Adapter {
             }
         }
 
-        void this.ensureDeviceChannel(device);
+        // Channel nur anlegen wenn Gerät ready (Serial bekannt oder virtuell)
+        if (device.ready) {
+            void this.ensureDeviceChannel(device);
+        }
     }
 
     // ── Channel anlegen ──────────────────────────────────────────────────────

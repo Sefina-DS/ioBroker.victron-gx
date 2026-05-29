@@ -397,9 +397,12 @@ const WRITABLE_PATHS = {
 };
 const MODBUS_REGISTERS = {
   vebus: {
-    Mode: { register: 4, scale: 1, signed: false },
+    Mode: { register: 33, scale: 1, signed: false },
+    // Betriebsmodus (1=Ladegerät, 2=Wechselrichter, 3=Ein, 4=APS)
     "Ac.In1.CurrentLimit": { register: 22, scale: 10, signed: false },
+    // Eingangsstrombegrenzung
     "Hub4.L1.AcPowerSetpoint": { register: 37, scale: 1, signed: true }
+    // ESS Sollwert W
   }
 };
 const PVINVERTER_STATUS = {
@@ -474,6 +477,7 @@ class VictronGx extends utils.Adapter {
     void this.setState("info.modbusWritable", false, true);
     this.subscribeStates("devices.switch.*");
     this.subscribeStates("devices.vebus.*");
+    void this.cleanupNumericChannels();
     const host = this.config.host;
     const port = this.config.port || 1883;
     const username = this.config.mqttUsername;
@@ -488,6 +492,31 @@ class VictronGx extends utils.Adapter {
       const modbusPort = this.config.modbusPort || 502;
       this.log.info(`Steuerung aktiviert \u2013 verbinde Modbus TCP ${host}:${modbusPort}...`);
       void this.connectModbus(host, modbusPort);
+    }
+  }
+  // ── Einmalige Bereinigung numerischer Leichen ───────────────────────────
+  // Löscht Channel-Ordner die rein numerisch sind und max 3 Zeichen haben
+  // z.B. devices.pvinverter.101, devices.grid.31 — aber nicht devices.battery.57_280_0Ah
+  async cleanupNumericChannels() {
+    try {
+      const allObjects = await this.getObjectListAsync({
+        startkey: `${this.namespace}.devices.`,
+        endkey: `${this.namespace}.devices.\u9999`
+      });
+      for (const obj of allObjects.rows) {
+        const id = obj.id.replace(`${this.namespace}.`, "");
+        const parts = id.split(".");
+        if (parts.length !== 3) {
+          continue;
+        }
+        const channelId = parts[2];
+        if (/^\d{1,3}$/.test(channelId)) {
+          this.log.debug(`Bereinige numerischen Channel: ${id}`);
+          await this.delObjectAsync(id, { recursive: true }).catch(() => {
+          });
+        }
+      }
+    } catch {
     }
   }
   // ── MQTT ─────────────────────────────────────────────────────────────────
@@ -554,17 +583,29 @@ class VictronGx extends utils.Adapter {
     if (!this.modbusClient) {
       return;
     }
-    try {
+    let vebusEntry;
+    for (let i = 0; i < 60; i++) {
+      vebusEntry = Array.from(this.modbusUnitMap.entries()).find(([k]) => k.startsWith("vebus/"));
+      if (vebusEntry) {
+        break;
+      }
       await new Promise((r) => setTimeout(r, 1e3));
+    }
+    if (!vebusEntry) {
+      this.log.warn("Modbus Schreibtest: vebus Unit ID nicht bekannt, \xFCberspringe Test");
+      return;
+    }
+    const [, vebusUnitId] = vebusEntry;
+    try {
       if (this.modbusBusy) {
         await this.waitModbus();
       }
       this.modbusBusy = true;
-      this.modbusClient.setID(100);
+      this.modbusClient.setID(vebusUnitId);
       const result = await this.modbusClient.readHoldingRegisters(37, 1);
       await this.modbusClient.writeRegister(37, result.data[0]);
       this.modbusBusy = false;
-      this.log.info("Modbus Schreibzugriff best\xE4tigt!");
+      this.log.info(`Modbus Schreibzugriff best\xE4tigt! (vebus Unit ID ${vebusUnitId})`);
       void this.setState("info.modbusWritable", true, true);
     } catch (err) {
       this.modbusBusy = false;
@@ -586,10 +627,14 @@ class VictronGx extends utils.Adapter {
       // AC Input Voltage L1
       battery: 259,
       // SOC
-      grid: 2616
+      grid: 2616,
       // AC L1 Power
+      pvinverter: 1026,
+      // AC Power
+      solarcharger: 771
+      // PV Power
     };
-    const neededTypes = /* @__PURE__ */ new Set(["vebus", "battery", "grid"]);
+    const neededTypes = /* @__PURE__ */ new Set(["vebus", "battery", "grid", "pvinverter", "solarcharger"]);
     for (let unitId = 1; unitId <= 247; unitId++) {
       if (neededTypes.size === 0) {
         break;
@@ -737,7 +782,7 @@ class VictronGx extends utils.Adapter {
       const deviceKey = `${deviceType}/${instance}`;
       const device = this.deviceMap.get(deviceKey);
       const serial = this.serialMap.get(deviceKey);
-      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["grid", "system", "platform"]);
+      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["system", "platform"]);
       if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
         return;
       }
@@ -814,6 +859,7 @@ class VictronGx extends utils.Adapter {
   updateDeviceMeta(type, instance, field, value) {
     const deviceKey = `${type}/${instance}`;
     if (!this.deviceMap.has(deviceKey)) {
+      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["system", "platform", "switch"]);
       this.deviceMap.set(deviceKey, {
         type,
         instance,
@@ -825,7 +871,8 @@ class VictronGx extends utils.Adapter {
         group: "",
         phaseVoltage: { L1: 0, L2: 0, L3: 0 },
         lastUpdate: Date.now(),
-        staleTimer: null
+        staleTimer: null,
+        ready: NO_SERIAL_TYPES.has(type)
       });
     }
     const device = this.deviceMap.get(deviceKey);
@@ -833,6 +880,7 @@ class VictronGx extends utils.Adapter {
       case "Serial":
       case "Devices.0.SerialNumber": {
         device.serial = value;
+        device.ready = true;
         this.serialMap.set(deviceKey, value);
         const k = `serial:${deviceKey}`;
         if (!this.loggedDevices.has(k)) {
@@ -853,10 +901,17 @@ class VictronGx extends utils.Adapter {
         device.productName = value;
         device.virtual = value.toLowerCase().includes("virtual");
         if (device.virtual) {
+          device.ready = true;
           const k = `virtual:${deviceKey}`;
           if (!this.loggedDevices.has(k)) {
             this.loggedDevices.add(k);
             this.log.info(`Virtuelles Ger\xE4t: ${type}/${instance} \u2192 "${value}"`);
+          }
+          const deleteKey = `deleted:devices.${type}.${instance}`;
+          if (type !== "system" && !this.loggedDevices.has(deleteKey)) {
+            this.loggedDevices.add(deleteKey);
+            void this.delObjectAsync(`devices.${type}.${instance}`, { recursive: true }).catch(() => {
+            });
           }
         }
         break;
@@ -867,6 +922,9 @@ class VictronGx extends utils.Adapter {
         }
         break;
       case "Connected": {
+        if (!device.ready) {
+          break;
+        }
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
           const connected = value === "1" || value === "true";
@@ -902,6 +960,9 @@ class VictronGx extends utils.Adapter {
         }
         break;
       case "Position": {
+        if (!device.ready) {
+          break;
+        }
         const posNames = {
           0: "AC Ausgang (hinter MultiPlus)",
           1: "AC Eingang (Netz)",
@@ -932,6 +993,9 @@ class VictronGx extends utils.Adapter {
         break;
       }
       case "NrOfPhases": {
+        if (!device.ready) {
+          break;
+        }
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
           void this.setObjectNotExistsAsync(`${baseId}.info.nrOfPhases`, {
@@ -965,7 +1029,9 @@ class VictronGx extends utils.Adapter {
         break;
       }
     }
-    void this.ensureDeviceChannel(device);
+    if (device.ready) {
+      void this.ensureDeviceChannel(device);
+    }
   }
   // ── Channel anlegen ──────────────────────────────────────────────────────
   async ensureDeviceChannel(device) {
