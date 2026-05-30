@@ -115,6 +115,9 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 
 ## Changelog
 
+### 0.5.7 (2026-05-30)
+- Fix: adapter-tests needs check-and-lint, automerge workflow renamed
+
 ### 0.5.6 (2026-05-29)
 - Fix: switched to npm trusted publishing
 
