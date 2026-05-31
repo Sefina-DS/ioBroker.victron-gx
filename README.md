@@ -155,6 +155,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 - Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added
 
 ### 0.6.0 (2026-05-31)
+- Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added
+
+### 0.6.0 (2026-05-31)
 - **Breaking change**: `ess.*` renamed to `control.system.*`, `control.inverter.*` added
 - All device datapoints are now strictly read-only
 - `control.*` channel added for all writable registers (Modbus only)

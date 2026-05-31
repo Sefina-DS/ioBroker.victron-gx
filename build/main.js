@@ -348,10 +348,10 @@ const PATH_REMAP = {
     "Voltages.Cell31": "cells.cell31",
     "Voltages.Cell32": "cells.cell32",
     "Voltages.Diff": "cells.diff",
-    "Temperature": "temperatures.temp1",
-    "Temperature2": "temperatures.temp2",
-    "Temperature3": "temperatures.temp3",
-    "Temperature4": "temperatures.temp4",
+    Temperature: "temperatures.temp1",
+    Temperature2: "temperatures.temp2",
+    Temperature3: "temperatures.temp3",
+    Temperature4: "temperatures.temp4",
     "Alarms.LowVoltage": "alarms.lowVoltage",
     "Alarms.HighVoltage": "alarms.highVoltage",
     "Alarms.LowSoc": "alarms.lowSoc"
@@ -590,15 +590,42 @@ const STATES_MAP = {
   }
 };
 const OVERVIEW_TOTAL_POWER = {
-  "Ac.Consumption.L1.Power": { sources: ["Ac.Consumption.L1.Power", "Ac.Consumption.L2.Power", "Ac.Consumption.L3.Power"], target: "Ac.Consumption.Power" },
-  "Ac.Consumption.L2.Power": { sources: ["Ac.Consumption.L1.Power", "Ac.Consumption.L2.Power", "Ac.Consumption.L3.Power"], target: "Ac.Consumption.Power" },
-  "Ac.Consumption.L3.Power": { sources: ["Ac.Consumption.L1.Power", "Ac.Consumption.L2.Power", "Ac.Consumption.L3.Power"], target: "Ac.Consumption.Power" },
-  "Ac.Grid.L1.Power": { sources: ["Ac.Grid.L1.Power", "Ac.Grid.L2.Power", "Ac.Grid.L3.Power"], target: "Ac.Grid.Power" },
-  "Ac.Grid.L2.Power": { sources: ["Ac.Grid.L1.Power", "Ac.Grid.L2.Power", "Ac.Grid.L3.Power"], target: "Ac.Grid.Power" },
-  "Ac.Grid.L3.Power": { sources: ["Ac.Grid.L1.Power", "Ac.Grid.L2.Power", "Ac.Grid.L3.Power"], target: "Ac.Grid.Power" },
-  "Ac.PvOnGrid.L1.Power": { sources: ["Ac.PvOnGrid.L1.Power", "Ac.PvOnGrid.L2.Power", "Ac.PvOnGrid.L3.Power"], target: "Ac.PvOnGrid.Power" },
-  "Ac.PvOnGrid.L2.Power": { sources: ["Ac.PvOnGrid.L1.Power", "Ac.PvOnGrid.L2.Power", "Ac.PvOnGrid.L3.Power"], target: "Ac.PvOnGrid.Power" },
-  "Ac.PvOnGrid.L3.Power": { sources: ["Ac.PvOnGrid.L1.Power", "Ac.PvOnGrid.L2.Power", "Ac.PvOnGrid.L3.Power"], target: "Ac.PvOnGrid.Power" }
+  "Ac.Consumption.L1.Power": {
+    sources: ["Ac.Consumption.L1.Power", "Ac.Consumption.L2.Power", "Ac.Consumption.L3.Power"],
+    target: "Ac.Consumption.Power"
+  },
+  "Ac.Consumption.L2.Power": {
+    sources: ["Ac.Consumption.L1.Power", "Ac.Consumption.L2.Power", "Ac.Consumption.L3.Power"],
+    target: "Ac.Consumption.Power"
+  },
+  "Ac.Consumption.L3.Power": {
+    sources: ["Ac.Consumption.L1.Power", "Ac.Consumption.L2.Power", "Ac.Consumption.L3.Power"],
+    target: "Ac.Consumption.Power"
+  },
+  "Ac.Grid.L1.Power": {
+    sources: ["Ac.Grid.L1.Power", "Ac.Grid.L2.Power", "Ac.Grid.L3.Power"],
+    target: "Ac.Grid.Power"
+  },
+  "Ac.Grid.L2.Power": {
+    sources: ["Ac.Grid.L1.Power", "Ac.Grid.L2.Power", "Ac.Grid.L3.Power"],
+    target: "Ac.Grid.Power"
+  },
+  "Ac.Grid.L3.Power": {
+    sources: ["Ac.Grid.L1.Power", "Ac.Grid.L2.Power", "Ac.Grid.L3.Power"],
+    target: "Ac.Grid.Power"
+  },
+  "Ac.PvOnGrid.L1.Power": {
+    sources: ["Ac.PvOnGrid.L1.Power", "Ac.PvOnGrid.L2.Power", "Ac.PvOnGrid.L3.Power"],
+    target: "Ac.PvOnGrid.Power"
+  },
+  "Ac.PvOnGrid.L2.Power": {
+    sources: ["Ac.PvOnGrid.L1.Power", "Ac.PvOnGrid.L2.Power", "Ac.PvOnGrid.L3.Power"],
+    target: "Ac.PvOnGrid.Power"
+  },
+  "Ac.PvOnGrid.L3.Power": {
+    sources: ["Ac.PvOnGrid.L1.Power", "Ac.PvOnGrid.L2.Power", "Ac.PvOnGrid.L3.Power"],
+    target: "Ac.PvOnGrid.Power"
+  }
 };
 const PHASE_POWER_PATHS = {
   pvinverter: ["Ac.L1.Power", "Ac.L2.Power", "Ac.L3.Power"],
@@ -647,12 +674,26 @@ class VictronGx extends utils.Adapter {
     void this.setState("info.connection", false, true);
     void this.setObjectNotExistsAsync("info.modbusConnected", {
       type: "state",
-      common: { name: "Modbus TCP verbunden", type: "boolean", role: "indicator.connected", read: true, write: false, def: false },
+      common: {
+        name: "Modbus TCP verbunden",
+        type: "boolean",
+        role: "indicator.connected",
+        read: true,
+        write: false,
+        def: false
+      },
       native: {}
     });
     void this.setObjectNotExistsAsync("info.modbusWritable", {
       type: "state",
-      common: { name: "Modbus Schreibzugriff", type: "boolean", role: "indicator", read: true, write: false, def: false },
+      common: {
+        name: "Modbus Schreibzugriff",
+        type: "boolean",
+        role: "indicator",
+        read: true,
+        write: false,
+        def: false
+      },
       native: {}
     });
     void this.setState("info.modbusConnected", false, true);
@@ -694,7 +735,9 @@ class VictronGx extends utils.Adapter {
       for (const obj of allObjects.rows) {
         const id = obj.id.replace(`${this.namespace}.`, "");
         const parts = id.split(".");
-        if (parts.length !== 3) continue;
+        if (parts.length !== 3) {
+          continue;
+        }
         if (/^\d{1,3}$/.test(parts[2])) {
           this.log.debug(`Bereinige numerischen Channel: ${id}`);
           await this.delObjectAsync(id, { recursive: true }).catch(() => {
@@ -712,14 +755,20 @@ class VictronGx extends utils.Adapter {
       clean: true,
       reconnectPeriod: 5e3
     };
-    if (username) options.username = username;
-    if (password) options.password = password;
+    if (username) {
+      options.username = username;
+    }
+    if (password) {
+      options.password = password;
+    }
     this.mqttClient = mqtt.connect(`mqtt://${host}`, options);
     this.mqttClient.on("connect", () => {
       this.log.info("MQTT verbunden mit Victron GX!");
       void this.setState("info.connection", true, true);
       this.mqttClient.subscribe("N/#", (err) => {
-        if (err) this.log.error(`Subscribe Fehler: ${err.message}`);
+        if (err) {
+          this.log.error(`Subscribe Fehler: ${err.message}`);
+        }
       });
     });
     this.mqttClient.on("message", (topic, payload) => {
@@ -735,7 +784,9 @@ class VictronGx extends utils.Adapter {
     });
     this.mqttClient.on("reconnect", () => {
       this.log.info("MQTT verbindet neu...");
-      if (this.vrmId) this.startKeepAlive();
+      if (this.vrmId) {
+        this.startKeepAlive();
+      }
     });
   }
   // ── Modbus TCP ───────────────────────────────────────────────────────────
@@ -756,11 +807,15 @@ class VictronGx extends utils.Adapter {
     }
   }
   async testModbusWrite() {
-    if (!this.modbusClient) return;
+    if (!this.modbusClient) {
+      return;
+    }
     let vebusEntry;
     for (let i = 0; i < 60; i++) {
       vebusEntry = Array.from(this.modbusUnitMap.entries()).find(([k]) => k.startsWith("vebus/"));
-      if (vebusEntry) break;
+      if (vebusEntry) {
+        break;
+      }
       await new Promise((r) => setTimeout(r, 1e3));
     }
     if (!vebusEntry) {
@@ -769,7 +824,9 @@ class VictronGx extends utils.Adapter {
     }
     const [, vebusUnitId] = vebusEntry;
     try {
-      if (this.modbusBusy) await this.waitModbus();
+      if (this.modbusBusy) {
+        await this.waitModbus();
+      }
       this.modbusBusy = true;
       this.modbusClient.setID(vebusUnitId);
       const result = await this.modbusClient.readHoldingRegisters(37, 1);
@@ -784,7 +841,9 @@ class VictronGx extends utils.Adapter {
     }
   }
   async discoverModbusUnits() {
-    if (!this.modbusClient) return;
+    if (!this.modbusClient) {
+      return;
+    }
     this.log.info(`Starte Modbus Unit ID Discovery... (deviceMap: ${this.deviceMap.size} Ger\xE4te)`);
     const TYPE_TEST_REGISTER = {
       vebus: 3,
@@ -795,10 +854,14 @@ class VictronGx extends utils.Adapter {
     };
     const neededTypes = /* @__PURE__ */ new Set(["vebus", "battery", "grid", "pvinverter", "solarcharger"]);
     for (let unitId = 1; unitId <= 247; unitId++) {
-      if (neededTypes.size === 0) break;
+      if (neededTypes.size === 0) {
+        break;
+      }
       for (const type of Array.from(neededTypes)) {
         try {
-          if (this.modbusBusy) await this.waitModbus();
+          if (this.modbusBusy) {
+            await this.waitModbus();
+          }
           this.modbusBusy = true;
           this.modbusClient.setID(unitId);
           await this.modbusClient.readHoldingRegisters(TYPE_TEST_REGISTER[type], 1);
@@ -814,7 +877,13 @@ class VictronGx extends utils.Adapter {
             if (baseId) {
               await this.extendObjectAsync(`${baseId}.info.modbusId`, {
                 type: "state",
-                common: { name: "Modbus Unit ID", type: "number", role: "info", read: true, write: false },
+                common: {
+                  name: "Modbus Unit ID",
+                  type: "number",
+                  role: "info",
+                  read: true,
+                  write: false
+                },
                 native: {}
               });
               await this.setState(`${baseId}.info.modbusId`, { val: unitId, ack: true });
@@ -830,7 +899,9 @@ class VictronGx extends utils.Adapter {
     this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Ger\xE4te gefunden.`);
     if (this.config.controlEnabled) {
       try {
-        if (this.modbusBusy) await this.waitModbus();
+        if (this.modbusBusy) {
+          await this.waitModbus();
+        }
         this.modbusBusy = true;
         this.modbusClient.setID(100);
         await this.modbusClient.readHoldingRegisters(2902, 1);
@@ -846,7 +917,9 @@ class VictronGx extends utils.Adapter {
   }
   // ── control.* Datenpunkte anlegen und initial per Modbus lesen ───────────
   async initControlDatapoints() {
-    if (!this.modbusClient) return;
+    if (!this.modbusClient) {
+      return;
+    }
     await this.setObjectNotExistsAsync("control", {
       type: "channel",
       common: { name: "Steuerung" },
@@ -875,7 +948,9 @@ class VictronGx extends utils.Adapter {
         read: true,
         write: reg.write && this.config.controlEnabled
       };
-      if (reg.states) commonDef.states = reg.states;
+      if (reg.states) {
+        commonDef.states = reg.states;
+      }
       await this.extendObjectAsync(`control.${dpId}`, {
         type: "state",
         common: commonDef,
@@ -886,13 +961,17 @@ class VictronGx extends utils.Adapter {
         continue;
       }
       try {
-        if (this.modbusBusy) await this.waitModbus();
+        if (this.modbusBusy) {
+          await this.waitModbus();
+        }
         this.modbusBusy = true;
         this.modbusClient.setID(unitId);
         const result = await this.modbusClient.readHoldingRegisters(reg.register, 1);
         this.modbusBusy = false;
         let raw = result.data[0];
-        if (reg.signed && raw > 32767) raw = raw - 65536;
+        if (reg.signed && raw > 32767) {
+          raw = raw - 65536;
+        }
         const val = Math.round(raw * reg.scaleRead * 100) / 100;
         await this.setState(`control.${dpId}`, { val, ack: true });
         this.log.info(`control.${dpId} = ${val}${reg.unit} (Reg ${reg.register})`);
@@ -905,7 +984,9 @@ class VictronGx extends utils.Adapter {
   }
   // ── Modbus Write ─────────────────────────────────────────────────────────
   async writeControlModbus(dpId, value) {
-    if (!this.modbusClient) return;
+    if (!this.modbusClient) {
+      return;
+    }
     const reg = CONTROL_REGISTERS[dpId];
     if (!reg) {
       this.log.warn(`Kein Register f\xFCr control.${dpId}`);
@@ -926,12 +1007,16 @@ class VictronGx extends utils.Adapter {
     const rawValue = Math.round(value * reg.scaleWrite);
     const writeValue = reg.signed && rawValue < 0 ? rawValue + 65536 : rawValue;
     try {
-      if (this.modbusBusy) await this.waitModbus();
+      if (this.modbusBusy) {
+        await this.waitModbus();
+      }
       this.modbusBusy = true;
       this.modbusClient.setID(unitId);
       await this.modbusClient.writeRegister(reg.register, writeValue);
       this.modbusBusy = false;
-      this.log.info(`Modbus Write: control.${dpId} = ${value}${reg.unit} \u2192 Reg ${reg.register} = ${writeValue} (Unit ${unitId})`);
+      this.log.info(
+        `Modbus Write: control.${dpId} = ${value}${reg.unit} \u2192 Reg ${reg.register} = ${writeValue} (Unit ${unitId})`
+      );
       await this.setState(`control.${dpId}`, { val: value, ack: true });
     } catch (err) {
       this.modbusBusy = false;
@@ -966,12 +1051,18 @@ class VictronGx extends utils.Adapter {
           }
           const reg = CONTROL_REGISTERS["inverter.AcPowerSetpoint"];
           const vebusEntry = Array.from(this.modbusUnitMap.entries()).find(([k]) => k.startsWith("vebus/"));
-          if (!vebusEntry || !this.modbusClient) return;
+          if (!vebusEntry || !this.modbusClient) {
+            return;
+          }
           const [, unitId] = vebusEntry;
           const rawValue = Math.round(v * reg.scaleWrite);
           const writeValue = reg.signed && rawValue < 0 ? rawValue + 65536 : rawValue;
-          if (this.modbusBusy) return;
-          if (!this.modbusClient) return;
+          if (this.modbusBusy) {
+            return;
+          }
+          if (!this.modbusClient) {
+            return;
+          }
           this.modbusBusy = true;
           this.modbusClient.setID(unitId);
           await this.modbusClient.writeRegister(reg.register, writeValue);
@@ -986,21 +1077,27 @@ class VictronGx extends utils.Adapter {
     this.log.info(`AcPowerSetpoint Keepalive gestartet: ${value}W`);
   }
   startKeepAlive() {
-    if (this.keepAliveInterval) this.clearInterval(this.keepAliveInterval);
+    if (this.keepAliveInterval) {
+      this.clearInterval(this.keepAliveInterval);
+    }
     this.keepAliveInterval = this.setInterval(() => {
       if (this.mqttClient && this.vrmId) {
         this.mqttClient.publish(`R/${this.vrmId}/keepalive`, "");
         this.log.debug("MQTT Keepalive gesendet");
       }
     }, 5e4);
-    if (this.vrmId) this.mqttClient.publish(`R/${this.vrmId}/keepalive`, "");
+    if (this.vrmId) {
+      this.mqttClient.publish(`R/${this.vrmId}/keepalive`, "");
+    }
   }
   // ── Haupt-Message-Handler ────────────────────────────────────────────────
   async handleMessage(topic, payload) {
     var _a, _b, _c, _d, _e;
     try {
       const raw = payload.toString();
-      if (!raw) return;
+      if (!raw) {
+        return;
+      }
       let parsed;
       try {
         parsed = JSON.parse(raw);
@@ -1008,7 +1105,9 @@ class VictronGx extends utils.Adapter {
         return;
       }
       const topicParts = topic.split("/");
-      if (topicParts[0] !== "N" || topicParts.length < 3) return;
+      if (topicParts[0] !== "N" || topicParts.length < 3) {
+        return;
+      }
       const vrmId = topicParts[1];
       if (!this.vrmId && vrmId) {
         this.vrmId = vrmId;
@@ -1016,7 +1115,9 @@ class VictronGx extends utils.Adapter {
         this.startKeepAlive();
       }
       const parts = topicParts;
-      if (parts.length < 5) return;
+      if (parts.length < 5) {
+        return;
+      }
       const deviceType = parts[2];
       const instanceStr = parts[3];
       const instance = parseInt(instanceStr, 10);
@@ -1029,7 +1130,9 @@ class VictronGx extends utils.Adapter {
         return;
       }
       const rawValue = "value" in parsed ? parsed.value : parsed;
-      if (rawValue === null || rawValue === void 0) return;
+      if (rawValue === null || rawValue === void 0) {
+        return;
+      }
       if (REGISTRATION_PATHS.has(normPath)) {
         if (typeof rawValue === "string" || typeof rawValue === "number") {
           this.updateDeviceMeta(deviceType, instance, normPath, String(rawValue));
@@ -1038,19 +1141,29 @@ class VictronGx extends utils.Adapter {
       }
       const remappedPath = (_b = (_a = PATH_REMAP[deviceType]) == null ? void 0 : _a[normPath]) != null ? _b : normPath;
       const isRelevant = RELEVANT_PATHS[deviceType].some((rp) => normPath === rp.replace(/\//g, "."));
-      if (!isRelevant) return;
+      if (!isRelevant) {
+        return;
+      }
       const deviceKey = `${deviceType}/${instance}`;
       const device = this.deviceMap.get(deviceKey);
       const serial = this.serialMap.get(deviceKey);
       const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["system", "platform"]);
-      if (!serial && !NO_SERIAL_TYPES.has(deviceType)) return;
+      if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
+        return;
+      }
       const baseId = this.getBaseId(deviceType, instance, serial, device);
-      if (!baseId) return;
+      if (!baseId) {
+        return;
+      }
       if ((device == null ? void 0 : device.virtual) && PHASE_VOLTAGE_PATHS[deviceType]) {
         const vMatch = normPath.match(/^Ac\.(L[123])\.Voltage$/);
-        if (vMatch) device.phaseVoltage[vMatch[1]] = typeof rawValue === "number" ? rawValue : 0;
+        if (vMatch) {
+          device.phaseVoltage[vMatch[1]] = typeof rawValue === "number" ? rawValue : 0;
+        }
         const pMatch = normPath.match(/^Ac\.(L[123])\./);
-        if (pMatch && ((_c = device.phaseVoltage[pMatch[1]]) != null ? _c : 0) === 0) return;
+        if (pMatch && ((_c = device.phaseVoltage[pMatch[1]]) != null ? _c : 0) === 0) {
+          return;
+        }
       }
       if (!this.channelReady.has(baseId)) {
         if (device) {
@@ -1065,7 +1178,9 @@ class VictronGx extends utils.Adapter {
           this.log.debug("Channel angelegt: overview");
         }
       }
-      if (device) this.touchDevice(device, baseId);
+      if (device) {
+        this.touchDevice(device, baseId);
+      }
       const isSwitchBool = deviceType === "switch" && (remappedPath === "State" || remappedPath === "Status");
       const storeValue = isSwitchBool ? rawValue !== 0 : rawValue;
       const storeType = isSwitchBool ? "boolean" : typeof rawValue === "number" ? "number" : typeof rawValue === "boolean" ? "boolean" : "string";
@@ -1083,7 +1198,9 @@ class VictronGx extends utils.Adapter {
         commonBase.states = PVINVERTER_STATUS;
       }
       const statesForPath = (_d = STATES_MAP[deviceType]) == null ? void 0 : _d[remappedPath];
-      if (statesForPath) commonBase.states = statesForPath;
+      if (statesForPath) {
+        commonBase.states = statesForPath;
+      }
       await this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
       await this.setState(stateId, { val: storeValue, ack: true });
       if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath)) {
@@ -1102,12 +1219,16 @@ class VictronGx extends utils.Adapter {
   // ── Gesamtleistung overview berechnen ───────────────────────────────────
   async updateOverviewTotalPower(triggeredPath) {
     const entry = OVERVIEW_TOTAL_POWER[triggeredPath];
-    if (!entry) return;
+    if (!entry) {
+      return;
+    }
     let total = 0;
     for (const src of entry.sources) {
       try {
         const s = await this.getStateAsync(`overview.${src}`);
-        if (s && typeof s.val === "number") total += s.val;
+        if (s && typeof s.val === "number") {
+          total += s.val;
+        }
       } catch {
       }
     }
@@ -1129,9 +1250,13 @@ class VictronGx extends utils.Adapter {
   // ── Settings MQTT → control.system.* ────────────────────────────────────
   async handleSettingsMqttUpdate(normPath, parsed) {
     const rawValue = "value" in parsed ? parsed.value : null;
-    if (rawValue === null || rawValue === void 0) return;
+    if (rawValue === null || rawValue === void 0) {
+      return;
+    }
     const dpId = ESS_MQTT_MAP[normPath];
-    if (!dpId) return;
+    if (!dpId) {
+      return;
+    }
     const val = typeof rawValue === "number" ? rawValue : parseFloat(rawValue);
     try {
       await this.setState(`control.${dpId}`, { val, ack: true });
@@ -1141,12 +1266,18 @@ class VictronGx extends utils.Adapter {
   }
   // ── baseId berechnen ─────────────────────────────────────────────────────
   getBaseId(type, instance, serial, device) {
-    if (type === "system") return "overview";
+    if (type === "system") {
+      return "overview";
+    }
     if (type === "switch") {
-      if (!serial || !(device == null ? void 0 : device.group)) return null;
+      if (!serial || !(device == null ? void 0 : device.group)) {
+        return null;
+      }
       return `devices.switch.${device.group.replace(/[^a-zA-Z0-9_]/g, "_")}.${serial}`;
     }
-    if (serial) return `devices.${type}.${serial}`;
+    if (serial) {
+      return `devices.${type}.${serial}`;
+    }
     return `devices.${type}.${instance}`;
   }
   // ── Metadaten sammeln ────────────────────────────────────────────────────
@@ -1187,9 +1318,7 @@ class VictronGx extends utils.Adapter {
         const deleteKey = `deleted:${oldId}`;
         if (type !== "system" && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
           this.loggedDevices.add(deleteKey);
-          void this.delObjectAsync(oldId, { recursive: true }).then(
-            () => this.log.debug(`Alter Channel gel\xF6scht: ${oldId}`)
-          ).catch(() => {
+          void this.delObjectAsync(oldId, { recursive: true }).then(() => this.log.debug(`Alter Channel gel\xF6scht: ${oldId}`)).catch(() => {
           });
         }
         break;
@@ -1214,16 +1343,26 @@ class VictronGx extends utils.Adapter {
         break;
       }
       case "CustomName":
-        if (!device.customName) device.customName = value;
+        if (!device.customName) {
+          device.customName = value;
+        }
         break;
       case "Connected": {
-        if (!device.ready) break;
+        if (!device.ready) {
+          break;
+        }
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
           const connected = value === "1" || value === "true";
           void this.setObjectNotExistsAsync(`${baseId}.info.connected`, {
             type: "state",
-            common: { name: "Verbunden", type: "boolean", role: "indicator.connected", read: true, write: false },
+            common: {
+              name: "Verbunden",
+              type: "boolean",
+              role: "indicator.connected",
+              read: true,
+              write: false
+            },
             native: {}
           }).then(() => {
             void this.setState(`${baseId}.info.connected`, { val: connected, ack: true });
@@ -1242,10 +1381,14 @@ class VictronGx extends utils.Adapter {
         }
         break;
       case "Mgmt.ProcessName":
-        if (value === "dbus-victron-virtual") device.virtual = true;
+        if (value === "dbus-victron-virtual") {
+          device.virtual = true;
+        }
         break;
       case "Position": {
-        if (!device.ready) break;
+        if (!device.ready) {
+          break;
+        }
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
           void this.setObjectNotExistsAsync(`${baseId}.info.position`, {
@@ -1266,7 +1409,9 @@ class VictronGx extends utils.Adapter {
         break;
       }
       case "NrOfPhases": {
-        if (!device.ready) break;
+        if (!device.ready) {
+          break;
+        }
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
           void this.setObjectNotExistsAsync(`${baseId}.info.nrOfPhases`, {
@@ -1280,7 +1425,9 @@ class VictronGx extends utils.Adapter {
         break;
       }
       case "SwitchableOutput.output_1.Settings.Group": {
-        if (!device.group) device.group = value;
+        if (!device.group) {
+          device.group = value;
+        }
         const groupKey = value.replace(/[^a-zA-Z0-9_]/g, "_");
         void this.setObjectNotExistsAsync(`devices.switch.${groupKey}`, {
           type: "channel",
@@ -1290,7 +1437,9 @@ class VictronGx extends utils.Adapter {
         break;
       }
       case "SwitchableOutput.output_1.Settings.CustomName": {
-        if (!device.serial) break;
+        if (!device.serial) {
+          break;
+        }
         const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, "_");
         const channelId = `devices.switch.${groupKey}.${device.serial}`;
         const suffix = value ? ` (${value})` : "";
@@ -1301,8 +1450,12 @@ class VictronGx extends utils.Adapter {
   }
   // ── Channel anlegen ──────────────────────────────────────────────────────
   async ensureChannel(baseId, device) {
-    if (this.channelReady.has(baseId)) return;
-    if (!device.ready) return;
+    if (this.channelReady.has(baseId)) {
+      return;
+    }
+    if (!device.ready) {
+      return;
+    }
     const label = device.customName || device.productName || device.type;
     await this.setObjectNotExistsAsync(baseId, {
       type: "channel",
@@ -1352,12 +1505,26 @@ class VictronGx extends utils.Adapter {
       });
       await this.setObjectNotExistsAsync(`${baseId}.cells.min`, {
         type: "state",
-        common: { name: "Zelle Min", type: "number", role: "value.voltage", unit: "V", read: true, write: false },
+        common: {
+          name: "Zelle Min",
+          type: "number",
+          role: "value.voltage",
+          unit: "V",
+          read: true,
+          write: false
+        },
         native: {}
       });
       await this.setObjectNotExistsAsync(`${baseId}.cells.max`, {
         type: "state",
-        common: { name: "Zelle Max", type: "number", role: "value.voltage", unit: "V", read: true, write: false },
+        common: {
+          name: "Zelle Max",
+          type: "number",
+          role: "value.voltage",
+          unit: "V",
+          read: true,
+          write: false
+        },
         native: {}
       });
     }
@@ -1370,19 +1537,27 @@ class VictronGx extends utils.Adapter {
     for (let i = 1; i <= 32; i++) {
       try {
         const s = await this.getStateAsync(`${baseId}.cells.cell${String(i).padStart(2, "0")}`);
-        if (s && typeof s.val === "number" && s.val > 0) vals.push(s.val);
+        if (s && typeof s.val === "number" && s.val > 0) {
+          vals.push(s.val);
+        }
       } catch {
       }
     }
-    if (vals.length === 0) return;
+    if (vals.length === 0) {
+      return;
+    }
     await this.setState(`${baseId}.cells.min`, { val: Math.round(Math.min(...vals) * 1e3) / 1e3, ack: true });
     await this.setState(`${baseId}.cells.max`, { val: Math.round(Math.max(...vals) * 1e3) / 1e3, ack: true });
   }
   // ── Stale-Erkennung ──────────────────────────────────────────────────────
   touchDevice(device, baseId) {
     device.lastUpdate = Date.now();
-    if (device.staleTimer) clearTimeout(device.staleTimer);
-    if (!this.channelReady.has(baseId) || baseId === "overview") return;
+    if (device.staleTimer) {
+      clearTimeout(device.staleTimer);
+    }
+    if (!this.channelReady.has(baseId) || baseId === "overview") {
+      return;
+    }
     void this.setState(`${baseId}.info.lastUpdate`, { val: device.lastUpdate, ack: true });
     void this.setState(`${baseId}.info.stale`, { val: false, ack: true });
     device.staleTimer = this.setTimeout(() => {
@@ -1396,7 +1571,9 @@ class VictronGx extends utils.Adapter {
     for (const phase of ["L1", "L2", "L3"]) {
       try {
         const s = await this.getStateAsync(`${baseId}.Ac.${phase}.Power`);
-        if (s && typeof s.val === "number" && s.val !== 0) active.push(phase);
+        if (s && typeof s.val === "number" && s.val !== 0) {
+          active.push(phase);
+        }
       } catch {
       }
     }
@@ -1406,8 +1583,12 @@ class VictronGx extends utils.Adapter {
   // ── onStateChange: Schreibzugriffe ───────────────────────────────────────
   onStateChange(id, state) {
     var _a, _b;
-    if (!state || state.ack) return;
-    if (!this.mqttClient || !this.vrmId) return;
+    if (!state || state.ack) {
+      return;
+    }
+    if (!this.mqttClient || !this.vrmId) {
+      return;
+    }
     const parts = id.split(".");
     if (parts[2] === "control") {
       const dpId = parts.slice(3).join(".");
@@ -1423,12 +1604,16 @@ class VictronGx extends utils.Adapter {
       })();
       return;
     }
-    if (parts.length < 5) return;
+    if (parts.length < 5) {
+      return;
+    }
     const deviceType = parts[3];
     let serial;
     let dpPath;
     if (deviceType === "switch") {
-      if (parts.length < 7) return;
+      if (parts.length < 7) {
+        return;
+      }
       serial = parts[5];
       const remapped = parts.slice(6).join(".");
       dpPath = (_b = (_a = WRITE_PATH_REMAP[deviceType]) == null ? void 0 : _a[remapped]) != null ? _b : remapped.replace(/\./g, "/");
@@ -1445,7 +1630,9 @@ class VictronGx extends utils.Adapter {
     }
     if (instance === null) {
       const num = parseInt(serial, 10);
-      if (!isNaN(num)) instance = num;
+      if (!isNaN(num)) {
+        instance = num;
+      }
     }
     if (instance === null) {
       this.log.warn(`Konnte Instanz f\xFCr ${id} nicht ermitteln`);
@@ -1548,54 +1735,114 @@ class VictronGx extends utils.Adapter {
       "Ac.PowerLimit": "Leistungsbegrenzung",
       "SystemState.State": "Systemzustand"
     };
-    if (names[path]) return names[path];
-    if (path.startsWith("cells.cell")) return `Zelle ${parseInt(path.replace("cells.cell", ""), 10)}`;
+    if (names[path]) {
+      return names[path];
+    }
+    if (path.startsWith("cells.cell")) {
+      return `Zelle ${parseInt(path.replace("cells.cell", ""), 10)}`;
+    }
     return path;
   }
   getUnit(path) {
-    if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) return "V";
-    if (path.includes("Power") || path === "Hub4.L1.AcPowerSetpoint" || path.endsWith(".P") || path === "Ac.Power") return "W";
-    if (path.includes("Current") || path.endsWith(".I")) return "A";
-    if (path.includes("Energy")) return "kWh";
-    if (path.includes("Soc")) return "%";
-    if (path.startsWith("temperatures.")) return "\xB0C";
-    if (path.endsWith(".S")) return "VA";
-    if (path.endsWith(".F") || path === "Ac.Frequency") return "Hz";
-    if (path === "Yield.Today" || path === "Yield.Total") return "kWh";
-    if (path === "Level" || path === "Humidity") return "%";
-    if (path === "Remaining") return "m\xB3";
-    if (path === "Pressure") return "hPa";
-    if (path === "Capacity" || path.includes("ConsumedAmphours")) return "Ah";
-    if (path === "Ac.MaxPower" || path === "Ac.PowerLimit") return "W";
+    if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) {
+      return "V";
+    }
+    if (path.includes("Power") || path === "Hub4.L1.AcPowerSetpoint" || path.endsWith(".P") || path === "Ac.Power") {
+      return "W";
+    }
+    if (path.includes("Current") || path.endsWith(".I")) {
+      return "A";
+    }
+    if (path.includes("Energy")) {
+      return "kWh";
+    }
+    if (path.includes("Soc")) {
+      return "%";
+    }
+    if (path.startsWith("temperatures.")) {
+      return "\xB0C";
+    }
+    if (path.endsWith(".S")) {
+      return "VA";
+    }
+    if (path.endsWith(".F") || path === "Ac.Frequency") {
+      return "Hz";
+    }
+    if (path === "Yield.Today" || path === "Yield.Total") {
+      return "kWh";
+    }
+    if (path === "Level" || path === "Humidity") {
+      return "%";
+    }
+    if (path === "Remaining") {
+      return "m\xB3";
+    }
+    if (path === "Pressure") {
+      return "hPa";
+    }
+    if (path === "Capacity" || path.includes("ConsumedAmphours")) {
+      return "Ah";
+    }
+    if (path === "Ac.MaxPower" || path === "Ac.PowerLimit") {
+      return "W";
+    }
     return "";
   }
   getRole(path) {
-    if (path === "State") return "switch";
-    if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) return "value.voltage";
-    if (path.includes("Power") || path === "Hub4.L1.AcPowerSetpoint" || path.endsWith(".P") || path === "Ac.Power" || path.endsWith(".S")) return "value.power";
-    if (path.includes("Current") || path.endsWith(".I")) return "value.current";
-    if (path.endsWith(".F") || path === "Ac.Frequency") return "value.frequency";
-    if (path.includes("Energy")) return "value.energy.consumed";
-    if (path.includes("Soc")) return "value.battery";
-    if (path.startsWith("temperatures.")) return "value.temperature";
-    if (path.startsWith("alarms.")) return "indicator.alarm";
-    if (path === "cells.minId" || path === "cells.maxId") return "text";
+    if (path === "State") {
+      return "switch";
+    }
+    if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) {
+      return "value.voltage";
+    }
+    if (path.includes("Power") || path === "Hub4.L1.AcPowerSetpoint" || path.endsWith(".P") || path === "Ac.Power" || path.endsWith(".S")) {
+      return "value.power";
+    }
+    if (path.includes("Current") || path.endsWith(".I")) {
+      return "value.current";
+    }
+    if (path.endsWith(".F") || path === "Ac.Frequency") {
+      return "value.frequency";
+    }
+    if (path.includes("Energy")) {
+      return "value.energy.consumed";
+    }
+    if (path.includes("Soc")) {
+      return "value.battery";
+    }
+    if (path.startsWith("temperatures.")) {
+      return "value.temperature";
+    }
+    if (path.startsWith("alarms.")) {
+      return "indicator.alarm";
+    }
+    if (path === "cells.minId" || path === "cells.maxId") {
+      return "text";
+    }
     return "value";
   }
   // ── Adapter-Stop ─────────────────────────────────────────────────────────
   onUnload(callback) {
     try {
-      if (this.keepAliveInterval) this.clearInterval(this.keepAliveInterval);
+      if (this.keepAliveInterval) {
+        this.clearInterval(this.keepAliveInterval);
+      }
       if (this.acPowerSetpointInterval) {
         this.clearInterval(this.acPowerSetpointInterval);
         this.acPowerSetpointInterval = null;
       }
       for (const device of this.deviceMap.values()) {
-        if (device.staleTimer) clearTimeout(device.staleTimer);
+        if (device.staleTimer) {
+          clearTimeout(device.staleTimer);
+        }
       }
-      if (this.mqttClient) this.mqttClient.end();
-      if (this.modbusClient) this.modbusClient.close(() => {
-      });
+      if (this.mqttClient) {
+        this.mqttClient.end();
+      }
+      if (this.modbusClient) {
+        this.modbusClient.close(() => {
+        });
+      }
       callback();
     } catch (error) {
       this.log.error(`Fehler beim Beenden: ${error.message}`);
