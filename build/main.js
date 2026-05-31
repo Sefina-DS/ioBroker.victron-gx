@@ -1000,9 +1000,9 @@ class VictronGx extends utils.Adapter {
   }
   startKeepAlive() {
     if (this.keepAliveInterval) {
-      clearInterval(this.keepAliveInterval);
+      this.clearInterval(this.keepAliveInterval);
     }
-    this.keepAliveInterval = setInterval(() => {
+    this.keepAliveInterval = this.setInterval(() => {
       if (this.mqttClient && this.vrmId) {
         this.mqttClient.publish(`R/${this.vrmId}/keepalive`, "");
         this.log.debug("Keepalive gesendet");
@@ -1517,7 +1517,7 @@ class VictronGx extends utils.Adapter {
     }
     void this.setState(`${baseId}.info.lastUpdate`, { val: device.lastUpdate, ack: true });
     void this.setState(`${baseId}.info.stale`, { val: false, ack: true });
-    device.staleTimer = setTimeout(() => {
+    device.staleTimer = this.setTimeout(() => {
       this.log.warn(`Ger\xE4t ${device.type}/${device.instance} antwortet nicht mehr (stale)`);
       void this.setState(`${baseId}.info.stale`, { val: true, ack: true });
     }, STALE_TIMEOUT_MS);
@@ -1816,7 +1816,7 @@ class VictronGx extends utils.Adapter {
   onUnload(callback) {
     try {
       if (this.keepAliveInterval) {
-        clearInterval(this.keepAliveInterval);
+        this.clearInterval(this.keepAliveInterval);
       }
       for (const device of this.deviceMap.values()) {
         if (device.staleTimer) {

@@ -115,6 +115,9 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 
 ## Changelog
 
+### 0.5.9 (2026-05-31)
+- Fix: use this.setTimeout/setInterval, copyright in README
+
 ### 0.5.8 (2026-05-31)
 - Fix: news entries reduced to 7
 
@@ -150,4 +153,6 @@ Set State to true/false → MQTT Write → GX → Node-RED → Relay
 
 ## License
 
-MIT © 2026 Sefina-DS
+MIT License
+
+Copyright (c) 2026 Sefina-DS

@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.5.8",
+    "version": "0.5.9",
     "news": {
-      "0.5.2": {
-        "en": "Fix: dependabot config updated, auto-merge workflow migrated",
-        "de": "Fix: dependabot Konfiguration aktualisiert, auto-merge Workflow migriert",
-        "ru": "Исправление: обновление конфигурации dependabot",
-        "pt": "Correção: configuração dependabot atualizada",
-        "nl": "Fix: dependabot configuratie bijgewerkt",
-        "fr": "Correction: configuration dependabot mise à jour",
-        "it": "Correzione: configurazione dependabot aggiornata",
-        "es": "Corrección: configuración dependabot actualizada",
-        "pl": "Poprawka: konfiguracja dependabot zaktualizowana",
-        "uk": "Виправлення: конфігурацію dependabot оновлено",
-        "zh-cn": "修复: dependabot配置已更新"
-      },
       "0.5.3": {
         "en": "Fix: protectedNative/encryptedNative moved to root, tsconfig updated to node22, modbusHint size attributes added",
         "de": "Fix: protectedNative/encryptedNative in root verschoben, tsconfig auf node22 aktualisiert",
@@ -93,6 +80,19 @@
         "pl": "Fix: news entries reduced to 7",
         "uk": "Fix: news entries reduced to 7",
         "zh-cn": "Fix: news entries reduced to 7"
+      },
+      "0.5.9": {
+        "en": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "de": "Fix: this.setTimeout/setInterval, Copyright in README",
+        "ru": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "pt": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "nl": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "fr": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "it": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "es": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "pl": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "uk": "Fix: use this.setTimeout/setInterval, copyright in README",
+        "zh-cn": "Fix: use this.setTimeout/setInterval, copyright in README"
       }
     },
     "titleLang": {
