@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.2",
+    "version": "0.6.3",
     "news": {
-      "0.5.6": {
-        "en": "Fix: switched to npm trusted publishing, removed npm-token",
-        "de": "Fix: auf npm Trusted Publishing umgestellt, npm-token entfernt",
-        "ru": "Исправление",
-        "pt": "Correção",
-        "nl": "Fix",
-        "fr": "Correction",
-        "it": "Correzione",
-        "es": "Corrección",
-        "pl": "Poprawka",
-        "uk": "Виправлення",
-        "zh-cn": "修复"
-      },
       "0.5.7": {
         "en": "Fix: adapter-tests needs check-and-lint, automerge workflow renamed",
         "de": "Fix: adapter-tests needs check-and-lint, automerge Workflow umbenannt",
@@ -93,6 +80,19 @@
         "pl": "Update TypeScript to 6.0.3",
         "uk": "Update TypeScript to 6.0.3",
         "zh-cn": "Update TypeScript to 6.0.3"
+      },
+      "0.6.3": {
+        "en": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "de": "Fix: mocha Types zu tsconfig für TypeScript 6 Kompatibilität hinzugefügt",
+        "ru": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "pt": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "nl": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "fr": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "it": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "es": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "pl": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "uk": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
+        "zh-cn": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility"
       }
     },
     "titleLang": {

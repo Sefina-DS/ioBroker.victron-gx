@@ -31,6 +31,7 @@
         // Uncomment this if you want the old behavior of catch variables being `any`
         // "useUnknownInCatchVariables": false,
 
+        "types": ["mocha", "node"],
         "sourceMap": true,
         "inlineSourceMap": false
     },
