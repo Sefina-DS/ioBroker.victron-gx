@@ -82,17 +82,17 @@
         "zh-cn": "Fix: use this.setTimeout/setInterval, copyright in README"
       },
       "0.6.0": {
-        "en": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "de": "Breaking change: ess.* umbenannt zu control.system.* und control.inverter.*; alle Gerätedatenpunkte read-only; AcPowerSetpoint Keepalive; Skalierungsfehler behoben; overview Gesamtleistungen ergänzt",
-        "ru": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "pt": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "nl": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "fr": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "it": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "es": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "pl": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "uk": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added",
-        "zh-cn": "Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added"
+        "en": "Add DVCC charge/discharge current control, external ESS control mode",
+        "de": "DVCC Lade-/Entladestrom Steuerung, externe ESS Steuerung hinzugefügt",
+        "ru": "Add DVCC charge/discharge current control, external ESS control mode",
+        "pt": "Add DVCC charge/discharge current control, external ESS control mode",
+        "nl": "Add DVCC charge/discharge current control, external ESS control mode",
+        "fr": "Add DVCC charge/discharge current control, external ESS control mode",
+        "it": "Add DVCC charge/discharge current control, external ESS control mode",
+        "es": "Add DVCC charge/discharge current control, external ESS control mode",
+        "pl": "Add DVCC charge/discharge current control, external ESS control mode",
+        "uk": "Add DVCC charge/discharge current control, external ESS control mode",
+        "zh-cn": "Add DVCC charge/discharge current control, external ESS control mode"
       }
     },
     "titleLang": {

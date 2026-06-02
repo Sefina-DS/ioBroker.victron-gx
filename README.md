@@ -151,6 +151,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.6.0 (2026-06-02)
+- Add DVCC charge/discharge current control, external ESS control mode
+
 ### 0.6.0 (2026-05-31)
 - Breaking change: ess.* renamed to control.system.* and control.inverter.*; all device datapoints read-only; AcPowerSetpoint keepalive; corrected scale factors; overview totals added
 
