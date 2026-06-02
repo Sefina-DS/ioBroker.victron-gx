@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.1",
+    "version": "0.6.2",
     "news": {
-      "0.5.5": {
-        "en": "Fix: npm-token added to deploy workflow",
-        "de": "Fix: npm-token zum Deploy-Workflow hinzugefügt",
-        "ru": "Исправление",
-        "pt": "Correção",
-        "nl": "Fix",
-        "fr": "Correction",
-        "it": "Correzione",
-        "es": "Corrección",
-        "pl": "Poprawka",
-        "uk": "Виправлення",
-        "zh-cn": "修复"
-      },
       "0.5.6": {
         "en": "Fix: switched to npm trusted publishing, removed npm-token",
         "de": "Fix: auf npm Trusted Publishing umgestellt, npm-token entfernt",
@@ -93,6 +80,19 @@
         "pl": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
         "uk": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
         "zh-cn": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries"
+      },
+      "0.6.2": {
+        "en": "Update TypeScript to 6.0.3",
+        "de": "TypeScript auf 6.0.3 aktualisiert",
+        "ru": "Update TypeScript to 6.0.3",
+        "pt": "Update TypeScript to 6.0.3",
+        "nl": "Update TypeScript to 6.0.3",
+        "fr": "Update TypeScript to 6.0.3",
+        "it": "Update TypeScript to 6.0.3",
+        "es": "Update TypeScript to 6.0.3",
+        "pl": "Update TypeScript to 6.0.3",
+        "uk": "Update TypeScript to 6.0.3",
+        "zh-cn": "Update TypeScript to 6.0.3"
       }
     },
     "titleLang": {
