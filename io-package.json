@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.0",
+    "version": "0.6.1",
     "news": {
-      "0.5.4": {
-        "en": "Fix: keywords in package.json, protectedNative/encryptedNative at root level",
-        "de": "Fix: keywords in package.json, protectedNative/encryptedNative auf root-Ebene",
-        "ru": "Исправления",
-        "pt": "Correções",
-        "nl": "Fixes",
-        "fr": "Corrections",
-        "it": "Correzioni",
-        "es": "Correcciones",
-        "pl": "Poprawki",
-        "uk": "Виправлення",
-        "zh-cn": "修复"
-      },
       "0.5.5": {
         "en": "Fix: npm-token added to deploy workflow",
         "de": "Fix: npm-token zum Deploy-Workflow hinzugefügt",
@@ -93,6 +80,19 @@
         "pl": "Add DVCC charge/discharge current control, external ESS control mode",
         "uk": "Add DVCC charge/discharge current control, external ESS control mode",
         "zh-cn": "Add DVCC charge/discharge current control, external ESS control mode"
+      },
+      "0.6.1": {
+        "en": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "de": "Fix: Changelog bereinigt, doppelte 0.6.0 Einträge entfernt",
+        "ru": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "pt": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "nl": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "fr": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "it": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "es": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "pl": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "uk": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
+        "zh-cn": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries"
       }
     },
     "titleLang": {
