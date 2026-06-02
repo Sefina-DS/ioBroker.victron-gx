@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.3",
+    "version": "0.6.4",
     "news": {
       "0.5.7": {
         "en": "Fix: adapter-tests needs check-and-lint, automerge workflow renamed",
@@ -68,19 +68,6 @@
         "uk": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
         "zh-cn": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries"
       },
-      "0.6.2": {
-        "en": "Update TypeScript to 6.0.3",
-        "de": "TypeScript auf 6.0.3 aktualisiert",
-        "ru": "Update TypeScript to 6.0.3",
-        "pt": "Update TypeScript to 6.0.3",
-        "nl": "Update TypeScript to 6.0.3",
-        "fr": "Update TypeScript to 6.0.3",
-        "it": "Update TypeScript to 6.0.3",
-        "es": "Update TypeScript to 6.0.3",
-        "pl": "Update TypeScript to 6.0.3",
-        "uk": "Update TypeScript to 6.0.3",
-        "zh-cn": "Update TypeScript to 6.0.3"
-      },
       "0.6.3": {
         "en": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
         "de": "Fix: mocha Types zu tsconfig für TypeScript 6 Kompatibilität hinzugefügt",
@@ -93,6 +80,19 @@
         "pl": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
         "uk": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
         "zh-cn": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility"
+      },
+      "0.6.4": {
+        "en": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "de": "Fix: @types/mocha aus devDependencies entfernt, 0.6.2 aus news entfernt",
+        "ru": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "pt": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "nl": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "fr": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "it": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "es": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "pl": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "uk": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
+        "zh-cn": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news"
       }
     },
     "titleLang": {

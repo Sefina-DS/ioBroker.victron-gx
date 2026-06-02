@@ -151,6 +151,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.6.4 (2026-06-02)
+- Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news
+
 ### 0.6.3 (2026-06-02)
 - Fix: add mocha types to tsconfig for TypeScript 6 compatibility
 
