@@ -151,6 +151,10 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+
+### **WORK IN PROGRESS**
+- (ioBroker-Bot) Adapter requires admin >= 7.8.23 now.
+
 ### 0.6.4 (2026-06-02)
 - Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news
 
