@@ -151,6 +151,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.6.6 (2026-06-05)
+- Fix: use this.setTimeout correctly in Promise wrappers
+
 ### 0.6.5 (2026-06-05)
 - Update dependencies and fix setTimeout
 

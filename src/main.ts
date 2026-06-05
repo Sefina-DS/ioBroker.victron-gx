@@ -884,7 +884,7 @@ class VictronGx extends utils.Adapter {
             if (vebusEntry) {
                 break;
             }
-            await new Promise(r => this.setTimeout(r, 1000));
+            await new Promise<void>(resolve => { this.setTimeout(() => resolve(), 1000); });
         }
         if (!vebusEntry) {
             this.log.warn('Modbus Schreibtest: vebus Unit ID nicht bekannt');
@@ -963,7 +963,7 @@ class VictronGx extends utils.Adapter {
                     this.modbusBusy = false;
                 }
             }
-            await new Promise(r => this.setTimeout(r, 50));
+            await new Promise<void>(resolve => { this.setTimeout(() => resolve(), 50); });
         }
         this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Geräte gefunden.`);
 

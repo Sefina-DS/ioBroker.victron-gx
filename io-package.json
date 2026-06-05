@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.5",
+    "version": "0.6.6",
     "news": {
-      "0.5.8": {
-        "en": "Fix: news entries reduced to 7",
-        "de": "Fix: news Einträge auf 7 reduziert",
-        "ru": "Fix: news entries reduced to 7",
-        "pt": "Fix: news entries reduced to 7",
-        "nl": "Fix: news entries reduced to 7",
-        "fr": "Fix: news entries reduced to 7",
-        "it": "Fix: news entries reduced to 7",
-        "es": "Fix: news entries reduced to 7",
-        "pl": "Fix: news entries reduced to 7",
-        "uk": "Fix: news entries reduced to 7",
-        "zh-cn": "Fix: news entries reduced to 7"
-      },
       "0.5.9": {
         "en": "Fix: use this.setTimeout/setInterval, copyright in README",
         "de": "Fix: this.setTimeout/setInterval, Copyright in README",
@@ -93,6 +80,19 @@
         "pl": "Update dependencies and fix setTimeout",
         "uk": "Update dependencies and fix setTimeout",
         "zh-cn": "Update dependencies and fix setTimeout"
+      },
+      "0.6.6": {
+        "en": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "de": "Fix: this.setTimeout korrekt in Promise-Wrappern verwendet",
+        "ru": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "pt": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "nl": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "fr": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "it": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "es": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "pl": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "uk": "Fix: use this.setTimeout correctly in Promise wrappers",
+        "zh-cn": "Fix: use this.setTimeout correctly in Promise wrappers"
       }
     },
     "titleLang": {
