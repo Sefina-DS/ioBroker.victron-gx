@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.6",
+    "version": "0.6.7",
     "news": {
-      "0.5.9": {
-        "en": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "de": "Fix: this.setTimeout/setInterval, Copyright in README",
-        "ru": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "pt": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "nl": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "fr": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "it": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "es": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "pl": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "uk": "Fix: use this.setTimeout/setInterval, copyright in README",
-        "zh-cn": "Fix: use this.setTimeout/setInterval, copyright in README"
-      },
       "0.6.0": {
         "en": "Add DVCC charge/discharge current control, external ESS control mode",
         "de": "DVCC Lade-/Entladestrom Steuerung, externe ESS Steuerung hinzugefügt",
@@ -93,6 +80,19 @@
         "pl": "Fix: use this.setTimeout correctly in Promise wrappers",
         "uk": "Fix: use this.setTimeout correctly in Promise wrappers",
         "zh-cn": "Fix: use this.setTimeout correctly in Promise wrappers"
+      },
+      "0.6.7": {
+        "en": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "de": "Fix: Lint-Formatierung fuer this.setTimeout Promise-Wrapper",
+        "ru": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "pt": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "nl": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "fr": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "it": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "es": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "pl": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "uk": "Fix: lint formatting for this.setTimeout Promise wrappers",
+        "zh-cn": "Fix: lint formatting for this.setTimeout Promise wrappers"
       }
     },
     "titleLang": {
