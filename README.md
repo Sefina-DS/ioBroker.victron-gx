@@ -151,6 +151,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.6.5 (2026-06-05)
+- Update dependencies and fix setTimeout
+
 
 ### **WORK IN PROGRESS**
 - (ioBroker-Bot) Adapter requires admin >= 7.8.23 now.

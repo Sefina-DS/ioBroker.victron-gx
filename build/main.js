@@ -816,7 +816,7 @@ class VictronGx extends utils.Adapter {
       if (vebusEntry) {
         break;
       }
-      await new Promise((r) => setTimeout(r, 1e3));
+      await new Promise((r) => this.setTimeout(r, 1e3));
     }
     if (!vebusEntry) {
       this.log.warn("Modbus Schreibtest: vebus Unit ID nicht bekannt");
@@ -894,7 +894,7 @@ class VictronGx extends utils.Adapter {
           this.modbusBusy = false;
         }
       }
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => this.setTimeout(r, 50));
     }
     this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Ger\xE4te gefunden.`);
     if (this.config.controlEnabled) {
@@ -1024,7 +1024,7 @@ class VictronGx extends utils.Adapter {
     }
   }
   waitModbus() {
-    return new Promise((r) => setTimeout(r, 100));
+    return new Promise((r) => this.setTimeout(r, 100));
   }
   // ── AcPowerSetpoint Keepalive ─────────────────────────────────────────────
   // Victron erwartet Reg 37 alle ~1s neu wenn externe Steuerung aktiv

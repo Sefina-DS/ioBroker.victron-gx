@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.4",
+    "version": "0.6.5",
     "news": {
-      "0.5.7": {
-        "en": "Fix: adapter-tests needs check-and-lint, automerge workflow renamed",
-        "de": "Fix: adapter-tests needs check-and-lint, automerge Workflow umbenannt",
-        "ru": "Исправление",
-        "pt": "Correção",
-        "nl": "Fix",
-        "fr": "Correction",
-        "it": "Correzione",
-        "es": "Corrección",
-        "pl": "Poprawka",
-        "uk": "Виправлення",
-        "zh-cn": "修复"
-      },
       "0.5.8": {
         "en": "Fix: news entries reduced to 7",
         "de": "Fix: news Einträge auf 7 reduziert",
@@ -93,6 +80,19 @@
         "pl": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
         "uk": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
         "zh-cn": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news"
+      },
+      "0.6.5": {
+        "en": "Update dependencies and fix setTimeout",
+        "de": "Abhaengigkeiten aktualisiert und setTimeout gefixt",
+        "ru": "Update dependencies and fix setTimeout",
+        "pt": "Update dependencies and fix setTimeout",
+        "nl": "Update dependencies and fix setTimeout",
+        "fr": "Update dependencies and fix setTimeout",
+        "it": "Update dependencies and fix setTimeout",
+        "es": "Update dependencies and fix setTimeout",
+        "pl": "Update dependencies and fix setTimeout",
+        "uk": "Update dependencies and fix setTimeout",
+        "zh-cn": "Update dependencies and fix setTimeout"
       }
     },
     "titleLang": {

@@ -884,7 +884,7 @@ class VictronGx extends utils.Adapter {
             if (vebusEntry) {
                 break;
             }
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => this.setTimeout(r, 1000));
         }
         if (!vebusEntry) {
             this.log.warn('Modbus Schreibtest: vebus Unit ID nicht bekannt');
@@ -963,7 +963,7 @@ class VictronGx extends utils.Adapter {
                     this.modbusBusy = false;
                 }
             }
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => this.setTimeout(r, 50));
         }
         this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Geräte gefunden.`);
 
@@ -1121,7 +1121,7 @@ class VictronGx extends utils.Adapter {
     }
 
     private waitModbus(): Promise<void> {
-        return new Promise(r => setTimeout(r, 100));
+        return new Promise(r => this.setTimeout(r, 100));
     }
 
     // ── AcPowerSetpoint Keepalive ─────────────────────────────────────────────
