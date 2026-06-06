@@ -160,6 +160,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.7.1 (2026-06-06)
+- Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type
+
 ### 0.7.0 (2026-06-06)
 - Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)
 

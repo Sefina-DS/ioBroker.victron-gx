@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.7.0",
+    "version": "0.7.1",
     "news": {
-      "0.6.1": {
-        "en": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "de": "Fix: Changelog bereinigt, doppelte 0.6.0 Einträge entfernt",
-        "ru": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "pt": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "nl": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "fr": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "it": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "es": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "pl": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "uk": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
-        "zh-cn": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries"
-      },
       "0.6.3": {
         "en": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
         "de": "Fix: mocha Types zu tsconfig für TypeScript 6 Kompatibilität hinzugefügt",
@@ -93,6 +80,19 @@
         "pl": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
         "uk": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
         "zh-cn": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)"
+      },
+      "0.7.1": {
+        "en": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "de": "Objektstruktur korrigiert: fehlende Zwischenobjekte ergänzt (folder/channel Hierarchie), State-Rollen korrigiert (level für schreibbare Controls, indicator für Switch-Status, value für instanceId), Switch-Geräte-Channel-Typ korrigiert",
+        "ru": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "pt": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "nl": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "fr": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "it": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "es": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "pl": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "uk": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
+        "zh-cn": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type"
       }
     },
     "titleLang": {

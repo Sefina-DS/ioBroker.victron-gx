@@ -728,6 +728,16 @@ class VictronGx extends utils.Adapter {
     }
     void this.cleanupNumericChannels();
     void this.cleanupLegacyChannels();
+    void this.setObjectNotExistsAsync("devices", {
+      type: "folder",
+      common: { name: { en: "Devices", de: "Ger\xE4te" } },
+      native: {}
+    });
+    void this.setObjectNotExistsAsync("overview", {
+      type: "channel",
+      common: { name: { en: "System overview", de: "System\xFCbersicht" } },
+      native: {}
+    });
     const host = this.config.host;
     const port = this.config.port || 1883;
     if (!host) {
@@ -906,7 +916,7 @@ class VictronGx extends utils.Adapter {
                 common: {
                   name: { en: "Modbus Unit ID", de: "Modbus Unit ID" },
                   type: "number",
-                  role: "info",
+                  role: "value",
                   read: true,
                   write: false
                 },
@@ -971,7 +981,7 @@ class VictronGx extends utils.Adapter {
       const commonDef = {
         name: reg.name,
         type: "number",
-        role: reg.unit === "W" ? "value.power" : reg.unit === "A" ? "value.current" : reg.unit === "%" ? "value" : "value",
+        role: reg.write && this.config.controlEnabled ? "level" : reg.unit === "W" ? "value.power" : reg.unit === "A" ? "value.current" : reg.unit === "%" ? "value" : "value",
         unit: reg.unit,
         read: true,
         write: reg.write && this.config.controlEnabled
@@ -1202,6 +1212,11 @@ class VictronGx extends utils.Adapter {
             common: { name: { en: "System overview", de: "System\xFCbersicht" } },
             native: {}
           });
+          await this.setObjectNotExistsAsync("overview.info", {
+            type: "channel",
+            common: { name: { en: "Info", de: "Info" } },
+            native: {}
+          });
           this.channelReady.add("overview");
           this.log.debug("Channel angelegt: overview");
         }
@@ -1214,10 +1229,18 @@ class VictronGx extends utils.Adapter {
       const storeType = isSwitchBool ? "boolean" : typeof rawValue === "number" ? "number" : typeof rawValue === "boolean" ? "boolean" : "string";
       const isWritable = deviceType === "switch" ? (WRITABLE_PATHS[deviceType] || []).some((wp) => remappedPath === wp) : false;
       const stateId = `${baseId}.${remappedPath}`;
+      let stateRole = this.getRole(remappedPath);
+      if (deviceType === "switch") {
+        if (remappedPath === "State") {
+          stateRole = "switch";
+        } else if (remappedPath === "Status") {
+          stateRole = "indicator";
+        }
+      }
       const commonBase = {
         name: this.getFriendlyName(remappedPath),
         type: storeType,
-        role: this.getRole(remappedPath),
+        role: stateRole,
         unit: this.getUnit(remappedPath),
         read: true,
         write: isWritable
@@ -1233,6 +1256,7 @@ class VictronGx extends utils.Adapter {
         commonBase.unit = "m\xB3";
       }
       if (!this.createdStates.has(stateId)) {
+        await this.ensureIntermediates(stateId);
         await this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
         this.createdStates.add(stateId);
       }
@@ -1526,8 +1550,37 @@ class VictronGx extends utils.Adapter {
         const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, "_");
         const channelId = `devices.switch.${groupKey}.${device.serial}`;
         const suffix = value ? ` (${value})` : "";
-        void this.extendObjectAsync(channelId, { common: { name: `${device.productName}${suffix}` } });
+        void this.setObjectNotExistsAsync(channelId, {
+          type: "channel",
+          common: { name: `${device.productName}${suffix}` },
+          native: {}
+        }).then(() => {
+          void this.extendObjectAsync(channelId, { common: { name: `${device.productName}${suffix}` } });
+        });
+        void this.setObjectNotExistsAsync(`${channelId}.info`, {
+          type: "channel",
+          common: { name: { en: "Info", de: "Info" } },
+          native: {}
+        });
         break;
+      }
+    }
+  }
+  // ── Intermediate-Objekte sicherstellen ───────────────────────────────────
+  async ensureIntermediates(stateId) {
+    const parts = stateId.split(".");
+    for (let i = 1; i < parts.length - 1; i++) {
+      const intermId = parts.slice(0, i + 1).join(".");
+      if (!this.createdStates.has(`__folder_${intermId}`)) {
+        try {
+          await this.setObjectNotExistsAsync(intermId, {
+            type: "folder",
+            common: { name: parts[i] },
+            native: {}
+          });
+        } catch {
+        }
+        this.createdStates.add(`__folder_${intermId}`);
       }
     }
   }
@@ -1540,9 +1593,20 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const label = device.customName || device.productName || device.type;
+    const typeFolder = `devices.${device.type}`;
+    await this.setObjectNotExistsAsync(typeFolder, {
+      type: "folder",
+      common: { name: { en: device.type, de: device.type } },
+      native: {}
+    });
     await this.setObjectNotExistsAsync(baseId, {
       type: "channel",
       common: { name: label },
+      native: {}
+    });
+    await this.setObjectNotExistsAsync(`${baseId}.info`, {
+      type: "channel",
+      common: { name: { en: "Info", de: "Info" } },
       native: {}
     });
     await this.setObjectNotExistsAsync(`${baseId}.info.instanceId`, {
@@ -1550,7 +1614,7 @@ class VictronGx extends utils.Adapter {
       common: {
         name: { en: "Instance ID", de: "Instanz ID" },
         type: "number",
-        role: "info",
+        role: "value",
         read: true,
         write: false
       },
@@ -1908,7 +1972,7 @@ class VictronGx extends utils.Adapter {
   }
   getRole(path) {
     if (path === "State") {
-      return "switch";
+      return "value";
     }
     if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) {
       return "value.voltage";
