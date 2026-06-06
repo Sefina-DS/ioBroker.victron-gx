@@ -373,7 +373,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "Betriebsmodus",
+    name: { en: "Operating mode", de: "Betriebsmodus" },
     write: true,
     states: { 1: "Nur Laden", 2: "Nur Wechselrichter", 3: "Ein (Normal)", 4: "Aus (APS)" }
   },
@@ -383,7 +383,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 10,
     signed: false,
     unit: "A",
-    name: "Eingangsstrombegrenzung",
+    name: { en: "AC input current limit", de: "Eingangsstrombegrenzung" },
     write: true
   },
   "inverter.AcPowerSetpoint": {
@@ -392,7 +392,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: true,
     unit: "W",
-    name: "ESS Sollwert (Reg 37)",
+    name: { en: "ESS setpoint (Reg 37)", de: "ESS Sollwert (Reg 37)" },
     write: true
     // Positiv = Netz → Akku laden, Negativ = Akku → Netz einspeisen
     // Keepalive nötig! Wird alle 800ms wiederholt wenn ≠ 0
@@ -403,7 +403,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "Laden sperren",
+    name: { en: "Disable charge", de: "Laden sperren" },
     write: true,
     states: { 0: "Laden erlaubt", 1: "Laden gesperrt" }
   },
@@ -413,7 +413,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "AC-Einspeisung sperren",
+    name: { en: "Disable AC feed-in", de: "AC-Einspeisung sperren" },
     write: true,
     states: { 0: "Einspeisung erlaubt", 1: "Einspeisung gesperrt" }
   },
@@ -424,7 +424,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: true,
     unit: "W",
-    name: "Grid-Sollwert",
+    name: { en: "Grid setpoint", de: "Grid-Sollwert" },
     write: true
     // 0=Nulleinspeisung, +W=Grid-Bezug, -W=Einspeisung
     // Victron ESS-Algorithmus regelt Reg 37 automatisch auf diesen Wert
@@ -435,7 +435,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "ESS Phasenmodus",
+    name: { en: "ESS phase mode", de: "ESS Phasenmodus" },
     write: true,
     states: { 1: "Mit Phasenkompensation", 2: "Ohne Phasenkompensation", 3: "Externe Steuerung" }
   },
@@ -445,7 +445,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "BatteryLife Modus",
+    name: { en: "BatteryLife mode", de: "BatteryLife Modus" },
     write: true,
     states: {
       0: "Deaktiviert",
@@ -468,7 +468,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 10,
     signed: false,
     unit: "%",
-    name: "Minimum SoC (au\xDFer Netzausfall)",
+    name: { en: "Minimum SoC (except grid failure)", de: "Minimum SoC (au\xDFer Netzausfall)" },
     write: true
   },
   "system.BatteryLifeSocLimit": {
@@ -477,7 +477,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 10,
     signed: false,
     unit: "%",
-    name: "BatteryLife SoC Limit",
+    name: { en: "BatteryLife SoC limit", de: "BatteryLife SoC Limit" },
     write: false
   },
   "system.MaxFeedInPower": {
@@ -486,7 +486,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 100,
     signed: true,
     unit: "W",
-    name: "Max. Einspeisung",
+    name: { en: "Max. feed-in power", de: "Max. Einspeisung" },
     write: true
     // -1 = kein Limit, 0 = gesperrt, >0 = Limit in W
   },
@@ -496,7 +496,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "AC-Einspeisung ins Netz",
+    name: { en: "AC feed-in to grid", de: "AC-Einspeisung ins Netz" },
     write: true,
     states: { 0: "Einspeisung erlaubt", 1: "Einspeisung gesperrt" }
   },
@@ -506,7 +506,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "DC-\xDCberschuss ins Netz (Overvoltage Feed-in)",
+    name: { en: "DC surplus to grid (overvoltage feed-in)", de: "DC-\xDCberschuss ins Netz (Overvoltage Feed-in)" },
     write: true,
     states: { 0: "Deaktiviert", 1: "Aktiviert" }
   },
@@ -516,7 +516,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: false,
     unit: "",
-    name: "Einspeisebegrenzung aktiv",
+    name: { en: "Feed-in limit active", de: "Einspeisebegrenzung aktiv" },
     write: false,
     states: { 0: "Nein", 1: "Ja" }
   },
@@ -526,7 +526,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 1,
     signed: true,
     unit: "A",
-    name: "DVCC Max. Ladestrom",
+    name: { en: "DVCC max. charge current", de: "DVCC Max. Ladestrom" },
     write: true
     // -1 = kein Limit (DVCC deaktiviert für Ladestrom)
   },
@@ -536,7 +536,7 @@ const CONTROL_REGISTERS = {
     scaleWrite: 10,
     signed: true,
     unit: "W",
-    name: "Max. Entladeleistung",
+    name: { en: "Max. discharge power", de: "Max. Entladeleistung" },
     write: true
     // Victron Scalefactor 0.1 → raw * 0.1 = W
     // Nur aktiv wenn DVCC aktiviert
@@ -686,6 +686,7 @@ class VictronGx extends utils.Adapter {
   modbusClient = null;
   modbusUnitMap = /* @__PURE__ */ new Map();
   modbusBusy = false;
+  createdStates = /* @__PURE__ */ new Set();
   constructor(options = {}) {
     super({ ...options, name: "victron-gx" });
     this.on("ready", this.onReady.bind(this));
@@ -698,7 +699,7 @@ class VictronGx extends utils.Adapter {
     void this.setObjectNotExistsAsync("info.modbusConnected", {
       type: "state",
       common: {
-        name: "Modbus TCP verbunden",
+        name: { en: "Modbus TCP connected", de: "Modbus TCP verbunden" },
         type: "boolean",
         role: "indicator.connected",
         read: true,
@@ -710,7 +711,7 @@ class VictronGx extends utils.Adapter {
     void this.setObjectNotExistsAsync("info.modbusWritable", {
       type: "state",
       common: {
-        name: "Modbus Schreibzugriff",
+        name: { en: "Modbus write access", de: "Modbus Schreibzugriff" },
         type: "boolean",
         role: "indicator",
         read: true,
@@ -821,12 +822,12 @@ class VictronGx extends utils.Adapter {
       this.log.info("Modbus TCP verbunden!");
       void this.setState("info.modbusConnected", true, true);
       void this.testModbusWrite();
-      setTimeout(() => void this.discoverModbusUnits(), 2e4);
+      this.setTimeout(() => void this.discoverModbusUnits(), 2e4);
     } catch (err) {
       this.log.error(`Modbus Verbindungsfehler: ${err.message}`);
       void this.setState("info.modbusConnected", false, true);
       void this.setState("info.modbusWritable", false, true);
-      setTimeout(() => void this.connectModbus(host, port), 3e4);
+      this.setTimeout(() => void this.connectModbus(host, port), 3e4);
     }
   }
   async testModbusWrite() {
@@ -903,7 +904,7 @@ class VictronGx extends utils.Adapter {
               await this.extendObjectAsync(`${baseId}.info.modbusId`, {
                 type: "state",
                 common: {
-                  name: "Modbus Unit ID",
+                  name: { en: "Modbus Unit ID", de: "Modbus Unit ID" },
                   type: "number",
                   role: "info",
                   read: true,
@@ -949,17 +950,17 @@ class VictronGx extends utils.Adapter {
     }
     await this.setObjectNotExistsAsync("control", {
       type: "channel",
-      common: { name: "Steuerung" },
+      common: { name: { en: "Control", de: "Steuerung" } },
       native: {}
     });
     await this.setObjectNotExistsAsync("control.inverter", {
       type: "channel",
-      common: { name: "Wechselrichter (MP2)" },
+      common: { name: { en: "Inverter (MP2)", de: "Wechselrichter (MP2)" } },
       native: {}
     });
     await this.setObjectNotExistsAsync("control.system", {
       type: "channel",
-      common: { name: "System / ESS-Einstellungen" },
+      common: { name: { en: "System / ESS settings", de: "System / ESS-Einstellungen" } },
       native: {}
     });
     const vebusEntry = Array.from(this.modbusUnitMap.entries()).find(([k]) => k.startsWith("vebus/"));
@@ -1198,7 +1199,7 @@ class VictronGx extends utils.Adapter {
         } else if (baseId === "overview") {
           await this.setObjectNotExistsAsync("overview", {
             type: "channel",
-            common: { name: "System\xFCbersicht" },
+            common: { name: { en: "System overview", de: "System\xFCbersicht" } },
             native: {}
           });
           this.channelReady.add("overview");
@@ -1231,39 +1232,48 @@ class VictronGx extends utils.Adapter {
       if (deviceType === "tank" && (remappedPath === "Capacity" || remappedPath === "Remaining")) {
         commonBase.unit = "m\xB3";
       }
-      await this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
+      if (!this.createdStates.has(stateId)) {
+        await this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
+        this.createdStates.add(stateId);
+      }
       await this.setState(stateId, { val: storeValue, ack: true });
       if (deviceType === "tank" && typeof storeValue === "number") {
         if (remappedPath === "Capacity") {
           const literId = `${baseId}.CapacityLiter`;
-          await this.extendObjectAsync(literId, {
-            type: "state",
-            common: {
-              name: "Kapazit\xE4t (Liter)",
-              type: "number",
-              role: "value",
-              unit: "l",
-              read: true,
-              write: false
-            },
-            native: {}
-          });
+          if (!this.createdStates.has(literId)) {
+            await this.extendObjectAsync(literId, {
+              type: "state",
+              common: {
+                name: { en: "Capacity (liters)", de: "Kapazit\xE4t (Liter)" },
+                type: "number",
+                role: "value",
+                unit: "l",
+                read: true,
+                write: false
+              },
+              native: {}
+            });
+            this.createdStates.add(literId);
+          }
           await this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
         }
         if (remappedPath === "Remaining") {
           const literId = `${baseId}.RemainingLiter`;
-          await this.extendObjectAsync(literId, {
-            type: "state",
-            common: {
-              name: "Verbleibend (Liter)",
-              type: "number",
-              role: "value",
-              unit: "l",
-              read: true,
-              write: false
-            },
-            native: {}
-          });
+          if (!this.createdStates.has(literId)) {
+            await this.extendObjectAsync(literId, {
+              type: "state",
+              common: {
+                name: { en: "Remaining (liters)", de: "Verbleibend (Liter)" },
+                type: "number",
+                role: "value",
+                unit: "l",
+                read: true,
+                write: false
+              },
+              native: {}
+            });
+            this.createdStates.add(literId);
+          }
           await this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
         }
       }
@@ -1297,18 +1307,21 @@ class VictronGx extends utils.Adapter {
       }
     }
     const stateId = `overview.${entry.target}`;
-    await this.extendObjectAsync(stateId, {
-      type: "state",
-      common: {
-        name: this.getFriendlyName(entry.target),
-        type: "number",
-        role: "value.power",
-        unit: "W",
-        read: true,
-        write: false
-      },
-      native: {}
-    });
+    if (!this.createdStates.has(stateId)) {
+      await this.extendObjectAsync(stateId, {
+        type: "state",
+        common: {
+          name: this.getFriendlyName(entry.target),
+          type: "number",
+          role: "value.power",
+          unit: "W",
+          read: true,
+          write: false
+        },
+        native: {}
+      });
+      this.createdStates.add(stateId);
+    }
     await this.setState(stateId, { val: Math.round(total), ack: true });
   }
   // ── Settings MQTT → control.system.* ────────────────────────────────────
@@ -1421,7 +1434,7 @@ class VictronGx extends utils.Adapter {
           void this.setObjectNotExistsAsync(`${baseId}.info.connected`, {
             type: "state",
             common: {
-              name: "Verbunden",
+              name: { en: "Connected", de: "Verbunden" },
               type: "boolean",
               role: "indicator.connected",
               read: true,
@@ -1458,7 +1471,7 @@ class VictronGx extends utils.Adapter {
           void this.setObjectNotExistsAsync(`${baseId}.info.position`, {
             type: "state",
             common: {
-              name: "Position",
+              name: { en: "Position", de: "Position" },
               type: "number",
               role: "value",
               states: { 0: "AC Ausgang (hinter MultiPlus)", 1: "AC Eingang (Netz)", 2: "AC Eingang 2" },
@@ -1480,7 +1493,13 @@ class VictronGx extends utils.Adapter {
         if (baseId) {
           void this.setObjectNotExistsAsync(`${baseId}.info.nrOfPhases`, {
             type: "state",
-            common: { name: "Anzahl Phasen", type: "number", role: "value", read: true, write: false },
+            common: {
+              name: { en: "Number of phases", de: "Anzahl Phasen" },
+              type: "number",
+              role: "value",
+              read: true,
+              write: false
+            },
             native: {}
           }).then(() => {
             void this.setState(`${baseId}.info.nrOfPhases`, { val: parseInt(value, 10), ack: true });
@@ -1528,24 +1547,48 @@ class VictronGx extends utils.Adapter {
     });
     await this.setObjectNotExistsAsync(`${baseId}.info.instanceId`, {
       type: "state",
-      common: { name: "Instanz ID", type: "number", role: "info", read: true, write: false },
+      common: {
+        name: { en: "Instance ID", de: "Instanz ID" },
+        type: "number",
+        role: "info",
+        read: true,
+        write: false
+      },
       native: {}
     });
     await this.setState(`${baseId}.info.instanceId`, { val: device.instance, ack: true });
     await this.setObjectNotExistsAsync(`${baseId}.info.lastUpdate`, {
       type: "state",
-      common: { name: "Letztes Update", type: "number", role: "date", read: true, write: false },
+      common: {
+        name: { en: "Last update", de: "Letztes Update" },
+        type: "number",
+        role: "date",
+        read: true,
+        write: false
+      },
       native: {}
     });
     await this.setObjectNotExistsAsync(`${baseId}.info.stale`, {
       type: "state",
-      common: { name: "Keine Daten (stale)", type: "boolean", role: "indicator", read: true, write: false },
+      common: {
+        name: { en: "No data (stale)", de: "Keine Daten (stale)" },
+        type: "boolean",
+        role: "indicator",
+        read: true,
+        write: false
+      },
       native: {}
     });
     if (["grid", "acload", "pvinverter"].includes(device.type)) {
       await this.setObjectNotExistsAsync(`${baseId}.info.activePhase`, {
         type: "state",
-        common: { name: "Aktive Phasen", type: "string", role: "text", read: true, write: false },
+        common: {
+          name: { en: "Active phases", de: "Aktive Phasen" },
+          type: "string",
+          role: "text",
+          read: true,
+          write: false
+        },
         native: {}
       });
     }
@@ -1553,7 +1596,7 @@ class VictronGx extends utils.Adapter {
       await this.setObjectNotExistsAsync(`${baseId}.State`, {
         type: "state",
         common: {
-          name: "Laderichtung",
+          name: { en: "Charge direction", de: "Laderichtung" },
           type: "number",
           role: "value",
           states: { 0: "Ruhend", 1: "Laden", 2: "Entladen" },
@@ -1564,13 +1607,13 @@ class VictronGx extends utils.Adapter {
       });
       await this.setObjectNotExistsAsync(`${baseId}.cells`, {
         type: "channel",
-        common: { name: "Zellen" },
+        common: { name: { en: "Cells", de: "Zellen" } },
         native: {}
       });
       await this.setObjectNotExistsAsync(`${baseId}.cells.min`, {
         type: "state",
         common: {
-          name: "Zelle Min",
+          name: { en: "Cell min", de: "Zelle Min" },
           type: "number",
           role: "value.voltage",
           unit: "V",
@@ -1582,7 +1625,7 @@ class VictronGx extends utils.Adapter {
       await this.setObjectNotExistsAsync(`${baseId}.cells.max`, {
         type: "state",
         common: {
-          name: "Zelle Max",
+          name: { en: "Cell max", de: "Zelle Max" },
           type: "number",
           role: "value.voltage",
           unit: "V",
@@ -1712,98 +1755,106 @@ class VictronGx extends utils.Adapter {
   // ── Hilfsfunktionen ──────────────────────────────────────────────────────
   getFriendlyName(path) {
     const names = {
-      Soc: "Ladezustand",
-      "Dc.0.Voltage": "DC Spannung",
-      "Dc.0.Current": "DC Strom",
-      "Dc.0.Power": "DC Leistung",
-      "Dc.Battery.Voltage": "Batterie Spannung",
-      "Dc.Battery.Current": "Batterie Strom",
-      "Dc.Battery.Power": "Batterie Leistung",
-      "Ac.Power": "Gesamtleistung",
-      "Ac.L1.Power": "L1 Leistung",
-      "Ac.Consumption.Power": "Verbrauch Gesamt",
-      "Ac.Grid.Power": "Netz Gesamt",
-      "Ac.PvOnGrid.Power": "PV Netz Gesamt",
-      "Ac.L2.Power": "L2 Leistung",
-      "Ac.L3.Power": "L3 Leistung",
-      "Ac.L1.Voltage": "L1 Spannung",
-      "Ac.L2.Voltage": "L2 Spannung",
-      "Ac.L3.Voltage": "L3 Spannung",
-      "Ac.L1.Current": "L1 Strom",
-      "Ac.L2.Current": "L2 Strom",
-      "Ac.L3.Current": "L3 Strom",
-      "Ac.Energy.Forward": "Energie Bezug",
-      "Ac.Energy.Reverse": "Energie Einspeisung",
-      Mode: "Betriebsart",
-      State: "Schaltzustand",
-      VebusError: "VebusError",
-      VebusChargeState: "VebusChargeState",
-      TimeToGo: "Restlaufzeit",
-      "Dc.0.Temperature": "Temperatur",
-      "temperatures.main": "Temperatur Haupt",
-      "temperatures.temp1": "Temperatur 1",
-      "temperatures.temp2": "Temperatur 2",
-      "temperatures.temp3": "Temperatur 3",
-      "temperatures.temp4": "Temperatur 4",
-      "temperatures.min": "Temperatur Min",
-      "temperatures.max": "Temperatur Max",
-      "cells.min": "Zelle Min",
-      "cells.max": "Zelle Max",
-      "cells.minId": "Zelle Min ID",
-      "cells.maxId": "Zelle Max ID",
-      "cells.diff": "Zell-Spread",
-      "alarms.lowVoltage": "Alarm: Unterspannung",
-      "alarms.highVoltage": "Alarm: \xDCberspannung",
-      "alarms.lowSoc": "Alarm: SOC niedrig",
-      "Dc.Battery.Soc": "Batterie Ladezustand",
-      "Dc.Battery.ConsumedAmphours": "Batterie Verbrauch",
-      "Dc.System.Power": "DC System Leistung",
-      "Dc.Vebus.Power": "MultiPlus DC Leistung",
-      "Ac.Consumption.L1.Power": "Verbrauch L1",
-      "Ac.Consumption.L2.Power": "Verbrauch L2",
-      "Ac.Consumption.L3.Power": "Verbrauch L3",
-      "Ac.ConsumptionOnOutput.L1.Power": "Verbrauch Ausgang L1",
-      "Ac.ConsumptionOnInput.L1.Power": "Verbrauch Eingang L1",
-      "Ac.Grid.L1.Power": "Grid L1",
-      "Ac.Grid.L2.Power": "Grid L2",
-      "Ac.Grid.L3.Power": "Grid L3",
-      "Ac.PvOnGrid.L1.Power": "PV Netz L1",
-      "Ac.PvOnGrid.L2.Power": "PV Netz L2",
-      "BatterySense.Voltage": "Batterie Spannung (MP)",
-      "Hub4.L1.AcPowerSetpoint": "ESS Sollwert L1",
-      "Hub4.DisableFeedIn": "Einspeisung gesperrt",
-      "Hub4.DisableCharge": "Laden gesperrt",
-      "Ac.ActiveIn.L1.P": "L1 Eingangsleistung",
-      "Ac.ActiveIn.L1.I": "L1 Eingangsstrom",
-      "Ac.ActiveIn.L1.V": "L1 Eingangsspannung",
-      "Ac.ActiveIn.L1.S": "L1 Eingang Scheinleistung",
-      "Ac.ActiveIn.P": "Eingang Gesamtleistung",
-      "Ac.ActiveIn.S": "Eingang Scheinleistung",
-      "Ac.Out.L1.P": "L1 Ausgangsleistung",
-      "Ac.Out.L1.F": "L1 Ausgangsfrequenz",
-      "Ac.Out.L1.I": "L1 Ausgangsstrom",
-      "Ac.Out.L1.S": "L1 Ausgang Scheinleistung",
-      "Ac.Out.P": "Ausgang Gesamtleistung",
-      "Ac.Out.S": "Ausgang Scheinleistung",
-      Capacity: "Kapazit\xE4t",
-      CurrentAvg: "Durchschnittsstrom",
-      "Yield.Power": "PV Leistung",
-      "Yield.Today": "Ertrag heute",
-      "Yield.Total": "Ertrag gesamt",
-      "Pv.V": "PV Spannung",
-      "Pv.P": "PV Leistung",
-      StatusCode: "Status",
-      ErrorCode: "Fehlercode",
-      "Ac.Frequency": "Frequenz",
-      "Ac.MaxPower": "Max. Leistung",
-      "Ac.PowerLimit": "Leistungsbegrenzung",
-      "SystemState.State": "Systemzustand"
+      Soc: { en: "State of charge", de: "Ladezustand" },
+      "Dc.0.Voltage": { en: "DC voltage", de: "DC Spannung" },
+      "Dc.0.Current": { en: "DC current", de: "DC Strom" },
+      "Dc.0.Power": { en: "DC power", de: "DC Leistung" },
+      "Dc.Battery.Voltage": { en: "Battery voltage", de: "Batterie Spannung" },
+      "Dc.Battery.Current": { en: "Battery current", de: "Batterie Strom" },
+      "Dc.Battery.Power": { en: "Battery power", de: "Batterie Leistung" },
+      "Ac.Power": { en: "Total power", de: "Gesamtleistung" },
+      "Ac.L1.Power": { en: "L1 power", de: "L1 Leistung" },
+      "Ac.Consumption.Power": { en: "Total consumption", de: "Verbrauch Gesamt" },
+      "Ac.Grid.Power": { en: "Grid total", de: "Netz Gesamt" },
+      "Ac.PvOnGrid.Power": { en: "PV grid total", de: "PV Netz Gesamt" },
+      "Ac.L2.Power": { en: "L2 power", de: "L2 Leistung" },
+      "Ac.L3.Power": { en: "L3 power", de: "L3 Leistung" },
+      "Ac.L1.Voltage": { en: "L1 voltage", de: "L1 Spannung" },
+      "Ac.L2.Voltage": { en: "L2 voltage", de: "L2 Spannung" },
+      "Ac.L3.Voltage": { en: "L3 voltage", de: "L3 Spannung" },
+      "Ac.L1.Current": { en: "L1 current", de: "L1 Strom" },
+      "Ac.L2.Current": { en: "L2 current", de: "L2 Strom" },
+      "Ac.L3.Current": { en: "L3 current", de: "L3 Strom" },
+      "Ac.Energy.Forward": { en: "Energy consumption", de: "Energie Bezug" },
+      "Ac.Energy.Reverse": { en: "Energy feed-in", de: "Energie Einspeisung" },
+      Mode: { en: "Operating mode", de: "Betriebsart" },
+      State: { en: "Switch state", de: "Schaltzustand" },
+      VebusError: { en: "Vebus error", de: "VebusError" },
+      VebusChargeState: { en: "Vebus charge state", de: "VebusChargeState" },
+      TimeToGo: { en: "Time to go", de: "Restlaufzeit" },
+      "Dc.0.Temperature": { en: "Temperature", de: "Temperatur" },
+      "temperatures.main": { en: "Main temperature", de: "Temperatur Haupt" },
+      "temperatures.temp1": { en: "Temperature 1", de: "Temperatur 1" },
+      "temperatures.temp2": { en: "Temperature 2", de: "Temperatur 2" },
+      "temperatures.temp3": { en: "Temperature 3", de: "Temperatur 3" },
+      "temperatures.temp4": { en: "Temperature 4", de: "Temperatur 4" },
+      "temperatures.min": { en: "Temperature min", de: "Temperatur Min" },
+      "temperatures.max": { en: "Temperature max", de: "Temperatur Max" },
+      "cells.min": { en: "Cell min", de: "Zelle Min" },
+      "cells.max": { en: "Cell max", de: "Zelle Max" },
+      "cells.minId": { en: "Cell min ID", de: "Zelle Min ID" },
+      "cells.maxId": { en: "Cell max ID", de: "Zelle Max ID" },
+      "cells.diff": { en: "Cell spread", de: "Zell-Spread" },
+      "alarms.lowVoltage": { en: "Alarm: low voltage", de: "Alarm: Unterspannung" },
+      "alarms.highVoltage": { en: "Alarm: high voltage", de: "Alarm: \xDCberspannung" },
+      "alarms.lowSoc": { en: "Alarm: low SoC", de: "Alarm: SOC niedrig" },
+      "Dc.Battery.Soc": { en: "Battery state of charge", de: "Batterie Ladezustand" },
+      "Dc.Battery.ConsumedAmphours": { en: "Battery consumed Ah", de: "Batterie Verbrauch" },
+      "Dc.System.Power": { en: "DC system power", de: "DC System Leistung" },
+      "Dc.Vebus.Power": { en: "MultiPlus DC power", de: "MultiPlus DC Leistung" },
+      "Ac.Consumption.L1.Power": { en: "Consumption L1", de: "Verbrauch L1" },
+      "Ac.Consumption.L2.Power": { en: "Consumption L2", de: "Verbrauch L2" },
+      "Ac.Consumption.L3.Power": { en: "Consumption L3", de: "Verbrauch L3" },
+      "Ac.ConsumptionOnOutput.L1.Power": { en: "Consumption output L1", de: "Verbrauch Ausgang L1" },
+      "Ac.ConsumptionOnInput.L1.Power": { en: "Consumption input L1", de: "Verbrauch Eingang L1" },
+      "Ac.Grid.L1.Power": { en: "Grid L1", de: "Grid L1" },
+      "Ac.Grid.L2.Power": { en: "Grid L2", de: "Grid L2" },
+      "Ac.Grid.L3.Power": { en: "Grid L3", de: "Grid L3" },
+      "Ac.PvOnGrid.L1.Power": { en: "PV grid L1", de: "PV Netz L1" },
+      "Ac.PvOnGrid.L2.Power": { en: "PV grid L2", de: "PV Netz L2" },
+      "BatterySense.Voltage": { en: "Battery voltage (MP)", de: "Batterie Spannung (MP)" },
+      "Hub4.L1.AcPowerSetpoint": { en: "ESS setpoint L1", de: "ESS Sollwert L1" },
+      "Hub4.DisableFeedIn": { en: "Feed-in disabled", de: "Einspeisung gesperrt" },
+      "Hub4.DisableCharge": { en: "Charge disabled", de: "Laden gesperrt" },
+      "Ac.ActiveIn.L1.P": { en: "L1 input power", de: "L1 Eingangsleistung" },
+      "Ac.ActiveIn.L1.I": { en: "L1 input current", de: "L1 Eingangsstrom" },
+      "Ac.ActiveIn.L1.V": { en: "L1 input voltage", de: "L1 Eingangsspannung" },
+      "Ac.ActiveIn.L1.S": { en: "L1 input apparent power", de: "L1 Eingang Scheinleistung" },
+      "Ac.ActiveIn.P": { en: "Total input power", de: "Eingang Gesamtleistung" },
+      "Ac.ActiveIn.S": { en: "Input apparent power", de: "Eingang Scheinleistung" },
+      "Ac.Out.L1.P": { en: "L1 output power", de: "L1 Ausgangsleistung" },
+      "Ac.Out.L1.F": { en: "L1 output frequency", de: "L1 Ausgangsfrequenz" },
+      "Ac.Out.L1.I": { en: "L1 output current", de: "L1 Ausgangsstrom" },
+      "Ac.Out.L1.S": { en: "L1 output apparent power", de: "L1 Ausgang Scheinleistung" },
+      "Ac.Out.P": { en: "Total output power", de: "Ausgang Gesamtleistung" },
+      "Ac.Out.S": { en: "Output apparent power", de: "Ausgang Scheinleistung" },
+      Capacity: { en: "Capacity", de: "Kapazit\xE4t" },
+      CurrentAvg: { en: "Average current", de: "Durchschnittsstrom" },
+      "Yield.Power": { en: "PV power", de: "PV Leistung" },
+      "Yield.Today": { en: "Today's yield", de: "Ertrag heute" },
+      "Yield.Total": { en: "Total yield", de: "Ertrag gesamt" },
+      "Pv.V": { en: "PV voltage", de: "PV Spannung" },
+      "Pv.P": { en: "PV power", de: "PV Leistung" },
+      StatusCode: { en: "Status", de: "Status" },
+      ErrorCode: { en: "Error code", de: "Fehlercode" },
+      "Ac.Frequency": { en: "Frequency", de: "Frequenz" },
+      "Ac.MaxPower": { en: "Max. power", de: "Max. Leistung" },
+      "Ac.PowerLimit": { en: "Power limit", de: "Leistungsbegrenzung" },
+      "SystemState.State": { en: "System state", de: "Systemzustand" },
+      Remaining: { en: "Remaining", de: "Verbleibend" },
+      FluidType: { en: "Fluid type", de: "Fl\xFCssigkeitstyp" },
+      Temperature: { en: "Temperature", de: "Temperatur" },
+      CustomName: { en: "Custom name", de: "Benutzerdefinierter Name" },
+      ProductName: { en: "Product name", de: "Produktname" },
+      Serial: { en: "Serial number", de: "Seriennummer" },
+      ConsumedAmphours: { en: "Consumed Ah", de: "Verbrauchte Ah" }
     };
     if (names[path]) {
       return names[path];
     }
     if (path.startsWith("cells.cell")) {
-      return `Zelle ${parseInt(path.replace("cells.cell", ""), 10)}`;
+      const n = parseInt(path.replace("cells.cell", ""), 10);
+      return { en: `Cell ${n}`, de: `Zelle ${n}` };
     }
     return path;
   }

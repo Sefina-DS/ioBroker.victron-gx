@@ -1,12 +1,10 @@
 #!/bin/bash
-
 # Auto-Release Script für ioBroker.victron-gx
 # Verwendung: ./release.sh [version] [changelog_en] [changelog_de]
 # Beispiel: ./release.sh 0.5.8 "Fix: something" "Fix: etwas"
 # Ohne Argumente: Version automatisch um 0.0.1 erhöhen
 
 set -e
-
 cd "$(dirname "$0")"
 
 # Version ermitteln
@@ -33,12 +31,42 @@ CURRENT=$(python3 -c "import json; print(json.load(open('package.json'))['versio
 sed -i "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW_VERSION\"/" package.json
 
 # io-package.json: Version + news (max 7)
+# Prüft welche news-Versionen auf npm existieren und entfernt nicht existierende
+PACKAGE_NAME=$(python3 -c "import json; print(json.load(open('package.json'))['name'])")
+
 python3 - <<EOF
 import json
+import urllib.request
+import urllib.error
+
+PACKAGE_NAME = '$PACKAGE_NAME'
+
+# npm-Versionen abrufen
+try:
+    url = f'https://registry.npmjs.org/{PACKAGE_NAME}'
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        npm_data = json.loads(resp.read())
+    npm_versions = set(npm_data.get('versions', {}).keys())
+    print(f"  npm Versionen gefunden: {len(npm_versions)}")
+except Exception as e:
+    print(f"  ⚠ npm-Prüfung fehlgeschlagen: {e} - überspringe Prüfung")
+    npm_versions = None
+
 with open('io-package.json', 'r') as f:
     data = json.load(f)
 
 data['common']['version'] = '$NEW_VERSION'
+
+# Nicht existierende Versionen aus news entfernen (außer neue Version)
+if npm_versions is not None:
+    news = data['common']['news']
+    to_remove = []
+    for v in list(news.keys()):
+        if v != '$NEW_VERSION' and v not in npm_versions:
+            to_remove.append(v)
+    for v in to_remove:
+        print(f"  🗑 Entferne nicht existierende Version aus news: {v}")
+        del news[v]
 
 # Neuen news-Eintrag hinzufügen
 data['common']['news']['$NEW_VERSION'] = {

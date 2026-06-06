@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.9",
+    "version": "0.7.0",
     "news": {
       "0.6.1": {
         "en": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
@@ -80,6 +80,19 @@
         "pl": "Fix: remove non-existing versions from news",
         "uk": "Fix: remove non-existing versions from news",
         "zh-cn": "Fix: remove non-existing versions from news"
+      },
+      "0.7.0": {
+        "en": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "de": "Performance: State-Objekt-Cache reduziert RAM-Verbrauch von ~660MB auf ~155MB (stabil); this.setTimeout() statt plain setTimeout; i18n-Unterstützung für alle State-Namen (en/de)",
+        "ru": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "pt": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "nl": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "fr": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "it": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "es": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "pl": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "uk": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
+        "zh-cn": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)"
       }
     },
     "titleLang": {
