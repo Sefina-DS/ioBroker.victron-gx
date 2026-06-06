@@ -160,6 +160,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.7.2 (2026-06-06)
+- Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)
+
 ### 0.7.1 (2026-06-06)
 - Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type
 

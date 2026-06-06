@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "news": {
-      "0.6.3": {
-        "en": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "de": "Fix: mocha Types zu tsconfig für TypeScript 6 Kompatibilität hinzugefügt",
-        "ru": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "pt": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "nl": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "fr": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "it": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "es": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "pl": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "uk": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility",
-        "zh-cn": "Fix: add mocha types to tsconfig for TypeScript 6 compatibility"
-      },
       "0.6.4": {
         "en": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
         "de": "Fix: @types/mocha aus devDependencies entfernt, 0.6.2 aus news entfernt",
@@ -93,6 +80,19 @@
         "pl": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
         "uk": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
         "zh-cn": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type"
+      },
+      "0.7.2": {
+        "en": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "de": "Vollständige i18n-Unterstützung für alle State-Namen ergänzt (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "ru": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "pt": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "nl": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "fr": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "it": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "es": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "pl": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "uk": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
+        "zh-cn": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)"
       }
     },
     "titleLang": {

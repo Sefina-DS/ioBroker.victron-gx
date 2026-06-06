@@ -1,6 +1,6 @@
 {
   "name": "iobroker.victron-gx",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "ioBroker adapter for Victron GX devices via local MQTT and Modbus",
   "author": {
     "name": "Sefina-DS",
