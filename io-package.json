@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.8",
+    "version": "0.6.9",
     "news": {
       "0.6.1": {
         "en": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
@@ -42,32 +42,6 @@
         "uk": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
         "zh-cn": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news"
       },
-      "0.6.5": {
-        "en": "Update dependencies and fix setTimeout",
-        "de": "Abhaengigkeiten aktualisiert und setTimeout gefixt",
-        "ru": "Update dependencies and fix setTimeout",
-        "pt": "Update dependencies and fix setTimeout",
-        "nl": "Update dependencies and fix setTimeout",
-        "fr": "Update dependencies and fix setTimeout",
-        "it": "Update dependencies and fix setTimeout",
-        "es": "Update dependencies and fix setTimeout",
-        "pl": "Update dependencies and fix setTimeout",
-        "uk": "Update dependencies and fix setTimeout",
-        "zh-cn": "Update dependencies and fix setTimeout"
-      },
-      "0.6.6": {
-        "en": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "de": "Fix: this.setTimeout korrekt in Promise-Wrappern verwendet",
-        "ru": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "pt": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "nl": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "fr": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "it": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "es": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "pl": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "uk": "Fix: use this.setTimeout correctly in Promise wrappers",
-        "zh-cn": "Fix: use this.setTimeout correctly in Promise wrappers"
-      },
       "0.6.7": {
         "en": "Fix: lint formatting for this.setTimeout Promise wrappers",
         "de": "Fix: Lint-Formatierung fuer this.setTimeout Promise-Wrapper",
@@ -93,6 +67,19 @@
         "pl": "Release 0.6.8",
         "uk": "Release 0.6.8",
         "zh-cn": "Release 0.6.8"
+      },
+      "0.6.9": {
+        "en": "Fix: remove non-existing versions from news",
+        "de": "Fix: nicht existierende Versionen aus news entfernt",
+        "ru": "Fix: remove non-existing versions from news",
+        "pt": "Fix: remove non-existing versions from news",
+        "nl": "Fix: remove non-existing versions from news",
+        "fr": "Fix: remove non-existing versions from news",
+        "it": "Fix: remove non-existing versions from news",
+        "es": "Fix: remove non-existing versions from news",
+        "pl": "Fix: remove non-existing versions from news",
+        "uk": "Fix: remove non-existing versions from news",
+        "zh-cn": "Fix: remove non-existing versions from news"
       }
     },
     "titleLang": {

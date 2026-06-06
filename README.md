@@ -160,6 +160,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.6.9 (2026-06-06)
+- Fix: remove non-existing versions from news
+
 ### 0.6.8 (2026-06-06)
 - Release 0.6.8
 
