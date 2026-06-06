@@ -283,7 +283,7 @@ const RELEVANT_PATHS = {
     "Serial"
   ],
   temperature: ["Temperature", "Humidity", "Pressure", "ProductName", "CustomName"],
-  tank: ["Level", "Remaining", "Status", "ProductName", "CustomName"]
+  tank: ["Level", "Remaining", "Capacity", "FluidType", "Status", "ProductName", "CustomName"]
 };
 const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
   "Serial",
@@ -587,6 +587,29 @@ const STATES_MAP = {
     "alarms.lowVoltage": { 0: "OK", 1: "Warnung", 2: "Alarm" },
     "alarms.highVoltage": { 0: "OK", 1: "Warnung", 2: "Alarm" },
     "alarms.lowSoc": { 0: "OK", 1: "Warnung", 2: "Alarm" }
+  },
+  tank: {
+    FluidType: {
+      0: "Fuel",
+      1: "Fresh water",
+      2: "Waste water",
+      3: "Live well",
+      4: "Oil",
+      5: "Black water",
+      6: "Gasoline",
+      7: "Diesel",
+      8: "LPG",
+      9: "LNG",
+      10: "Hydraulic oil",
+      11: "Raw water"
+    },
+    Status: {
+      0: "OK",
+      1: "Disconnected",
+      2: "Short circuit",
+      3: "Reverse polarity",
+      4: "Unknown"
+    }
   }
 };
 const OVERVIEW_TOTAL_POWER = {
@@ -1205,8 +1228,45 @@ class VictronGx extends utils.Adapter {
       if (statesForPath) {
         commonBase.states = statesForPath;
       }
+      if (deviceType === "tank" && (remappedPath === "Capacity" || remappedPath === "Remaining")) {
+        commonBase.unit = "m\xB3";
+      }
       await this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
       await this.setState(stateId, { val: storeValue, ack: true });
+      if (deviceType === "tank" && typeof storeValue === "number") {
+        if (remappedPath === "Capacity") {
+          const literId = `${baseId}.CapacityLiter`;
+          await this.extendObjectAsync(literId, {
+            type: "state",
+            common: {
+              name: "Kapazit\xE4t (Liter)",
+              type: "number",
+              role: "value",
+              unit: "l",
+              read: true,
+              write: false
+            },
+            native: {}
+          });
+          await this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
+        }
+        if (remappedPath === "Remaining") {
+          const literId = `${baseId}.RemainingLiter`;
+          await this.extendObjectAsync(literId, {
+            type: "state",
+            common: {
+              name: "Verbleibend (Liter)",
+              type: "number",
+              role: "value",
+              unit: "l",
+              read: true,
+              write: false
+            },
+            native: {}
+          });
+          await this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
+        }
+      }
       if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath)) {
         void this.updateBatteryCellMinMax(baseId);
       }
@@ -1784,7 +1844,10 @@ class VictronGx extends utils.Adapter {
     if (path === "Pressure") {
       return "hPa";
     }
-    if (path === "Capacity" || path.includes("ConsumedAmphours")) {
+    if (path.includes("ConsumedAmphours")) {
+      return "Ah";
+    }
+    if (path === "Capacity") {
       return "Ah";
     }
     if (path === "Ac.MaxPower" || path === "Ac.PowerLimit") {

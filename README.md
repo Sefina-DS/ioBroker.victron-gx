@@ -45,6 +45,7 @@ Connects ioBroker directly and locally to Victron GX devices via the local MQTT 
 | PV Inverters (real + Node-RED) | ✅ | – |
 | Virtual Switches (Node-RED) | ✅ | ✅ MQTT |
 | Solar Chargers (MPPT) | ✅ | – |
+| Tank Sensors (real + Node-RED virtual) | ✅ | – |
 | System Overview | ✅ | – |
 
 ## Datapoint Structure
@@ -113,6 +114,14 @@ victron-gx.0
     ├── solarcharger.<Serial>
     │   ├── Pv.V, Pv.P, Dc.0.Voltage/Current
     │   └── State, Yield.Power/Today/Total
+    ├── tank.<Serial>
+    │   ├── Level [%]
+    │   ├── Remaining [m³]
+    │   ├── RemainingLiter [l]  ← calculated: Remaining × 1000
+    │   ├── Capacity [m³]
+    │   ├── CapacityLiter [l]   ← calculated: Capacity × 1000
+    │   ├── FluidType           ← 0=Fuel, 1=Fresh water, 2=Waste water, 7=Diesel, 11=Raw water, …
+    │   └── Status              ← 0=OK, 1=Disconnected, 2=Short circuit, …
     └── switch.<Group>.<Serial>
         ├── State  ← writable (true/false) via MQTT
         └── Status ← hardware feedback
@@ -150,6 +159,15 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 ---
 
 ## Changelog
+
+### 0.6.8 (2026-06-06)
+- Release 0.6.8
+
+### 0.6.8 (2026-06-06)
+- Add: Tank sensor support (Level, Remaining, Capacity, FluidType, Status)
+- Add: Calculated `RemainingLiter` and `CapacityLiter` states [l]
+- Add: FluidType and Status dropdown labels (Raw water, Diesel, Fresh water, …)
+- Fix: Tank Capacity unit corrected to m³ (was Ah)
 
 ### 0.6.7 (2026-06-05)
 - Fix: lint formatting for this.setTimeout Promise wrappers

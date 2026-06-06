@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.6.7",
+    "version": "0.6.8",
     "news": {
-      "0.6.0": {
-        "en": "Add DVCC charge/discharge current control, external ESS control mode",
-        "de": "DVCC Lade-/Entladestrom Steuerung, externe ESS Steuerung hinzugefügt",
-        "ru": "Add DVCC charge/discharge current control, external ESS control mode",
-        "pt": "Add DVCC charge/discharge current control, external ESS control mode",
-        "nl": "Add DVCC charge/discharge current control, external ESS control mode",
-        "fr": "Add DVCC charge/discharge current control, external ESS control mode",
-        "it": "Add DVCC charge/discharge current control, external ESS control mode",
-        "es": "Add DVCC charge/discharge current control, external ESS control mode",
-        "pl": "Add DVCC charge/discharge current control, external ESS control mode",
-        "uk": "Add DVCC charge/discharge current control, external ESS control mode",
-        "zh-cn": "Add DVCC charge/discharge current control, external ESS control mode"
-      },
       "0.6.1": {
         "en": "Fix: cleaned up changelog, removed duplicate 0.6.0 entries",
         "de": "Fix: Changelog bereinigt, doppelte 0.6.0 Einträge entfernt",
@@ -93,6 +80,19 @@
         "pl": "Fix: lint formatting for this.setTimeout Promise wrappers",
         "uk": "Fix: lint formatting for this.setTimeout Promise wrappers",
         "zh-cn": "Fix: lint formatting for this.setTimeout Promise wrappers"
+      },
+      "0.6.8": {
+        "en": "Release 0.6.8",
+        "de": "Release 0.6.8",
+        "ru": "Release 0.6.8",
+        "pt": "Release 0.6.8",
+        "nl": "Release 0.6.8",
+        "fr": "Release 0.6.8",
+        "it": "Release 0.6.8",
+        "es": "Release 0.6.8",
+        "pl": "Release 0.6.8",
+        "uk": "Release 0.6.8",
+        "zh-cn": "Release 0.6.8"
       }
     },
     "titleLang": {
