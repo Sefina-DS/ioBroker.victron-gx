@@ -2135,9 +2135,24 @@ class VictronGx extends utils.Adapter {
             const intermId = parts.slice(0, i + 1).join('.');
             if (!this.createdStates.has(`__folder_${intermId}`)) {
                 try {
+                    const seg = parts[i];
                     await this.setObjectNotExistsAsync(intermId, {
                         type: 'folder',
-                        common: { name: parts[i] },
+                        common: {
+                            name: {
+                                en: seg,
+                                de: seg,
+                                ru: seg,
+                                pt: seg,
+                                nl: seg,
+                                fr: seg,
+                                it: seg,
+                                es: seg,
+                                pl: seg,
+                                uk: seg,
+                                'zh-cn': seg,
+                            },
+                        },
                         native: {},
                     });
                 } catch {
@@ -2162,9 +2177,24 @@ class VictronGx extends utils.Adapter {
 
         // Intermediate: devices.<type> folder
         const typeFolder = `devices.${device.type}`;
+        const typeName = device.type;
         await this.setObjectNotExistsAsync(typeFolder, {
             type: 'folder',
-            common: { name: { en: device.type, de: device.type } },
+            common: {
+                name: {
+                    en: typeName,
+                    de: typeName,
+                    ru: typeName,
+                    pt: typeName,
+                    nl: typeName,
+                    fr: typeName,
+                    it: typeName,
+                    es: typeName,
+                    pl: typeName,
+                    uk: typeName,
+                    'zh-cn': typeName,
+                },
+            },
             native: {},
         });
 
@@ -3735,7 +3765,19 @@ class VictronGx extends utils.Adapter {
         }
         if (path.startsWith('cells.cell')) {
             const n = parseInt(path.replace('cells.cell', ''), 10);
-            return { en: `Cell ${n}`, de: `Zelle ${n}` };
+            return {
+                en: `Cell ${n}`,
+                de: `Zelle ${n}`,
+                ru: `Cell ${n}`,
+                pt: `Cell ${n}`,
+                nl: `Cell ${n}`,
+                fr: `Cell ${n}`,
+                it: `Cell ${n}`,
+                es: `Cell ${n}`,
+                pl: `Cell ${n}`,
+                uk: `Cell ${n}`,
+                'zh-cn': `Cell ${n}`,
+            };
         }
         return path;
     }
