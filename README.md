@@ -167,6 +167,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.7.4 (2026-06-08)
+- Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices
+
 ### 0.7.3 (2026-06-08)
 - Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches
 

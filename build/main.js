@@ -35,7 +35,8 @@ const KNOWN_DEVICE_TYPES = {
   overview: "\xDCbersicht",
   platform: "GX Ger\xE4t",
   temperature: "Temperatursensor",
-  tank: "Tanksensor"
+  tank: "Tanksensor",
+  meteo: "Wetterstation"
 };
 const RELEVANT_PATHS = {
   battery: [
@@ -283,7 +284,8 @@ const RELEVANT_PATHS = {
     "Serial"
   ],
   temperature: ["Temperature", "Humidity", "Pressure", "ProductName", "CustomName"],
-  tank: ["Level", "Remaining", "Capacity", "FluidType", "Status", "ProductName", "CustomName"]
+  tank: ["Level", "Remaining", "Capacity", "FluidType", "Status", "ProductName", "CustomName"],
+  meteo: ["Irradiance", "WindSpeed", "WindDirection", "ExternalTemperature", "ProductName", "CustomName"]
 };
 const RELEVANT_PATHS_SET = Object.fromEntries(
   Object.entries(RELEVANT_PATHS).map(([k, v]) => [k, new Set(v.map((p) => p.replace(/\//g, ".")))])
@@ -1919,11 +1921,18 @@ class VictronGx extends utils.Adapter {
         }
         break;
       }
-      case "CustomName":
-        if (!device.customName) {
+      case "CustomName": {
+        if (device.customName !== value) {
           device.customName = value;
+          if (!this.setupComplete && device.ready) {
+            const cnBaseId = this.getBaseId(type, instance, device.serial || void 0, device);
+            if (cnBaseId) {
+              void this.ensureChannel(cnBaseId, device);
+            }
+          }
         }
         break;
+      }
       case "Connected": {
         if (!device.ready) {
           break;
@@ -2149,13 +2158,19 @@ class VictronGx extends utils.Adapter {
   }
   // ── Channel anlegen ──────────────────────────────────────────────────────
   async ensureChannel(baseId, device) {
-    if (this.channelReady.has(baseId)) {
-      return;
-    }
     if (!device.ready) {
       return;
     }
     const label = device.customName || device.productName || device.type;
+    if (this.channelReady.has(baseId)) {
+      if (!this.setupComplete) {
+        await this.extendObjectAsync(baseId, {
+          common: { name: label },
+          native: { virtual: device.virtual }
+        });
+      }
+      return;
+    }
     const typeFolder = `devices.${device.type}`;
     const typeName = device.type;
     await this.setObjectNotExistsAsync(typeFolder, {
@@ -2177,10 +2192,10 @@ class VictronGx extends utils.Adapter {
       },
       native: {}
     });
-    await this.setObjectNotExistsAsync(baseId, {
+    await this.extendObjectAsync(baseId, {
       type: "channel",
       common: { name: label },
-      native: {}
+      native: { virtual: device.virtual }
     });
     await this.setObjectNotExistsAsync(`${baseId}.info`, {
       type: "channel",
@@ -3669,6 +3684,84 @@ class VictronGx extends utils.Adapter {
         uk: "Temperature",
         "zh-cn": "Temperature"
       },
+      Humidity: {
+        en: "Humidity",
+        de: "Luftfeuchtigkeit",
+        ru: "Humidity",
+        pt: "Humidity",
+        nl: "Humidity",
+        fr: "Humidity",
+        it: "Humidity",
+        es: "Humidity",
+        pl: "Humidity",
+        uk: "Humidity",
+        "zh-cn": "Humidity"
+      },
+      Pressure: {
+        en: "Air pressure",
+        de: "Luftdruck",
+        ru: "Air pressure",
+        pt: "Air pressure",
+        nl: "Air pressure",
+        fr: "Air pressure",
+        it: "Air pressure",
+        es: "Air pressure",
+        pl: "Air pressure",
+        uk: "Air pressure",
+        "zh-cn": "Air pressure"
+      },
+      Irradiance: {
+        en: "Solar irradiance",
+        de: "Bestrahlungsst\xE4rke",
+        ru: "Solar irradiance",
+        pt: "Solar irradiance",
+        nl: "Solar irradiance",
+        fr: "Solar irradiance",
+        it: "Solar irradiance",
+        es: "Solar irradiance",
+        pl: "Solar irradiance",
+        uk: "Solar irradiance",
+        "zh-cn": "Solar irradiance"
+      },
+      WindSpeed: {
+        en: "Wind speed",
+        de: "Windgeschwindigkeit",
+        ru: "Wind speed",
+        pt: "Wind speed",
+        nl: "Wind speed",
+        fr: "Wind speed",
+        it: "Wind speed",
+        es: "Wind speed",
+        pl: "Wind speed",
+        uk: "Wind speed",
+        "zh-cn": "Wind speed"
+      },
+      WindDirection: {
+        en: "Wind direction",
+        de: "Windrichtung",
+        ru: "Wind direction",
+        pt: "Wind direction",
+        nl: "Wind direction",
+        fr: "Wind direction",
+        it: "Wind direction",
+        es: "Wind direction",
+        pl: "Wind direction",
+        uk: "Wind direction",
+        "zh-cn": "Wind direction"
+      },
+      ExternalTemperature: {
+        en: "Outside temperature",
+        de: "Au\xDFentemperatur",
+        ru: "Outside temperature",
+        pt: "Outside temperature",
+        nl: "Outside temperature",
+        fr: "Outside temperature",
+        it: "Outside temperature",
+        es: "Outside temperature",
+        pl: "Outside temperature",
+        uk: "Outside temperature",
+        "zh-cn": "Outside temperature"
+      },
       CustomName: {
         en: "Custom name",
         de: "Benutzerdefinierter Name",
@@ -3789,6 +3882,18 @@ class VictronGx extends utils.Adapter {
     if (path === "Ac.MaxPower" || path === "Ac.PowerLimit") {
       return "W";
     }
+    if (path === "Irradiance") {
+      return "W/m\xB2";
+    }
+    if (path === "WindSpeed") {
+      return "m/s";
+    }
+    if (path === "WindDirection") {
+      return "\xB0";
+    }
+    if (path === "ExternalTemperature") {
+      return "\xB0C";
+    }
     return "";
   }
   getRole(path) {
@@ -3815,6 +3920,24 @@ class VictronGx extends utils.Adapter {
     }
     if (path.startsWith("temperatures.")) {
       return "value.temperature";
+    }
+    if (path === "Temperature" || path === "ExternalTemperature") {
+      return "value.temperature";
+    }
+    if (path === "Humidity") {
+      return "value.humidity";
+    }
+    if (path === "Pressure") {
+      return "value.pressure";
+    }
+    if (path === "Irradiance") {
+      return "value";
+    }
+    if (path === "WindSpeed") {
+      return "value.speed.wind";
+    }
+    if (path === "WindDirection") {
+      return "value.direction.wind";
     }
     if (path.startsWith("alarms.")) {
       return "indicator.alarm";

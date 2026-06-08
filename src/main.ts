@@ -26,6 +26,7 @@ const KNOWN_DEVICE_TYPES: Record<string, string> = {
     platform: 'GX Gerät',
     temperature: 'Temperatursensor',
     tank: 'Tanksensor',
+    meteo: 'Wetterstation',
 };
 
 // ── Relevante MQTT-Pfade pro Gerätetyp ──────────────────────────────────────
@@ -276,6 +277,7 @@ const RELEVANT_PATHS: Record<string, string[]> = {
     ],
     temperature: ['Temperature', 'Humidity', 'Pressure', 'ProductName', 'CustomName'],
     tank: ['Level', 'Remaining', 'Capacity', 'FluidType', 'Status', 'ProductName', 'CustomName'],
+    meteo: ['Irradiance', 'WindSpeed', 'WindDirection', 'ExternalTemperature', 'ProductName', 'CustomName'],
 };
 
 // ── Pfade die nur Metadaten liefern ─────────────────────────────────────────
@@ -2113,11 +2115,19 @@ class VictronGx extends utils.Adapter {
                 }
                 break;
             }
-            case 'CustomName':
-                if (!device.customName) {
+            case 'CustomName': {
+                if (device.customName !== value) {
                     device.customName = value;
+                    // In Setup-Phase: ensureChannel aufrufen damit Channel-Name nachgezogen wird
+                    if (!this.setupComplete && device.ready) {
+                        const cnBaseId = this.getBaseId(type, instance, device.serial || undefined, device);
+                        if (cnBaseId) {
+                            void this.ensureChannel(cnBaseId, device);
+                        }
+                    }
                 }
                 break;
+            }
             case 'Connected': {
                 if (!device.ready) {
                     break;
@@ -2350,15 +2360,23 @@ class VictronGx extends utils.Adapter {
 
     // ── Channel anlegen ──────────────────────────────────────────────────────
     private async ensureChannel(baseId: string, device: DeviceInfo): Promise<void> {
-        if (this.channelReady.has(baseId)) {
-            return;
-        }
         // Nicht anlegen bevor Gerät vollständig erkannt (Serial bekannt)
         if (!device.ready) {
             return;
         }
 
         const label = device.customName || device.productName || device.type;
+
+        if (this.channelReady.has(baseId)) {
+            // In Setup-Phase: Channel-Namen immer aktualisieren (CustomName kann später kommen)
+            if (!this.setupComplete) {
+                await this.extendObjectAsync(baseId, {
+                    common: { name: label },
+                    native: { virtual: device.virtual },
+                });
+            }
+            return;
+        }
 
         // Intermediate: devices.<type> folder
         const typeFolder = `devices.${device.type}`;
@@ -2383,10 +2401,10 @@ class VictronGx extends utils.Adapter {
             native: {},
         });
 
-        await this.setObjectNotExistsAsync(baseId, {
+        await this.extendObjectAsync(baseId, {
             type: 'channel',
             common: { name: label },
-            native: {},
+            native: { virtual: device.virtual },
         });
 
         // Intermediate: info sub-channel
@@ -3896,6 +3914,84 @@ class VictronGx extends utils.Adapter {
                 uk: 'Temperature',
                 'zh-cn': 'Temperature',
             },
+            Humidity: {
+                en: 'Humidity',
+                de: 'Luftfeuchtigkeit',
+                ru: 'Humidity',
+                pt: 'Humidity',
+                nl: 'Humidity',
+                fr: 'Humidity',
+                it: 'Humidity',
+                es: 'Humidity',
+                pl: 'Humidity',
+                uk: 'Humidity',
+                'zh-cn': 'Humidity',
+            },
+            Pressure: {
+                en: 'Air pressure',
+                de: 'Luftdruck',
+                ru: 'Air pressure',
+                pt: 'Air pressure',
+                nl: 'Air pressure',
+                fr: 'Air pressure',
+                it: 'Air pressure',
+                es: 'Air pressure',
+                pl: 'Air pressure',
+                uk: 'Air pressure',
+                'zh-cn': 'Air pressure',
+            },
+            Irradiance: {
+                en: 'Solar irradiance',
+                de: 'Bestrahlungsstärke',
+                ru: 'Solar irradiance',
+                pt: 'Solar irradiance',
+                nl: 'Solar irradiance',
+                fr: 'Solar irradiance',
+                it: 'Solar irradiance',
+                es: 'Solar irradiance',
+                pl: 'Solar irradiance',
+                uk: 'Solar irradiance',
+                'zh-cn': 'Solar irradiance',
+            },
+            WindSpeed: {
+                en: 'Wind speed',
+                de: 'Windgeschwindigkeit',
+                ru: 'Wind speed',
+                pt: 'Wind speed',
+                nl: 'Wind speed',
+                fr: 'Wind speed',
+                it: 'Wind speed',
+                es: 'Wind speed',
+                pl: 'Wind speed',
+                uk: 'Wind speed',
+                'zh-cn': 'Wind speed',
+            },
+            WindDirection: {
+                en: 'Wind direction',
+                de: 'Windrichtung',
+                ru: 'Wind direction',
+                pt: 'Wind direction',
+                nl: 'Wind direction',
+                fr: 'Wind direction',
+                it: 'Wind direction',
+                es: 'Wind direction',
+                pl: 'Wind direction',
+                uk: 'Wind direction',
+                'zh-cn': 'Wind direction',
+            },
+            ExternalTemperature: {
+                en: 'Outside temperature',
+                de: 'Außentemperatur',
+                ru: 'Outside temperature',
+                pt: 'Outside temperature',
+                nl: 'Outside temperature',
+                fr: 'Outside temperature',
+                it: 'Outside temperature',
+                es: 'Outside temperature',
+                pl: 'Outside temperature',
+                uk: 'Outside temperature',
+                'zh-cn': 'Outside temperature',
+            },
             CustomName: {
                 en: 'Custom name',
                 de: 'Benutzerdefinierter Name',
@@ -4030,6 +4126,18 @@ class VictronGx extends utils.Adapter {
         if (path === 'Ac.MaxPower' || path === 'Ac.PowerLimit') {
             return 'W';
         }
+        if (path === 'Irradiance') {
+            return 'W/m²';
+        }
+        if (path === 'WindSpeed') {
+            return 'm/s';
+        }
+        if (path === 'WindDirection') {
+            return '°';
+        }
+        if (path === 'ExternalTemperature') {
+            return '°C';
+        }
         return '';
     }
 
@@ -4070,6 +4178,24 @@ class VictronGx extends utils.Adapter {
         }
         if (path.startsWith('temperatures.')) {
             return 'value.temperature';
+        }
+        if (path === 'Temperature' || path === 'ExternalTemperature') {
+            return 'value.temperature';
+        }
+        if (path === 'Humidity') {
+            return 'value.humidity';
+        }
+        if (path === 'Pressure') {
+            return 'value.pressure';
+        }
+        if (path === 'Irradiance') {
+            return 'value';
+        }
+        if (path === 'WindSpeed') {
+            return 'value.speed.wind';
+        }
+        if (path === 'WindDirection') {
+            return 'value.direction.wind';
         }
         if (path.startsWith('alarms.')) {
             return 'indicator.alarm';

@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.7.3",
+    "version": "0.7.4",
     "news": {
-      "0.6.7": {
-        "en": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "de": "Fix: Lint-Formatierung fuer this.setTimeout Promise-Wrapper",
-        "ru": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "pt": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "nl": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "fr": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "it": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "es": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "pl": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "uk": "Fix: lint formatting for this.setTimeout Promise wrappers",
-        "zh-cn": "Fix: lint formatting for this.setTimeout Promise wrappers"
-      },
       "0.6.8": {
         "en": "Release 0.6.8",
         "de": "Release 0.6.8",
@@ -93,6 +80,19 @@
         "pl": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
         "uk": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
         "zh-cn": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches"
+      },
+      "0.7.4": {
+        "en": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "de": "Meteo-Gerät hinzugefügt, Temperatursensor (Feuchte/Druck) korrigiert, CustomName für alle Geräte repariert",
+        "ru": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "pt": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "nl": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "fr": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "it": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "es": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "pl": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "uk": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
+        "zh-cn": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices"
       }
     },
     "titleLang": {
