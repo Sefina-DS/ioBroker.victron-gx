@@ -167,6 +167,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### 0.7.5 (2026-06-08)
+- Fix: remove invalid supportedMessages from io-package.json
+
 ### 0.7.4 (2026-06-08)
 - Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices
 
