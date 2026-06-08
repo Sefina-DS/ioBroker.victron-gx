@@ -285,6 +285,9 @@ const RELEVANT_PATHS = {
   temperature: ["Temperature", "Humidity", "Pressure", "ProductName", "CustomName"],
   tank: ["Level", "Remaining", "Capacity", "FluidType", "Status", "ProductName", "CustomName"]
 };
+const RELEVANT_PATHS_SET = Object.fromEntries(
+  Object.entries(RELEVANT_PATHS).map(([k, v]) => [k, new Set(v.map((p) => p.replace(/\//g, ".")))])
+);
 const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
   "Serial",
   "ProductName",
@@ -298,6 +301,9 @@ const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
   "SwitchableOutput.output_1.Settings.CustomName",
   "SwitchableOutput.output_1.Settings.Group"
 ]);
+const NO_SERIAL_TYPES_HANDLE = /* @__PURE__ */ new Set(["system", "platform"]);
+const NO_SERIAL_TYPES_REGISTER = /* @__PURE__ */ new Set(["system", "platform", "switch"]);
+const MODBUS_NEEDED_TYPES = /* @__PURE__ */ new Set(["vebus", "battery", "grid", "pvinverter", "solarcharger"]);
 const PATH_REMAP = {
   switch: {
     "SwitchableOutput.output_1.State": "State",
@@ -879,14 +885,25 @@ class VictronGx extends utils.Adapter {
   modbusUnitMap = /* @__PURE__ */ new Map();
   modbusBusy = false;
   createdStates = /* @__PURE__ */ new Set();
+  cellValueCache = /* @__PURE__ */ new Map();
+  // baseId.cellXX → Wert
+  powerValueCache = /* @__PURE__ */ new Map();
+  // stateId → letzter Wert
+  lastValueCache = /* @__PURE__ */ new Map();
+  // stateId → letzter gesetzter Wert
+  mqttMsgCount = 0;
+  setupComplete = false;
+  setupCompleteTimer = null;
+  mqttMsgCountLast = 0;
   constructor(options = {}) {
     super({ ...options, name: "victron-gx" });
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
+    this.on("message", this.onMessage.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
   // ── Adapter-Start ────────────────────────────────────────────────────────
-  onReady() {
+  async onReady() {
     void this.setState("info.connection", false, true);
     void this.setObjectNotExistsAsync("info.modbusConnected", {
       type: "state",
@@ -989,6 +1006,40 @@ class VictronGx extends utils.Adapter {
       return;
     }
     this.log.info(`Verbinde mit Victron GX unter ${host}:${port}...`);
+    await this.setObjectNotExistsAsync("info.scanStatus", {
+      type: "state",
+      common: {
+        name: {
+          en: "Scan status",
+          de: "Scan-Status",
+          ru: "Scan status",
+          pt: "Scan status",
+          nl: "Scan status",
+          fr: "Scan status",
+          it: "Scan status",
+          es: "Scan status",
+          pl: "Scan status",
+          uk: "Scan status",
+          "zh-cn": "Scan status"
+        },
+        type: "string",
+        role: "text",
+        read: true,
+        write: false
+      },
+      native: {}
+    });
+    void this.setState("info.scanStatus", { val: "Scanning...", ack: true });
+    this.setupCompleteTimer = this.setTimeout(() => {
+      this.setupComplete = true;
+      this.log.info(
+        `Setup abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Ger\xE4te \u2192 Static Mode aktiv`
+      );
+      void this.setState("info.scanStatus", {
+        val: `Abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Ger\xE4te`,
+        ack: true
+      });
+    }, 60 * 1e3);
     this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
     if (this.config.controlEnabled) {
       const modbusPort = this.config.modbusPort || 502;
@@ -1132,7 +1183,7 @@ class VictronGx extends utils.Adapter {
       pvinverter: 1026,
       solarcharger: 771
     };
-    const neededTypes = /* @__PURE__ */ new Set(["vebus", "battery", "grid", "pvinverter", "solarcharger"]);
+    const neededTypes = new Set(MODBUS_NEEDED_TYPES);
     for (let unitId = 1; unitId <= 247; unitId++) {
       if (neededTypes.size === 0) {
         break;
@@ -1427,11 +1478,78 @@ class VictronGx extends utils.Adapter {
     }
   }
   // ── Haupt-Message-Handler ────────────────────────────────────────────────
-  async handleMessage(topic, payload) {
-    var _a, _b, _c, _d, _e;
+  handleMessage(topic, payload) {
+    var _a, _b, _c, _d, _e, _f;
     try {
       const raw = payload.toString();
       if (!raw) {
+        return;
+      }
+      if (this.setupComplete) {
+        let parsedFast;
+        try {
+          parsedFast = JSON.parse(raw);
+        } catch {
+          return;
+        }
+        const rawValueFast = "value" in parsedFast ? parsedFast.value : parsedFast;
+        if (rawValueFast === null || rawValueFast === void 0) {
+          return;
+        }
+        const slashIdx2 = topic.indexOf("/", topic.indexOf("/", topic.indexOf("/") + 1) + 1);
+        const slashIdx3 = topic.indexOf("/", slashIdx2 + 1);
+        const slashIdx4 = topic.indexOf("/", slashIdx3 + 1);
+        if (slashIdx4 < 0) {
+          return;
+        }
+        const deviceTypeFast = topic.substring(slashIdx2 + 1, slashIdx3);
+        const pathFast = topic.substring(slashIdx4 + 1).replace(/\//g, ".");
+        if (deviceTypeFast === "settings") {
+          void this.handleSettingsMqttUpdate(pathFast, parsedFast);
+          return;
+        }
+        if (!RELEVANT_PATHS_SET[deviceTypeFast]) {
+          return;
+        }
+        if (!RELEVANT_PATHS_SET[deviceTypeFast].has(pathFast)) {
+          return;
+        }
+        const instanceStrFast = topic.substring(slashIdx3 + 1, slashIdx4);
+        const instanceFast = parseInt(instanceStrFast, 10);
+        const deviceKeyFast = `${deviceTypeFast}/${instanceFast}`;
+        const serialFast = this.serialMap.get(deviceKeyFast);
+        const deviceFast = this.deviceMap.get(deviceKeyFast);
+        let baseIdFast;
+        if (deviceTypeFast === "system") {
+          baseIdFast = "overview";
+        } else if (deviceTypeFast === "switch") {
+          if (!serialFast || !(deviceFast == null ? void 0 : deviceFast.group)) {
+            return;
+          }
+          baseIdFast = `devices.switch.${deviceFast.group.replace(/[^a-zA-Z0-9_]/g, "_")}.${serialFast}`;
+        } else {
+          baseIdFast = serialFast ? `devices.${deviceTypeFast}.${serialFast}` : `devices.${deviceTypeFast}.${instanceFast}`;
+        }
+        if (!baseIdFast) {
+          return;
+        }
+        const stateIdFast = `${baseIdFast}.${pathFast}`;
+        if (!this.createdStates.has(stateIdFast)) {
+          return;
+        }
+        const storeValueFast = typeof rawValueFast === "number" ? rawValueFast : typeof rawValueFast === "boolean" ? rawValueFast : String(rawValueFast);
+        const lastFast = this.lastValueCache.get(stateIdFast);
+        if (lastFast !== storeValueFast) {
+          this.lastValueCache.set(stateIdFast, storeValueFast);
+          void this.setState(stateIdFast, { val: storeValueFast, ack: true });
+          if (typeof storeValueFast === "number" && stateIdFast.endsWith(".Power")) {
+            this.powerValueCache.set(stateIdFast, storeValueFast);
+            this.updateOverviewTotalPower(stateIdFast.replace(`${baseIdFast}.`, ""));
+          }
+          if (deviceFast) {
+            this.touchDevice(deviceFast, baseIdFast);
+          }
+        }
         return;
       }
       let parsed;
@@ -1461,7 +1579,7 @@ class VictronGx extends utils.Adapter {
       const normPath = path.replace(/\//g, ".");
       if (!path || !RELEVANT_PATHS[deviceType]) {
         if (deviceType === "settings") {
-          await this.handleSettingsMqttUpdate(normPath, parsed);
+          void this.handleSettingsMqttUpdate(normPath, parsed);
         }
         return;
       }
@@ -1476,15 +1594,13 @@ class VictronGx extends utils.Adapter {
         return;
       }
       const remappedPath = (_b = (_a = PATH_REMAP[deviceType]) == null ? void 0 : _a[normPath]) != null ? _b : normPath;
-      const isRelevant = RELEVANT_PATHS[deviceType].some((rp) => normPath === rp.replace(/\//g, "."));
-      if (!isRelevant) {
+      if (!((_c = RELEVANT_PATHS_SET[deviceType]) == null ? void 0 : _c.has(normPath))) {
         return;
       }
       const deviceKey = `${deviceType}/${instance}`;
       const device = this.deviceMap.get(deviceKey);
       const serial = this.serialMap.get(deviceKey);
-      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["system", "platform"]);
-      if (!serial && !NO_SERIAL_TYPES.has(deviceType)) {
+      if (!serial && !NO_SERIAL_TYPES_HANDLE.has(deviceType)) {
         return;
       }
       const baseId = this.getBaseId(deviceType, instance, serial, device);
@@ -1497,15 +1613,16 @@ class VictronGx extends utils.Adapter {
           device.phaseVoltage[vMatch[1]] = typeof rawValue === "number" ? rawValue : 0;
         }
         const pMatch = normPath.match(/^Ac\.(L[123])\./);
-        if (pMatch && ((_c = device.phaseVoltage[pMatch[1]]) != null ? _c : 0) === 0) {
+        if (pMatch && ((_d = device.phaseVoltage[pMatch[1]]) != null ? _d : 0) === 0) {
           return;
         }
       }
       if (!this.channelReady.has(baseId)) {
         if (device) {
-          await this.ensureChannel(baseId, device);
+          void this.ensureChannel(baseId, device);
         } else if (baseId === "overview") {
-          await this.setObjectNotExistsAsync("overview", {
+          this.channelReady.add("overview");
+          void this.setObjectNotExistsAsync("overview", {
             type: "channel",
             common: {
               name: {
@@ -1524,7 +1641,7 @@ class VictronGx extends utils.Adapter {
             },
             native: {}
           });
-          await this.setObjectNotExistsAsync("overview.info", {
+          void this.setObjectNotExistsAsync("overview.info", {
             type: "channel",
             common: {
               name: {
@@ -1543,8 +1660,6 @@ class VictronGx extends utils.Adapter {
             },
             native: {}
           });
-          this.channelReady.add("overview");
-          this.log.debug("Channel angelegt: overview");
         }
       }
       if (device) {
@@ -1574,7 +1689,7 @@ class VictronGx extends utils.Adapter {
       if (deviceType === "pvinverter" && remappedPath === "StatusCode") {
         commonBase.states = PVINVERTER_STATUS;
       }
-      const statesForPath = (_d = STATES_MAP[deviceType]) == null ? void 0 : _d[remappedPath];
+      const statesForPath = (_e = STATES_MAP[deviceType]) == null ? void 0 : _e[remappedPath];
       if (statesForPath) {
         commonBase.states = statesForPath;
       }
@@ -1582,16 +1697,31 @@ class VictronGx extends utils.Adapter {
         commonBase.unit = "m\xB3";
       }
       if (!this.createdStates.has(stateId)) {
-        await this.ensureIntermediates(stateId);
-        await this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
         this.createdStates.add(stateId);
+        void this.ensureIntermediates(stateId);
+        void this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
+        void this.setState(stateId, { val: storeValue, ack: true });
+      } else {
+        const lastVal = this.lastValueCache.get(stateId);
+        if (lastVal !== storeValue) {
+          this.lastValueCache.set(stateId, storeValue);
+          void this.setState(stateId, { val: storeValue, ack: true });
+        }
       }
-      await this.setState(stateId, { val: storeValue, ack: true });
+      if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath) && typeof storeValue === "number") {
+        this.cellValueCache.set(stateId, storeValue);
+      }
+      if (typeof storeValue === "number" && stateId.endsWith(".Power")) {
+        this.powerValueCache.set(stateId, storeValue);
+      }
+      if (typeof storeValue === "number" && stateId.startsWith("overview.")) {
+        this.powerValueCache.set(stateId, storeValue);
+      }
       if (deviceType === "tank" && typeof storeValue === "number") {
         if (remappedPath === "Capacity") {
           const literId = `${baseId}.CapacityLiter`;
           if (!this.createdStates.has(literId)) {
-            await this.extendObjectAsync(literId, {
+            void this.extendObjectAsync(literId, {
               type: "state",
               common: {
                 name: {
@@ -1617,12 +1747,12 @@ class VictronGx extends utils.Adapter {
             });
             this.createdStates.add(literId);
           }
-          await this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
+          void this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
         }
         if (remappedPath === "Remaining") {
           const literId = `${baseId}.RemainingLiter`;
           if (!this.createdStates.has(literId)) {
-            await this.extendObjectAsync(literId, {
+            void this.extendObjectAsync(literId, {
               type: "state",
               common: {
                 name: {
@@ -1648,7 +1778,7 @@ class VictronGx extends utils.Adapter {
             });
             this.createdStates.add(literId);
           }
-          await this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
+          void this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
         }
       }
       if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath)) {
@@ -1657,7 +1787,7 @@ class VictronGx extends utils.Adapter {
       if (deviceType === "system" && OVERVIEW_TOTAL_POWER[normPath]) {
         void this.updateOverviewTotalPower(normPath);
       }
-      if (((_e = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _e.includes(normPath)) && this.channelReady.has(baseId)) {
+      if (((_f = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _f.includes(normPath)) && this.channelReady.has(baseId)) {
         void this.updateActivePhase(deviceType, baseId);
       }
     } catch (err) {
@@ -1665,24 +1795,21 @@ class VictronGx extends utils.Adapter {
     }
   }
   // ── Gesamtleistung overview berechnen ───────────────────────────────────
-  async updateOverviewTotalPower(triggeredPath) {
+  updateOverviewTotalPower(triggeredPath) {
     const entry = OVERVIEW_TOTAL_POWER[triggeredPath];
     if (!entry) {
       return;
     }
     let total = 0;
     for (const src of entry.sources) {
-      try {
-        const s = await this.getStateAsync(`overview.${src}`);
-        if (s && typeof s.val === "number") {
-          total += s.val;
-        }
-      } catch {
+      const v = this.powerValueCache.get(`overview.${src}`);
+      if (v !== void 0) {
+        total += v;
       }
     }
     const stateId = `overview.${entry.target}`;
     if (!this.createdStates.has(stateId)) {
-      await this.extendObjectAsync(stateId, {
+      void this.extendObjectAsync(stateId, {
         type: "state",
         common: {
           name: this.getFriendlyName(entry.target),
@@ -1696,7 +1823,7 @@ class VictronGx extends utils.Adapter {
       });
       this.createdStates.add(stateId);
     }
-    await this.setState(stateId, { val: Math.round(total), ack: true });
+    void this.setState(stateId, { val: Math.round(total), ack: true });
   }
   // ── Settings MQTT → control.system.* ────────────────────────────────────
   async handleSettingsMqttUpdate(normPath, parsed) {
@@ -1735,7 +1862,6 @@ class VictronGx extends utils.Adapter {
   updateDeviceMeta(type, instance, field, value) {
     const deviceKey = `${type}/${instance}`;
     if (!this.deviceMap.has(deviceKey)) {
-      const NO_SERIAL_TYPES = /* @__PURE__ */ new Set(["system", "platform", "switch"]);
       this.deviceMap.set(deviceKey, {
         type,
         instance,
@@ -1748,7 +1874,7 @@ class VictronGx extends utils.Adapter {
         phaseVoltage: { L1: 0, L2: 0, L3: 0 },
         lastUpdate: Date.now(),
         staleTimer: null,
-        ready: NO_SERIAL_TYPES.has(type)
+        ready: NO_SERIAL_TYPES_REGISTER.has(type)
         // system/platform/switch sofort ready
       });
     }
@@ -1805,31 +1931,37 @@ class VictronGx extends utils.Adapter {
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
           const connected = value === "1" || value === "true";
-          void this.setObjectNotExistsAsync(`${baseId}.info.connected`, {
-            type: "state",
-            common: {
-              name: {
-                en: "Connected",
-                de: "Verbunden",
-                ru: "Connected",
-                pt: "Connected",
-                nl: "Connected",
-                fr: "Connected",
-                it: "Connected",
-                es: "Connected",
-                pl: "Connected",
-                uk: "Connected",
-                "zh-cn": "Connected"
+          const connId2 = `${baseId}.info.connected`;
+          if (!this.createdStates.has(connId2)) {
+            void this.setObjectNotExistsAsync(connId2, {
+              type: "state",
+              common: {
+                name: {
+                  en: "Connected",
+                  de: "Verbunden",
+                  ru: "Connected",
+                  pt: "Connected",
+                  nl: "Connected",
+                  fr: "Connected",
+                  it: "Connected",
+                  es: "Connected",
+                  pl: "Connected",
+                  uk: "Connected",
+                  "zh-cn": "Connected"
+                },
+                type: "boolean",
+                role: "indicator.connected",
+                read: true,
+                write: false
               },
-              type: "boolean",
-              role: "indicator.connected",
-              read: true,
-              write: false
-            },
-            native: {}
-          }).then(() => {
-            void this.setState(`${baseId}.info.connected`, { val: connected, ack: true });
-          });
+              native: {}
+            }).then(() => {
+              this.createdStates.add(connId2);
+              void this.setState(connId2, { val: connected, ack: true });
+            });
+          } else {
+            void this.setState(connId2, { val: connected, ack: true });
+          }
         }
         break;
       }
@@ -1854,32 +1986,42 @@ class VictronGx extends utils.Adapter {
         }
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
-          void this.setObjectNotExistsAsync(`${baseId}.info.position`, {
-            type: "state",
-            common: {
-              name: {
-                en: "Position",
-                de: "Position",
-                ru: "Position",
-                pt: "Position",
-                nl: "Position",
-                fr: "Position",
-                it: "Position",
-                es: "Position",
-                pl: "Position",
-                uk: "Position",
-                "zh-cn": "Position"
+          const posStateId = `${baseId}.info.position`;
+          if (!this.createdStates.has(posStateId)) {
+            void this.setObjectNotExistsAsync(posStateId, {
+              type: "state",
+              common: {
+                name: {
+                  en: "Position",
+                  de: "Position",
+                  ru: "Position",
+                  pt: "Position",
+                  nl: "Position",
+                  fr: "Position",
+                  it: "Position",
+                  es: "Position",
+                  pl: "Position",
+                  uk: "Position",
+                  "zh-cn": "Position"
+                },
+                type: "number",
+                role: "value",
+                states: {
+                  0: "AC Ausgang (hinter MultiPlus)",
+                  1: "AC Eingang (Netz)",
+                  2: "AC Eingang 2"
+                },
+                read: true,
+                write: false
               },
-              type: "number",
-              role: "value",
-              states: { 0: "AC Ausgang (hinter MultiPlus)", 1: "AC Eingang (Netz)", 2: "AC Eingang 2" },
-              read: true,
-              write: false
-            },
-            native: {}
-          }).then(() => {
-            void this.setState(`${baseId}.info.position`, { val: parseInt(value, 10), ack: true });
-          });
+              native: {}
+            }).then(() => {
+              this.createdStates.add(posStateId);
+              void this.setState(posStateId, { val: parseInt(value, 10), ack: true });
+            });
+          } else {
+            void this.setState(posStateId, { val: parseInt(value, 10), ack: true });
+          }
         }
         break;
       }
@@ -1889,31 +2031,37 @@ class VictronGx extends utils.Adapter {
         }
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
-          void this.setObjectNotExistsAsync(`${baseId}.info.nrOfPhases`, {
-            type: "state",
-            common: {
-              name: {
-                en: "Number of phases",
-                de: "Anzahl Phasen",
-                ru: "Number of phases",
-                pt: "Number of phases",
-                nl: "Number of phases",
-                fr: "Number of phases",
-                it: "Number of phases",
-                es: "Number of phases",
-                pl: "Number of phases",
-                uk: "Number of phases",
-                "zh-cn": "Number of phases"
+          const phasesStateId = `${baseId}.info.nrOfPhases`;
+          if (!this.createdStates.has(phasesStateId)) {
+            void this.setObjectNotExistsAsync(phasesStateId, {
+              type: "state",
+              common: {
+                name: {
+                  en: "Number of phases",
+                  de: "Anzahl Phasen",
+                  ru: "Number of phases",
+                  pt: "Number of phases",
+                  nl: "Number of phases",
+                  fr: "Number of phases",
+                  it: "Number of phases",
+                  es: "Number of phases",
+                  pl: "Number of phases",
+                  uk: "Number of phases",
+                  "zh-cn": "Number of phases"
+                },
+                type: "number",
+                role: "value",
+                read: true,
+                write: false
               },
-              type: "number",
-              role: "value",
-              read: true,
-              write: false
-            },
-            native: {}
-          }).then(() => {
-            void this.setState(`${baseId}.info.nrOfPhases`, { val: parseInt(value, 10), ack: true });
-          });
+              native: {}
+            }).then(() => {
+              this.createdStates.add(phasesStateId);
+              void this.setState(phasesStateId, { val: parseInt(value, 10), ack: true });
+            });
+          } else {
+            void this.setState(phasesStateId, { val: parseInt(value, 10), ack: true });
+          }
         }
         break;
       }
@@ -2248,12 +2396,10 @@ class VictronGx extends utils.Adapter {
   async updateBatteryCellMinMax(baseId) {
     const vals = [];
     for (let i = 1; i <= 32; i++) {
-      try {
-        const s = await this.getStateAsync(`${baseId}.cells.cell${String(i).padStart(2, "0")}`);
-        if (s && typeof s.val === "number" && s.val > 0) {
-          vals.push(s.val);
-        }
-      } catch {
+      const key = `${baseId}.cells.cell${String(i).padStart(2, "0")}`;
+      const v = this.cellValueCache.get(key);
+      if (v !== void 0 && v > 0) {
+        vals.push(v);
       }
     }
     if (vals.length === 0) {
@@ -2264,17 +2410,25 @@ class VictronGx extends utils.Adapter {
   }
   // ── Stale-Erkennung ──────────────────────────────────────────────────────
   touchDevice(device, baseId) {
-    device.lastUpdate = Date.now();
+    const now = Date.now();
+    device.lastUpdate = now;
     if (device.staleTimer) {
       clearTimeout(device.staleTimer);
     }
     if (!this.channelReady.has(baseId) || baseId === "overview") {
       return;
     }
-    void this.setState(`${baseId}.info.lastUpdate`, { val: device.lastUpdate, ack: true });
-    void this.setState(`${baseId}.info.stale`, { val: false, ack: true });
+    if (!device.lastUpdateWritten || now - device.lastUpdateWritten > 5e3) {
+      device.lastUpdateWritten = now;
+      void this.setState(`${baseId}.info.lastUpdate`, { val: now, ack: true });
+    }
+    if (device.isStale) {
+      device.isStale = false;
+      void this.setState(`${baseId}.info.stale`, { val: false, ack: true });
+    }
     device.staleTimer = this.setTimeout(() => {
       this.log.warn(`Ger\xE4t ${device.type}/${device.instance} antwortet nicht mehr (stale)`);
+      device.isStale = true;
       void this.setState(`${baseId}.info.stale`, { val: true, ack: true });
     }, STALE_TIMEOUT_MS);
   }
@@ -2282,12 +2436,9 @@ class VictronGx extends utils.Adapter {
   async updateActivePhase(_deviceType, baseId) {
     const active = [];
     for (const phase of ["L1", "L2", "L3"]) {
-      try {
-        const s = await this.getStateAsync(`${baseId}.Ac.${phase}.Power`);
-        if (s && typeof s.val === "number" && s.val !== 0) {
-          active.push(phase);
-        }
-      } catch {
+      const v = this.powerValueCache.get(`${baseId}.Ac.${phase}.Power`);
+      if (v !== void 0 && v !== 0) {
+        active.push(phase);
       }
     }
     const activePhase = active.length === 1 ? active[0] : active.length > 1 ? "multi" : "";
@@ -3674,6 +3825,53 @@ class VictronGx extends utils.Adapter {
     return "value";
   }
   // ── Adapter-Stop ─────────────────────────────────────────────────────────
+  onMessage(obj) {
+    if (obj.command === "startScan") {
+      this.log.info("Manueller Scan gestartet \u2013 l\xF6sche bestehende Ger\xE4teobjekte...");
+      this.setupComplete = false;
+      void this.setState("info.scanStatus", { val: "Scanning...", ack: true });
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, { result: "scan started" }, obj.callback);
+      }
+      void (async () => {
+        try {
+          for (const viewType of ["state", "channel", "folder"]) {
+            const result = await this.getObjectViewAsync("system", viewType, {
+              startkey: `${this.namespace}.devices.`,
+              endkey: `${this.namespace}.devices.\u9999`
+            });
+            for (const row of result.rows) {
+              await this.delObjectAsync(row.id);
+            }
+          }
+          this.log.info("Ger\xE4teobjekte gel\xF6scht \u2013 leere Caches und starte Discovery...");
+        } catch (err) {
+          this.log.error(`Fehler beim L\xF6schen: ${err.message}`);
+        }
+        this.createdStates.clear();
+        this.channelReady.clear();
+        this.lastValueCache.clear();
+        this.powerValueCache.clear();
+        this.cellValueCache.clear();
+        this.deviceMap.clear();
+        this.serialMap.clear();
+        this.modbusUnitMap.clear();
+        if (this.setupCompleteTimer) {
+          this.clearTimeout(this.setupCompleteTimer);
+        }
+        this.setupCompleteTimer = this.setTimeout(() => {
+          this.setupComplete = true;
+          this.log.info(
+            `Scan abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Ger\xE4te \u2192 Static Mode aktiv`
+          );
+          void this.setState("info.scanStatus", {
+            val: `Abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Ger\xE4te`,
+            ack: true
+          });
+        }, 60 * 1e3);
+      })();
+    }
+  }
   onUnload(callback) {
     try {
       if (this.keepAliveInterval) {

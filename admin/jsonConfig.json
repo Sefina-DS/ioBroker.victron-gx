@@ -1,80 +1,85 @@
 {
-  "type": "panel",
+  "type": "tabs",
   "items": {
-    "host": {
-      "type": "text",
-      "label": "IP-Adresse des GX-Geräts",
-      "help": "z.B. 192.168.6.200",
-      "sm": 12,
-      "md": 6,
-      "xs": 12,
-      "lg": 6,
-      "xl": 6
+    "tab_main": {
+      "type": "panel",
+      "label": "Haupteinstellungen",
+      "items": {
+        "host": {
+          "type": "text",
+          "label": "IP-Adresse des GX-Geräts",
+          "help": "z.B. 192.168.6.200",
+          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
+        },
+        "port": {
+          "type": "number",
+          "label": "MQTT-Port",
+          "default": 1883,
+          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
+        },
+        "mqttUsername": {
+          "type": "text",
+          "label": "MQTT-Benutzername",
+          "help": "Leer lassen wenn kein Auth konfiguriert",
+          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
+        },
+        "mqttPassword": {
+          "type": "password",
+          "label": "MQTT-Passwort",
+          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
+        },
+        "divider": {
+          "type": "divider"
+        },
+        "controlEnabled": {
+          "type": "checkbox",
+          "label": "Steuerung aktivieren (Modbus TCP)",
+          "default": false,
+          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
+        },
+        "modbusPort": {
+          "type": "number",
+          "label": "Modbus Port",
+          "default": 502,
+          "sm": 12, "md": 6, "xs": 12, "lg": 4, "xl": 4
+        },
+        "modbusHint": {
+          "type": "staticText",
+          "text": "⚠️  Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
+          "style": { "fontSize": "14px", "fontWeight": "bold" },
+          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
+        }
+      }
     },
-    "port": {
-      "type": "number",
-      "label": "MQTT-Port",
-      "default": 1883,
-      "sm": 12,
-      "md": 6,
-      "xs": 12,
-      "lg": 6,
-      "xl": 6
-    },
-    "mqttUsername": {
-      "type": "text",
-      "label": "MQTT-Benutzername",
-      "help": "Leer lassen wenn kein Auth konfiguriert",
-      "sm": 12,
-      "md": 6,
-      "xs": 12,
-      "lg": 6,
-      "xl": 6
-    },
-    "mqttPassword": {
-      "type": "password",
-      "label": "MQTT-Passwort",
-      "sm": 12,
-      "md": 6,
-      "xs": 12,
-      "lg": 6,
-      "xl": 6
-    },
-    "divider": {
-      "type": "divider"
-    },
-    "controlEnabled": {
-      "type": "checkbox",
-      "label": "Steuerung aktivieren (Modbus TCP)",
-      "default": false,
-      "sm": 12,
-      "md": 6,
-      "xs": 12,
-      "lg": 6,
-      "xl": 6
-    },
-    "modbusPort": {
-      "type": "number",
-      "label": "Modbus Port",
-      "default": 502,
-      "sm": 12,
-      "md": 6,
-      "xs": 12,
-      "lg": 4,
-      "xl": 4
-    },
-    "modbusHint": {
-      "type": "staticText",
-      "text": "⚠️  Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "bold"
-      },
-      "sm": 12,
-      "xs": 12,
-      "md": 12,
-      "lg": 12,
-      "xl": 12
+    "tab_devices": {
+      "type": "panel",
+      "label": "Geräte",
+      "items": {
+        "scanInfo": {
+          "type": "staticText",
+          "text": "Der Adapter erkennt beim Start automatisch alle angeschlossenen Victron-Geräte (Discovery-Phase, ca. 60 Sekunden). Danach wechselt er in den effizienten Static-Mode mit minimalem RAM-Verbrauch (~100 MB).\n\nWenn du neue Hardware hinzugefügt hast, starte einen neuen Scan. Dabei werden alle bestehenden Geräteobjekte gelöscht und neu angelegt.",
+          "style": { "fontSize": "14px", "marginBottom": "16px" },
+          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
+        },
+        "scanButton": {
+          "type": "sendTo",
+          "command": "startScan",
+          "label": "🔍 Neue Geräteerkennung starten",
+          "variant": "contained",
+          "color": "primary",
+          "sm": 12, "xs": 12, "md": 6, "lg": 4, "xl": 4
+        },
+        "divider2": {
+          "type": "divider"
+        },
+        "scanStatus": {
+          "type": "state",
+          "oid": "info.scanStatus",
+          "label": "Scan-Status",
+          "readOnly": true,
+          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
+        }
+      }
     }
   }
 }

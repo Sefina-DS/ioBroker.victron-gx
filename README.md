@@ -17,6 +17,7 @@ Connects ioBroker directly and locally to Victron GX devices via the local MQTT 
 - Control happens exclusively through the `control.*` channel via Modbus TCP
 - Works with single-phase and three-phase systems
 - Automatic Modbus Unit ID discovery
+- **Low RAM footprint**: ~100 MB stable after discovery phase
 
 ## Requirements
 
@@ -33,6 +34,23 @@ Connects ioBroker directly and locally to Victron GX devices via the local MQTT 
    - MQTT port: `1883` (default)
    - Optional: **Enable control** (activates Modbus TCP and `control.*` datapoints)
 
+## Device Discovery
+
+The adapter uses a two-phase approach for minimal RAM usage:
+
+**Discovery phase** (first 60 seconds after start):
+- All connected Victron devices and their datapoints are discovered automatically
+- States and channels are created dynamically
+
+**Static mode** (after 60 seconds):
+- Adapter switches to an optimized fast-path with minimal overhead
+- Only `setState` is called when values actually change
+- RAM usage stabilizes at ~100 MB regardless of message rate
+
+**Rescan** (Admin → Devices tab):
+- If you add new hardware, use the "Start device scan" button
+- All existing device objects are deleted and rediscovered
+
 ## Supported Devices
 
 | Device | Read | Control |
@@ -45,7 +63,6 @@ Connects ioBroker directly and locally to Victron GX devices via the local MQTT 
 | PV Inverters (real + Node-RED) | ✅ | – |
 | Virtual Switches (Node-RED) | ✅ | ✅ MQTT |
 | Solar Chargers (MPPT) | ✅ | – |
-| Tank Sensors (real + Node-RED virtual) | ✅ | – |
 | System Overview | ✅ | – |
 
 ## Datapoint Structure
@@ -55,6 +72,7 @@ victron-gx.0
 ├── info.connection          ← MQTT connected (boolean)
 ├── info.modbusConnected     ← Modbus connected (boolean)
 ├── info.modbusWritable      ← Write access confirmed (boolean)
+├── info.scanStatus          ← Device scan status (text)
 │
 ├── overview.*               ← Aggregated system values (read only)
 │   ├── Dc.Battery.Soc / Voltage / Current / Power
@@ -77,7 +95,6 @@ victron-gx.0
 │   │   └── DisableFeedIn    ← Reg 39: 0=feed-in allowed, 1=feed-in blocked
 │   └── system.*             ← GX/ESS settings (Modbus Unit 100)
 │       ├── GridSetpoint     ← Reg 2700: grid setpoint [W] (0=zero feed-in, -W=feed-in)
-│       │                       Victron ESS algorithm controls Reg 37 automatically
 │       ├── EssMode          ← Reg 2902: 1=with compensation, 2=without, 3=External
 │       ├── BatteryLifeState ← Reg 2900: ESS operating mode
 │       ├── MinimumSoc       ← Reg 2901: minimum SoC % (except grid failure)
@@ -99,7 +116,6 @@ victron-gx.0
     │   ├── Mode, State, VebusError, VebusChargeState, Soc
     │   ├── Ac.ActiveIn.L1.P/I/V/S, Ac.ActiveIn.P
     │   ├── Ac.Out.L1.P/I/V/F/S, Ac.Out.P
-    │   ├── Ac.In1.CurrentLimit
     │   ├── Hub4.L1.AcPowerSetpoint  ← live value (read only here, write via control.*)
     │   ├── Hub4.DisableFeedIn       ← live value (read only here)
     │   ├── Hub4.DisableCharge       ← live value (read only here)
@@ -114,14 +130,6 @@ victron-gx.0
     ├── solarcharger.<Serial>
     │   ├── Pv.V, Pv.P, Dc.0.Voltage/Current
     │   └── State, Yield.Power/Today/Total
-    ├── tank.<Serial>
-    │   ├── Level [%]
-    │   ├── Remaining [m³]
-    │   ├── RemainingLiter [l]  ← calculated: Remaining × 1000
-    │   ├── Capacity [m³]
-    │   ├── CapacityLiter [l]   ← calculated: Capacity × 1000
-    │   ├── FluidType           ← 0=Fuel, 1=Fresh water, 2=Waste water, 7=Diesel, 11=Raw water, …
-    │   └── Status              ← 0=OK, 1=Disconnected, 2=Short circuit, …
     └── switch.<Group>.<Serial>
         ├── State  ← writable (true/false) via MQTT
         └── Status ← hardware feedback
@@ -150,7 +158,6 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 ### Disable Charge / Feed-In
 - `control.inverter.DisableCharge = 1` → battery will not charge
 - `control.inverter.DisableFeedIn = 1` → inverter will not feed into grid
-  ⚠ Effect depends on system topology (AC-coupled vs. AC-out load)
 
 ### DVCC Limits (requires DVCC enabled on GX)
 - `control.system.DvccMaxChargeCurrent` [A]: limit charge current system-wide (-1 = disabled)
@@ -160,93 +167,45 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
-### 0.7.2 (2026-06-06)
+### 0.7.3 (2026-06-08)
+- Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches
+
+### 0.7.2 (2026-06-08)
 - Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)
 
-### 0.7.2 (2026-06-06)
-- Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)
+### 0.7.1 (2026-06-07)
+- Fix object structure: add missing intermediate objects (folder/channel hierarchy)
+- Fix state roles (level for writable controls, indicator for switch status, value for instanceId)
+- Fix switch device channel type
 
-### 0.7.1 (2026-06-06)
-- Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type
-
-### 0.7.0 (2026-06-06)
-- Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)
+### 0.7.0 (2026-06-07)
+- Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable)
+- Fix: use this.setTimeout() instead of plain setTimeout
+- i18n support for all state names (en/de)
 
 ### 0.6.9 (2026-06-06)
-- Fix: remove non-existing versions from news
+- Fix: extendObjectAsync cache via createdStates Set (W5005 fixed)
+- Fix: i18n for all state names (W5022 fixed)
+- Fix: intermediate folder/channel objects via ensureIntermediates() (E3009 fixed)
+- Fix: corrected state roles (E1008, E1009, E1011 fixed)
 
-### 0.6.8 (2026-06-06)
-- Release 0.6.8
-
-### 0.6.8 (2026-06-06)
-- Add: Tank sensor support (Level, Remaining, Capacity, FluidType, Status)
-- Add: Calculated `RemainingLiter` and `CapacityLiter` states [l]
-- Add: FluidType and Status dropdown labels (Raw water, Diesel, Fresh water, …)
-- Fix: Tank Capacity unit corrected to m³ (was Ah)
+### 0.6.8 (2026-06-05)
+- Fix: tank sensor support, virtual switch detection
 
 ### 0.6.7 (2026-06-05)
 - Fix: lint formatting for this.setTimeout Promise wrappers
 
-### 0.6.6 (2026-06-05)
-- Fix: use this.setTimeout correctly in Promise wrappers
-
-### 0.6.5 (2026-06-05)
-- Update dependencies and fix setTimeout
-
-
-### **WORK IN PROGRESS**
-- (ioBroker-Bot) Adapter requires admin >= 7.8.23 now.
-
 ### 0.6.4 (2026-06-02)
-- Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news
+- Fix: remove @types/mocha from devDependencies
 
 ### 0.6.3 (2026-06-02)
 - Fix: add mocha types to tsconfig for TypeScript 6 compatibility
 
-### 0.6.2 (2026-06-02)
-- Update TypeScript to 6.0.3
-
-### 0.6.1 (2026-06-02)
-- Fix: cleaned up changelog, removed duplicate 0.6.0 entries
-
 ### 0.6.0 (2026-05-31)
-- **Breaking change**: `ess.*` renamed to `control.system.*`, `control.inverter.*` added
+- Breaking change: `ess.*` renamed to `control.system.*`, `control.inverter.*` added
 - All device datapoints are now strictly read-only
 - `control.*` channel added for all writable registers (Modbus only)
 - `AcPowerSetpoint` keepalive: value re-sent every 800ms while ≠ 0
-- Corrected scale factors for Reg 2704 (MaxDischargePower) and Reg 2706 (MaxFeedInPower)
-- No default values written to registers on startup (read only, write on demand)
-- `overview.Ac.Grid.Power`, `overview.Ac.Consumption.Power`, `overview.Ac.PvOnGrid.Power` added as calculated totals
-- Automatic cleanup of legacy `ess.*` objects on startup
-- `Hub4.DisableCharge` (Reg 38) added
-- States/dropdown labels for vebus Mode, State, VebusChargeState, DisableFeedIn, DisableCharge
-
-### 0.5.9 (2026-05-31)
-- Fix: use this.setTimeout/setInterval, copyright in README
-
-### 0.5.8 (2026-05-31)
-- Fix: news entries reduced to 7
-
-### 0.5.7 (2026-05-30)
-- Fix: adapter-tests needs check-and-lint, automerge workflow renamed
-
-### 0.5.6 (2026-05-29)
-- Fix: switched to npm trusted publishing
-
-### 0.5.5 (2026-05-29)
-- Fix: npm-token added to deploy workflow
-
-### 0.5.4 (2026-05-29)
-- Fix: keywords in package.json, protectedNative/encryptedNative at root level
-
-### 0.5.3 (2026-05-29)
-- Fix: protectedNative/encryptedNative moved to root, tsconfig updated to node22, modbusHint size attributes
-
-### 0.5.2 (2026-05-29)
-- Fix: Node.js >= 22, admin >= 7.6.20, English-only README, jsonConfig cleanup, dependabot config
-
-### 0.5.0 (2026-05-29)
-- ESS control via Modbus Unit 100 (all settings)
 
 ### 0.1.0 (2026-05-27)
 - Complete read support for all device types

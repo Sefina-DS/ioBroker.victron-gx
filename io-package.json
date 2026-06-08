@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.7.2",
+    "version": "0.7.3",
     "news": {
-      "0.6.4": {
-        "en": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "de": "Fix: @types/mocha aus devDependencies entfernt, 0.6.2 aus news entfernt",
-        "ru": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "pt": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "nl": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "fr": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "it": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "es": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "pl": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "uk": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news",
-        "zh-cn": "Fix: remove @types/mocha from devDependencies, remove 0.6.2 from news"
-      },
       "0.6.7": {
         "en": "Fix: lint formatting for this.setTimeout Promise wrappers",
         "de": "Fix: Lint-Formatierung fuer this.setTimeout Promise-Wrapper",
@@ -93,6 +80,19 @@
         "pl": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
         "uk": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
         "zh-cn": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)"
+      },
+      "0.7.3": {
+        "en": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "de": "Performance: Static Fast-Path nach 60s Discovery reduziert RAM auf ~100MB stabil; Geräte-Scan-Button im Admin mit vollständigem Rescan; setState nur bei Wertänderung; alle Hot-Path getStateAsync durch In-Memory-Caches ersetzt",
+        "ru": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "pt": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "nl": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "fr": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "it": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "es": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "pl": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "uk": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
+        "zh-cn": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches"
       }
     },
     "titleLang": {
@@ -159,7 +159,11 @@
       {
         "admin": ">=7.8.23"
       }
-    ]
+    ],
+    "messagebox": true,
+    "supportedMessages": {
+      "startScan": true
+    }
   },
   "native": {
     "host": "",
