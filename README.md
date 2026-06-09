@@ -167,9 +167,6 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
-###  (2026-06-09)
-- 
-
 ### Add localLink to instance overview for direct GX access (2026-06-09)
 - Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt
 

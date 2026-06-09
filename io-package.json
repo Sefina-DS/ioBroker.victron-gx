@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "",
+    "version": "Add localLink to instance overview for direct GX access",
     "news": {
       "0.7.0": {
         "en": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
@@ -81,18 +81,18 @@
         "uk": "Fix: remove invalid supportedMessages from io-package.json",
         "zh-cn": "Fix: remove invalid supportedMessages from io-package.json"
       },
-      "": {
-        "en": "",
-        "de": "",
-        "ru": "",
-        "pt": "",
-        "nl": "",
-        "fr": "",
-        "it": "",
-        "es": "",
-        "pl": "",
-        "uk": "",
-        "zh-cn": ""
+      "Add localLink to instance overview for direct GX access": {
+        "en": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "de": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "ru": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "pt": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "nl": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "fr": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "it": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "es": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "pl": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "uk": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "zh-cn": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt"
       }
     },
     "titleLang": {
@@ -160,8 +160,7 @@
         "admin": ">=7.8.23"
       }
     ],
-    "messagebox": true,
-    "localLink": "http://%host%"
+    "messagebox": true
   },
   "native": {
     "host": "",
