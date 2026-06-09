@@ -1,6 +1,6 @@
 {
   "name": "iobroker.victron-gx",
-  "version": "Add localLink to instance overview for direct GX access",
+  "version": "",
   "description": "ioBroker adapter for Victron GX devices via local MQTT and Modbus",
   "author": {
     "name": "Sefina-DS",
