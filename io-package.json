@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "",
+    "version": "0.7.7",
     "news": {
       "0.7.0": {
         "en": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
@@ -81,18 +81,18 @@
         "uk": "Fix: remove invalid supportedMessages from io-package.json",
         "zh-cn": "Fix: remove invalid supportedMessages from io-package.json"
       },
-      "": {
-        "en": "",
-        "de": "",
-        "ru": "",
-        "pt": "",
-        "nl": "",
-        "fr": "",
-        "it": "",
-        "es": "",
-        "pl": "",
-        "uk": "",
-        "zh-cn": ""
+      "0.7.7": {
+        "en": "Add localLink to instance overview for direct GX access",
+        "de": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "ru": "Add localLink to instance overview for direct GX access",
+        "pt": "Add localLink to instance overview for direct GX access",
+        "nl": "Add localLink to instance overview for direct GX access",
+        "fr": "Add localLink to instance overview for direct GX access",
+        "it": "Add localLink to instance overview for direct GX access",
+        "es": "Add localLink to instance overview for direct GX access",
+        "pl": "Add localLink to instance overview for direct GX access",
+        "uk": "Add localLink to instance overview for direct GX access",
+        "zh-cn": "Add localLink to instance overview for direct GX access"
       }
     },
     "titleLang": {
