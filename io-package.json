@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.7.5",
+    "version": "Add localLink to instance overview for direct GX access",
     "news": {
-      "0.6.9": {
-        "en": "Fix: remove non-existing versions from news",
-        "de": "Fix: nicht existierende Versionen aus news entfernt",
-        "ru": "Fix: remove non-existing versions from news",
-        "pt": "Fix: remove non-existing versions from news",
-        "nl": "Fix: remove non-existing versions from news",
-        "fr": "Fix: remove non-existing versions from news",
-        "it": "Fix: remove non-existing versions from news",
-        "es": "Fix: remove non-existing versions from news",
-        "pl": "Fix: remove non-existing versions from news",
-        "uk": "Fix: remove non-existing versions from news",
-        "zh-cn": "Fix: remove non-existing versions from news"
-      },
       "0.7.0": {
         "en": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
         "de": "Performance: State-Objekt-Cache reduziert RAM-Verbrauch von ~660MB auf ~155MB (stabil); this.setTimeout() statt plain setTimeout; i18n-Unterstützung für alle State-Namen (en/de)",
@@ -93,6 +80,19 @@
         "pl": "Fix: remove invalid supportedMessages from io-package.json",
         "uk": "Fix: remove invalid supportedMessages from io-package.json",
         "zh-cn": "Fix: remove invalid supportedMessages from io-package.json"
+      },
+      "Add localLink to instance overview for direct GX access": {
+        "en": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "de": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "ru": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "pt": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "nl": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "fr": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "it": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "es": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "pl": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "uk": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
+        "zh-cn": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt"
       }
     },
     "titleLang": {

@@ -167,6 +167,9 @@ Write `control.inverter.AcPowerSetpoint` [W]:
 
 ## Changelog
 
+### Add localLink to instance overview for direct GX access (2026-06-09)
+- Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt
+
 ### 0.7.5 (2026-06-08)
 - Fix: remove invalid supportedMessages from io-package.json
 
