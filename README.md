@@ -13,18 +13,27 @@ Connects ioBroker **directly and locally** to Victron GX devices (Cerbo GX, Venu
 
 Connects ioBroker directly and locally to Victron GX devices via the local MQTT protocol. Supports reading all device data and full ESS/inverter control via Modbus TCP.
 
-- All device datapoints are **read-only** (except virtual switches via MQTT)
-- Control happens exclusively through the `control.*` channel via Modbus TCP
+- All device datapoints are **discovered automatically** and created as ioBroker states
+- Control exclusively through the `control.*` channel via Modbus TCP
 - Works with single-phase and three-phase systems
 - Automatic Modbus Unit ID discovery
-- **Low RAM footprint**: ~100 MB stable after discovery phase
+- **Low RAM footprint**: ~130 MB stable
+- Virtual devices via Node-RED (`dbus-victron-virtual`) are fully supported
+
+---
 
 ## Requirements
 
 **On the GX device:**
 - Enable MQTT: `Settings → Integrations → MQTT access → On`
 - For Modbus control: `Settings → Integrations → Modbus TCP Server → Enabled`
-- Write access: `Write access allowed`
+- Write access: `Access level → Write access allowed`
+
+**In ioBroker:**
+- Node.js >= 22
+- Admin >= 7.7.28
+
+---
 
 ## Installation
 
@@ -34,111 +43,87 @@ Connects ioBroker directly and locally to Victron GX devices via the local MQTT 
    - MQTT port: `1883` (default)
    - Optional: **Enable control** (activates Modbus TCP and `control.*` datapoints)
 
-## Device Discovery
+---
 
-The adapter uses a two-phase approach for minimal RAM usage:
+## Configuration
 
-**Discovery phase** (first 60 seconds after start):
-- All connected Victron devices and their datapoints are discovered automatically
-- States and channels are created dynamically
+![Configuration](docs/img/victron-gx-einstellungen.png)
 
-**Static mode** (after 60 seconds):
-- Adapter switches to an optimized fast-path with minimal overhead
-- Only `setState` is called when values actually change
-- RAM usage stabilizes at ~100 MB regardless of message rate
+| Field | Description |
+|-------|-------------|
+| IP address of GX device | Local IP of Cerbo/Venus/Ekrano GX |
+| MQTT port | Default: 1883 |
+| MQTT username / password | Only if MQTT auth is configured on GX |
+| Enable control | Activates Modbus TCP control |
+| Modbus port | Default: 502 |
 
-**Rescan** (Admin → Devices tab):
-- If you add new hardware, use the "Start device scan" button
-- All existing device objects are deleted and rediscovered
+---
 
 ## Supported Devices
 
-| Device | Read | Control |
-|---|---|---|
-| Battery / BMS (LiFePO4, AGM, ...) | ✅ | – |
-| MultiPlus / Quattro (VE.Bus) | ✅ | ✅ Modbus |
-| ESS / GX System Settings | ✅ | ✅ Modbus |
-| Grid Meter | ✅ | – |
-| AC Loads (real + Node-RED virtual) | ✅ | – |
-| PV Inverters (real + Node-RED) | ✅ | – |
-| Virtual Switches (Node-RED) | ✅ | ✅ MQTT |
-| Solar Chargers (MPPT) | ✅ | – |
-| System Overview | ✅ | – |
+The adapter automatically discovers all devices connected to the GX device:
 
-## Datapoint Structure
+![GX Devices](docs/img/victron-gx-GX-Geräte.png)
+
+| Device type | Description |
+|-------------|-------------|
+| `battery` | Battery systems (e.g. SerialBattery/LLT/JBD) |
+| `vebus` | MultiPlus/Quattro inverters |
+| `grid` | Grid meters (e.g. Shelly 3EM, Carlo Gavazzi) |
+| `pvinverter` | PV inverters |
+| `acload` | AC loads |
+| `switch` | Virtual switches (Node-RED) |
+| `temperature` | Temperature sensors |
+| `meteo` | Weather stations |
+| `tank` | Tank level sensors |
+| `system` | System overview |
+
+---
+
+## Object Structure
+
+![Object structure](docs/img/victron-gx-Objektstruktur.png)
 
 ```
 victron-gx.0
-├── info.connection          ← MQTT connected (boolean)
-├── info.modbusConnected     ← Modbus connected (boolean)
-├── info.modbusWritable      ← Write access confirmed (boolean)
-├── info.scanStatus          ← Device scan status (text)
-│
-├── overview.*               ← Aggregated system values (read only)
-│   ├── Dc.Battery.Soc / Voltage / Current / Power
-│   ├── Ac.Grid.L1/L2/L3.Power/Current
-│   ├── Ac.Grid.Power            ← calculated: L1+L2+L3
-│   ├── Ac.Consumption.L1/L2/L3.Power
-│   ├── Ac.Consumption.Power     ← calculated: L1+L2+L3
-│   ├── Ac.PvOnGrid.L1/L2/L3.Power
-│   ├── Ac.PvOnGrid.Power        ← calculated: L1+L2+L3
-│   └── SystemState.State / TimeToGo
-│
-├── control.*                ← Writable control registers (only when control enabled)
-│   ├── inverter.*           ← MultiPlus/Quattro (Modbus Unit 238)
-│   │   ├── Mode             ← Reg 33: 1=Charger only, 2=Inverter only, 3=On, 4=Off (APS)
-│   │   ├── AcIn1CurrentLimit← Reg 22: AC input current limit [A]
-│   │   ├── AcPowerSetpoint  ← Reg 37: ESS live setpoint [W] (+=charge, -=feed-in)
-│   │   │                       ⚠ Keepalive: value is re-sent every 800ms while ≠ 0
-│   │   │                       ⚠ Requires ESS mode = External control (EssMode = 3)
-│   │   ├── DisableCharge    ← Reg 38: 0=charging allowed, 1=charging blocked
-│   │   └── DisableFeedIn    ← Reg 39: 0=feed-in allowed, 1=feed-in blocked
-│   └── system.*             ← GX/ESS settings (Modbus Unit 100)
-│       ├── GridSetpoint     ← Reg 2700: grid setpoint [W] (0=zero feed-in, -W=feed-in)
-│       ├── EssMode          ← Reg 2902: 1=with compensation, 2=without, 3=External
-│       ├── BatteryLifeState ← Reg 2900: ESS operating mode
-│       ├── MinimumSoc       ← Reg 2901: minimum SoC % (except grid failure)
-│       ├── BatteryLifeSocLimit ← Reg 2903: BL SoC limit % (read only)
-│       ├── MaxFeedInPower   ← Reg 2706: max feed-in [W] (-1=no limit, 0=blocked)
-│       ├── AcFeedInEnabled  ← Reg 2708: 0=allowed, 1=blocked
-│       ├── DcFeedInEnabled  ← Reg 2707: DC overvoltage feed-in (0=off, 1=on)
-│       ├── FeedInLimitActive← Reg 2709: limiting active (read only)
-│       ├── DvccMaxChargeCurrent ← Reg 2705: DVCC max charge current [A] (-1=disabled)
-│       └── MaxDischargePower    ← Reg 2704: max discharge power [W] (DVCC only)
-│
-└── devices.*                ← Device data (read only, values exactly as received from GX)
-    ├── battery.<Serial>
-    │   ├── Soc, Dc.0.Voltage/Current/Power, TimeToGo, Capacity
-    │   ├── cells.cell01–cell32 / min / max / diff
-    │   ├── temperatures.main / temp1–temp4 / min / max
-    │   └── alarms.lowVoltage / highVoltage / lowSoc
-    ├── vebus.<Serial>
-    │   ├── Mode, State, VebusError, VebusChargeState, Soc
-    │   ├── Ac.ActiveIn.L1.P/I/V/S, Ac.ActiveIn.P
-    │   ├── Ac.Out.L1.P/I/V/F/S, Ac.Out.P
-    │   ├── Hub4.L1.AcPowerSetpoint  ← live value (read only here, write via control.*)
-    │   ├── Hub4.DisableFeedIn       ← live value (read only here)
-    │   ├── Hub4.DisableCharge       ← live value (read only here)
-    │   └── Dc.0.Voltage/Current/Power
-    ├── grid.<Serial>
-    │   └── Ac.L1/L2/L3.Power/Voltage/Current, Ac.Energy.Forward/Reverse
-    ├── acload.<Serial>
-    │   └── Ac.L1/L2/L3.Power/Voltage/Current, Ac.Energy.Forward
-    ├── pvinverter.<Serial>
-    │   ├── Ac.L1/L2/L3.Power/Voltage/Current
-    │   └── StatusCode, ErrorCode, Ac.Frequency, Ac.MaxPower
-    ├── solarcharger.<Serial>
-    │   ├── Pv.V, Pv.P, Dc.0.Voltage/Current
-    │   └── State, Yield.Power/Today/Total
-    └── switch.<Group>.<Serial>
-        ├── State  ← writable (true/false) via MQTT
-        └── Status ← hardware feedback
+├── control.*          → Control via Modbus TCP
+├── devices.*          → All discovered devices
+│   ├── battery.*
+│   ├── vebus.*
+│   ├── grid.*
+│   ├── pvinverter.*
+│   ├── acload.*
+│   ├── switch.*
+│   ├── temperature.*
+│   ├── meteo.*
+│   ├── tank.*
+│   └── system.*
+├── overview.*         → System overview (from system/0)
+└── info.*             → Connection status
 ```
+
+---
+
+## Device List (Admin)
+
+![Device whitelist](docs/img/victron-gx-Geräte.png)
+
+The **Devices** tab shows all discovered devices with type, serial number, name and number of datapoints. The list can be downloaded as a JSON file – useful for support requests.
+
+---
+
+## Topic Catalog (Admin)
+
+![All topics](docs/img/victron-gx-AlleTopics.png)
+
+The **All Topics** tab shows all MQTT topics that the GX device has sent since the last adapter start. Topics processed by the adapter are marked with ✓. The catalog can be downloaded as a JSON file.
+
+---
 
 ## Control
 
 ### Virtual Switches (Node-RED)
-Set `State` to `true`/`false` → MQTT Write → GX → Node-RED → Relay
+Set `State` to `true`/`false` → MQTT write → GX → Node-RED → relay
 
 ### ESS Grid Setpoint (simplest approach)
 Write `control.system.GridSetpoint` [W]:
@@ -146,88 +131,72 @@ Write `control.system.GridSetpoint` [W]:
 - `-3000` → feed 3000W into grid (battery discharges)
 - `+500` → draw 500W from grid (battery charges)
 
-The Victron ESS algorithm automatically calculates the correct inverter setpoint. No keepalive needed.
+No keepalive needed – value is stored persistently.
 
-### ESS Live Setpoint (advanced / external control)
+### ESS Live Setpoint (direct control)
 Write `control.inverter.AcPowerSetpoint` [W]:
 - Requires `control.system.EssMode = 3` (External control)
-- The adapter sends this value every 800ms as long as it is ≠ 0 (Victron watchdog)
-- Set to `0` to return control to Victron ESS algorithm
-- Use for dynamic control scripts (e.g. dynamic electricity tariffs)
+- The adapter resends the value every 800ms while it is ≠ 0 (Victron watchdog)
+- Set to `0` to return control to the Victron ESS algorithm
 
 ### Disable Charge / Feed-In
 - `control.inverter.DisableCharge = 1` → battery will not charge
 - `control.inverter.DisableFeedIn = 1` → inverter will not feed into grid
 
 ### DVCC Limits (requires DVCC enabled on GX)
-- `control.system.DvccMaxChargeCurrent` [A]: limit charge current system-wide (-1 = disabled)
-- `control.system.MaxDischargePower` [W]: limit discharge power (DVCC only)
+- `control.system.DvccMaxChargeCurrent` [A]: system-wide charge current limit (-1 = disabled)
+- `control.system.MaxDischargePower` [W]: discharge power limit
+
+---
+
+## Virtual Devices (Node-RED)
+
+The adapter fully supports virtual devices created via Node-RED with the `dbus-victron-virtual` package:
+
+- Virtual PV inverters
+- Virtual AC loads
+- Virtual switches (with group and individual name)
+- Virtual temperature sensors
+- Virtual weather stations
+- Virtual tank sensors
 
 ---
 
 ## Changelog
 
+### 0.8.0 (2026-06-10)
+- Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required
+
 ### 0.7.7 (2026-06-09)
 - Add localLink to instance overview for direct GX access
 
-###  (2026-06-09)
-- 
-
-### Add localLink to instance overview for direct GX access (2026-06-09)
-- Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt
-
-### 0.7.5 (2026-06-08)
+### 0.7.5 – 0.7.6
 - Fix: remove invalid supportedMessages from io-package.json
+- Add localLink to instance overview for direct GX access
 
-### 0.7.4 (2026-06-08)
-- Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices
+### 0.7.3 – 0.7.4
+- Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable
+- Add meteo device support
+- Fix temperature device (Humidity/Pressure)
+- Fix CustomName for all devices
 
-### 0.7.3 (2026-06-08)
-- Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches
+### 0.7.0 – 0.7.2
+- Performance: state object cache reduces RAM from ~660MB to ~155MB
+- Full i18n support for all state names
+- Fix object structure (folder/channel hierarchy)
 
-### 0.7.2 (2026-06-08)
-- Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)
+### 0.6.0
+- Breaking: `ess.*` renamed to `control.system.*`
+- `control.inverter.*` added
+- All device datapoints are strictly read-only
+- AcPowerSetpoint keepalive every 800ms
 
-### 0.7.1 (2026-06-07)
-- Fix object structure: add missing intermediate objects (folder/channel hierarchy)
-- Fix state roles (level for writable controls, indicator for switch status, value for instanceId)
-- Fix switch device channel type
-
-### 0.7.0 (2026-06-07)
-- Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable)
-- Fix: use this.setTimeout() instead of plain setTimeout
-- i18n support for all state names (en/de)
-
-### 0.6.9 (2026-06-06)
-- Fix: extendObjectAsync cache via createdStates Set (W5005 fixed)
-- Fix: i18n for all state names (W5022 fixed)
-- Fix: intermediate folder/channel objects via ensureIntermediates() (E3009 fixed)
-- Fix: corrected state roles (E1008, E1009, E1011 fixed)
-
-### 0.6.8 (2026-06-05)
-- Fix: tank sensor support, virtual switch detection
-
-### 0.6.7 (2026-06-05)
-- Fix: lint formatting for this.setTimeout Promise wrappers
-
-### 0.6.4 (2026-06-02)
-- Fix: remove @types/mocha from devDependencies
-
-### 0.6.3 (2026-06-02)
-- Fix: add mocha types to tsconfig for TypeScript 6 compatibility
-
-### 0.6.0 (2026-05-31)
-- Breaking change: `ess.*` renamed to `control.system.*`, `control.inverter.*` added
-- All device datapoints are now strictly read-only
-- `control.*` channel added for all writable registers (Modbus only)
-- `AcPowerSetpoint` keepalive: value re-sent every 800ms while ≠ 0
-
-### 0.1.0 (2026-05-27)
+### 0.1.0
 - Complete read support for all device types
 
 ---
 
-[Older changelogs can be found there](CHANGELOG_OLD.md)
+[Older changelogs](CHANGELOG_OLD.md)
 
 ## License
 

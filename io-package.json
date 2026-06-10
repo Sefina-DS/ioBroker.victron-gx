@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.7.7",
+    "version": "0.8.0",
     "news": {
-      "0.7.0": {
-        "en": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "de": "Performance: State-Objekt-Cache reduziert RAM-Verbrauch von ~660MB auf ~155MB (stabil); this.setTimeout() statt plain setTimeout; i18n-Unterstützung für alle State-Namen (en/de)",
-        "ru": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "pt": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "nl": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "fr": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "it": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "es": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "pl": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "uk": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)",
-        "zh-cn": "Performance: state object cache reduces RAM usage from ~660MB to ~155MB (stable); use this.setTimeout() instead of plain setTimeout; i18n support for all state names (en/de)"
-      },
       "0.7.1": {
         "en": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
         "de": "Objektstruktur korrigiert: fehlende Zwischenobjekte ergänzt (folder/channel Hierarchie), State-Rollen korrigiert (level für schreibbare Controls, indicator für Switch-Status, value für instanceId), Switch-Geräte-Channel-Typ korrigiert",
@@ -93,6 +80,19 @@
         "pl": "Add localLink to instance overview for direct GX access",
         "uk": "Add localLink to instance overview for direct GX access",
         "zh-cn": "Add localLink to instance overview for direct GX access"
+      },
+      "0.8.0": {
+        "en": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "de": "Topic Map und Topic Catalog als Admin-Tabs; dynamische Geräteerkennung ohne Timer; Switch CustomName aus Node-RED; Node.js >= 22, Admin >= 7.7.28 erforderlich",
+        "ru": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "pt": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "nl": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "fr": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "it": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "es": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "pl": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "uk": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
+        "zh-cn": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required"
       }
     },
     "titleLang": {
@@ -157,11 +157,12 @@
     ],
     "globalDependencies": [
       {
-        "admin": ">=7.8.23"
+        "admin": ">=7.7.28"
       }
     ],
     "messagebox": true,
-    "localLink": "http://%host%"
+    "localLink": "http://%host%",
+    "nodeVersion": ">=22"
   },
   "native": {
     "host": "",

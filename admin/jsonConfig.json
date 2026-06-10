@@ -48,35 +48,32 @@
           "text": "⚠️  Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
           "style": { "fontSize": "14px", "fontWeight": "bold" },
           "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
-        }
-      }
-    },
-    "tab_devices": {
-      "type": "panel",
-      "label": "Geräte",
-      "items": {
-        "scanInfo": {
-          "type": "staticText",
-          "text": "Der Adapter erkennt beim Start automatisch alle angeschlossenen Victron-Geräte (Discovery-Phase, ca. 60 Sekunden). Danach wechselt er in den effizienten Static-Mode mit minimalem RAM-Verbrauch (~100 MB).\n\nWenn du neue Hardware hinzugefügt hast, starte einen neuen Scan. Dabei werden alle bestehenden Geräteobjekte gelöscht und neu angelegt.",
-          "style": { "fontSize": "14px", "marginBottom": "16px" },
-          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
-        },
-        "scanButton": {
-          "type": "sendTo",
-          "command": "startScan",
-          "label": "🔍 Neue Geräteerkennung starten",
-          "variant": "contained",
-          "color": "primary",
-          "sm": 12, "xs": 12, "md": 6, "lg": 4, "xl": 4
         },
         "divider2": {
           "type": "divider"
-        },
-        "scanStatus": {
-          "type": "state",
-          "oid": "info.scanStatus",
-          "label": "Scan-Status",
-          "readOnly": true,
+        }
+      }
+    },
+    "tab_geräte": {
+      "type": "panel",
+      "label": "Geräte",
+      "items": {
+        "mapFrame": {
+          "type": "iframe",
+          "style": { "height": "calc(100vh - 265px)" },
+          "url": "/adapter/victron-gx/tab_whitelist.html",
+          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
+        }
+      }
+    },
+    "tab_catalog": {
+      "type": "panel",
+      "label": "Alle Topics",
+      "items": {
+        "mapFrame": {
+          "type": "iframe",
+          "style": { "height": "calc(100vh - 265px)" },
+          "url": "/adapter/victron-gx/tab_catalog.html",
           "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
         }
       }

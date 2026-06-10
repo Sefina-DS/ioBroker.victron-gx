@@ -2,17 +2,16 @@
 .*/
 !.vscode/
 !.github/
-
 *.code-workspace
 node_modules
 nbproject
-
 # npm package files
 iobroker.*.tgz
-
 Thumbs.db
 .commitinfo
-
 # i18n intermediate files
 admin/i18n/flat.txt
-admin/i18n/*/flat.txtbuild/
+admin/i18n/*/flat.txt
+build/
+# Internal development notes
+PROJEKTSTAND.md

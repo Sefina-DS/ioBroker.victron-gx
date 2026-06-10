@@ -13,6 +13,21 @@ import * as utils from '@iobroker/adapter-core';
 import * as mqtt from 'mqtt';
 import ModbusRTU from 'modbus-serial';
 
+// ── Topic Map Typen ───────────────────────────────────────────────────────────
+interface TopicMapPath {
+    stateId: string; // vollständige ioBroker State ID (ohne Namespace)
+    active: boolean; // true = State wird angelegt/aktualisiert
+}
+interface TopicMapDevice {
+    serial: string;
+    productName: string;
+    customName: string;
+    virtual: boolean;
+    paths: Record<string, TopicMapPath>; // normPath → TopicMapPath
+}
+// topicMap: deviceKey ("battery/2") → TopicMapDevice
+type TopicMap = Record<string, TopicMapDevice>;
+
 // ── Gerätetypen ──────────────────────────────────────────────────────────────
 const KNOWN_DEVICE_TYPES: Record<string, string> = {
     battery: 'Batterie',
@@ -899,7 +914,7 @@ const PHASE_VOLTAGE_PATHS: Record<string, string[]> = {
 const CELL_PATH_RE = /^cells\.cell\d+$/;
 
 // ── Stale-Timeout ────────────────────────────────────────────────────────────
-const STALE_TIMEOUT_MS = 5 * 60 * 1000;
+const STALE_TIMEOUT_MS = 20 * 60 * 1000; // 20 Minuten (meteo sendet alle 15 min)
 
 // ── ESS MQTT → control.system.* Mapping ─────────────────────────────────────
 // GX sendet Settings-Werte via MQTT zurück → in control.system.* aktualisieren
@@ -947,13 +962,12 @@ class VictronGx extends utils.Adapter {
     private modbusUnitMap: Map<string, number> = new Map();
     private modbusBusy: boolean = false;
     private createdStates: Set<string> = new Set();
-    private cellValueCache: Map<string, number> = new Map(); // baseId.cellXX → Wert
-    private powerValueCache: Map<string, number> = new Map(); // stateId → letzter Wert
-    private lastValueCache: Map<string, ioBroker.StateValue> = new Map(); // stateId → letzter gesetzter Wert
+    private cellValueCache: Map<string, number> = new Map();
+    private powerValueCache: Map<string, number> = new Map();
+    private lastValueCache: Map<string, ioBroker.StateValue> = new Map();
     private mqttMsgCount: number = 0;
-    private setupComplete: boolean = false;
-    private setupCompleteTimer: ioBroker.Timeout | null | undefined = null;
-    private mqttMsgCountLast: number = 0;
+    private topicMap: TopicMap = {};
+    private topicCatalog: Record<string, { value: unknown }> = {};
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'victron-gx' });
@@ -964,7 +978,7 @@ class VictronGx extends utils.Adapter {
     }
 
     // ── Adapter-Start ────────────────────────────────────────────────────────
-    private async onReady(): Promise<void> {
+    private onReady(): void {
         void this.setState('info.connection', false, true);
 
         void this.setObjectNotExistsAsync('info.modbusConnected', {
@@ -1074,44 +1088,6 @@ class VictronGx extends utils.Adapter {
             return;
         }
         this.log.info(`Verbinde mit Victron GX unter ${host}:${port}...`);
-        // Scan-Status State anlegen und initialisieren
-        await this.setObjectNotExistsAsync('info.scanStatus', {
-            type: 'state',
-            common: {
-                name: {
-                    en: 'Scan status',
-                    de: 'Scan-Status',
-                    ru: 'Scan status',
-                    pt: 'Scan status',
-                    nl: 'Scan status',
-                    fr: 'Scan status',
-                    it: 'Scan status',
-                    es: 'Scan status',
-                    pl: 'Scan status',
-                    uk: 'Scan status',
-                    'zh-cn': 'Scan status',
-                },
-                type: 'string',
-                role: 'text',
-                read: true,
-                write: false,
-            },
-            native: {},
-        });
-        void this.setState('info.scanStatus', { val: 'Scanning...', ack: true });
-
-        // Nach 60 Sekunden in Static-Mode wechseln (alle Geräte bekannt)
-        this.setupCompleteTimer = this.setTimeout(() => {
-            this.setupComplete = true;
-            this.log.info(
-                `Setup abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Geräte → Static Mode aktiv`,
-            );
-            void this.setState('info.scanStatus', {
-                val: `Abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Geräte`,
-                ack: true,
-            });
-        }, 60 * 1000);
-
         this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
         if (this.config.controlEnabled) {
             const modbusPort = this.config.modbusPort || 502;
@@ -1195,6 +1171,26 @@ class VictronGx extends utils.Adapter {
                 this.startKeepAlive();
             }
         });
+    }
+
+    // Neuen Pfad in Topic Map eintragen
+    private updateTopicMap(deviceKey: string, normPath: string, stateId: string, device: DeviceInfo): void {
+        if (!this.topicMap[deviceKey]) {
+            this.topicMap[deviceKey] = {
+                serial: device.serial,
+                productName: device.productName,
+                customName: device.customName,
+                virtual: device.virtual,
+                paths: {},
+            };
+        }
+        const dev = this.topicMap[deviceKey];
+        dev.serial = device.serial;
+        dev.productName = device.productName;
+        dev.customName = device.customName;
+        if (!dev.paths[normPath]) {
+            dev.paths[normPath] = { stateId, active: true };
+        }
     }
 
     // ── Modbus TCP ───────────────────────────────────────────────────────────
@@ -1599,99 +1595,18 @@ class VictronGx extends utils.Adapter {
                 return;
             }
 
-            // ── STATIC FAST-PATH (nach Setup-Phase) ──────────────────────────
-            // Nach 60s sind alle States bekannt → minimaler Overhead
-            if (this.setupComplete) {
-                let parsedFast: any;
+            // Catalog: alle Topics mit letztem Wert speichern (nur N/<vrmId>/...)
+            if (this.vrmId && topic.startsWith(`N/${this.vrmId}/`)) {
                 try {
-                    parsedFast = JSON.parse(raw);
+                    const parsed = JSON.parse(raw);
+                    const shortTopic = topic.substring(`N/${this.vrmId}/`.length);
+                    this.topicCatalog[shortTopic] = { value: 'value' in parsed ? parsed.value : parsed };
                 } catch {
-                    return;
+                    // ignore
                 }
-                const rawValueFast = 'value' in parsedFast ? parsedFast.value : parsedFast;
-                if (rawValueFast === null || rawValueFast === undefined) {
-                    return;
-                }
-                // Topic parsen
-                const slashIdx2 = topic.indexOf('/', topic.indexOf('/', topic.indexOf('/') + 1) + 1);
-                const slashIdx3 = topic.indexOf('/', slashIdx2 + 1);
-                const slashIdx4 = topic.indexOf('/', slashIdx3 + 1);
-                if (slashIdx4 < 0) {
-                    return;
-                }
-                const deviceTypeFast = topic.substring(slashIdx2 + 1, slashIdx3);
-                const pathFast = topic.substring(slashIdx4 + 1).replace(/\//g, '.');
-
-                // Settings-Updates durchleiten
-                if (deviceTypeFast === 'settings') {
-                    void this.handleSettingsMqttUpdate(pathFast, parsedFast);
-                    return;
-                }
-
-                if (!RELEVANT_PATHS_SET[deviceTypeFast]) {
-                    return;
-                }
-                if (!RELEVANT_PATHS_SET[deviceTypeFast].has(pathFast)) {
-                    return;
-                }
-
-                // StateId aus Cache
-                const instanceStrFast = topic.substring(slashIdx3 + 1, slashIdx4);
-                const instanceFast = parseInt(instanceStrFast, 10);
-                const deviceKeyFast = `${deviceTypeFast}/${instanceFast}`;
-                const serialFast = this.serialMap.get(deviceKeyFast);
-                const deviceFast = this.deviceMap.get(deviceKeyFast);
-
-                let baseIdFast: string | null;
-                if (deviceTypeFast === 'system') {
-                    baseIdFast = 'overview';
-                } else if (deviceTypeFast === 'switch') {
-                    if (!serialFast || !deviceFast?.group) {
-                        return;
-                    }
-                    baseIdFast = `devices.switch.${deviceFast.group.replace(/[^a-zA-Z0-9_]/g, '_')}.${serialFast}`;
-                } else {
-                    baseIdFast = serialFast
-                        ? `devices.${deviceTypeFast}.${serialFast}`
-                        : `devices.${deviceTypeFast}.${instanceFast}`;
-                }
-                if (!baseIdFast) {
-                    return;
-                }
-
-                const stateIdFast = `${baseIdFast}.${pathFast}`;
-                if (!this.createdStates.has(stateIdFast)) {
-                    return;
-                } // unbekannter State → ignorieren
-
-                const storeValueFast =
-                    typeof rawValueFast === 'number'
-                        ? rawValueFast
-                        : typeof rawValueFast === 'boolean'
-                          ? rawValueFast
-                          : String(rawValueFast);
-
-                // Nur setState wenn Wert sich geändert hat
-                const lastFast = this.lastValueCache.get(stateIdFast);
-                if (lastFast !== storeValueFast) {
-                    this.lastValueCache.set(stateIdFast, storeValueFast);
-                    void this.setState(stateIdFast, { val: storeValueFast, ack: true });
-
-                    // Power-Cache aktualisieren
-                    if (typeof storeValueFast === 'number' && stateIdFast.endsWith('.Power')) {
-                        this.powerValueCache.set(stateIdFast, storeValueFast);
-                        this.updateOverviewTotalPower(stateIdFast.replace(`${baseIdFast}.`, ''));
-                    }
-
-                    // touchDevice
-                    if (deviceFast) {
-                        this.touchDevice(deviceFast, baseIdFast);
-                    }
-                }
-                return; // Fast-Path fertig
             }
 
-            // ── SETUP-PATH (erste 60 Sekunden) ───────────────────────────────
+            // ── MESSAGE HANDLER ───────────────────────────────────────────────
             let parsed: any;
             try {
                 parsed = JSON.parse(raw);
@@ -1872,13 +1787,17 @@ class VictronGx extends utils.Adapter {
             }
 
             if (!this.createdStates.has(stateId)) {
-                // Async Setup-Pfad: nur beim ersten Mal, danach immer der sync Fast-Path
-                this.createdStates.add(stateId); // sofort hinzufügen um Race-Conditions zu vermeiden
+                // Async Setup-Pfad: nur beim ersten Mal
+                this.createdStates.add(stateId);
+                // Topic Map aktualisieren
+                if (device && deviceKey) {
+                    this.updateTopicMap(deviceKey, normPath, stateId, device);
+                }
                 void this.ensureIntermediates(stateId);
                 void this.extendObjectAsync(stateId, { type: 'state', common: commonBase, native: {} });
                 void this.setState(stateId, { val: storeValue, ack: true });
             } else {
-                // Sync Fast-Path: nur setState wenn Wert sich geändert hat
+                // Bekannter State: nur setState wenn Wert sich geändert hat
                 const lastVal = this.lastValueCache.get(stateId);
                 if (lastVal !== storeValue) {
                     this.lastValueCache.set(stateId, storeValue);
@@ -2118,8 +2037,7 @@ class VictronGx extends utils.Adapter {
             case 'CustomName': {
                 if (device.customName !== value) {
                     device.customName = value;
-                    // In Setup-Phase: ensureChannel aufrufen damit Channel-Name nachgezogen wird
-                    if (!this.setupComplete && device.ready) {
+                    if (device.ready) {
                         const cnBaseId = this.getBaseId(type, instance, device.serial || undefined, device);
                         if (cnBaseId) {
                             void this.ensureChannel(cnBaseId, device);
@@ -2285,6 +2203,11 @@ class VictronGx extends utils.Adapter {
                 if (!device.serial) {
                     break;
                 }
+                // customName in Map auf individuellen Namen setzen
+                const deviceKeyC = `${type}/${instance}`;
+                if (this.topicMap[deviceKeyC] && value) {
+                    this.topicMap[deviceKeyC].customName = value;
+                }
                 const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, '_');
                 const channelId = `devices.switch.${groupKey}.${device.serial}`;
                 const suffix = value ? ` (${value})` : '';
@@ -2368,13 +2291,11 @@ class VictronGx extends utils.Adapter {
         const label = device.customName || device.productName || device.type;
 
         if (this.channelReady.has(baseId)) {
-            // In Setup-Phase: Channel-Namen immer aktualisieren (CustomName kann später kommen)
-            if (!this.setupComplete) {
-                await this.extendObjectAsync(baseId, {
-                    common: { name: label },
-                    native: { virtual: device.virtual },
-                });
-            }
+            // Channel-Namen immer aktualisieren (CustomName kann später kommen)
+            await this.extendObjectAsync(baseId, {
+                common: { name: label },
+                native: { virtual: device.virtual },
+            });
             return;
         }
 
@@ -4208,58 +4129,30 @@ class VictronGx extends utils.Adapter {
 
     // ── Adapter-Stop ─────────────────────────────────────────────────────────
     private onMessage(obj: ioBroker.Message): void {
-        if (obj.command === 'startScan') {
-            this.log.info('Manueller Scan gestartet – lösche bestehende Geräteobjekte...');
-            // Sofort in Setup-Mode wechseln
-            this.setupComplete = false;
-            void this.setState('info.scanStatus', { val: 'Scanning...', ack: true });
+        if (obj.command === 'downloadMap') {
+            const json = JSON.stringify(this.topicMap, null, 2);
             if (obj.callback) {
-                this.sendTo(obj.from, obj.command, { result: 'scan started' }, obj.callback);
+                this.sendTo(obj.from, obj.command, { result: json }, obj.callback);
             }
-
-            // Async: Objekte löschen, dann Caches leeren und Timer starten
-            void (async () => {
-                try {
-                    // Alle devices.* Objekte löschen
-                    for (const viewType of ['state', 'channel', 'folder'] as const) {
-                        const result = await this.getObjectViewAsync('system', viewType, {
-                            startkey: `${this.namespace}.devices.`,
-                            endkey: `${this.namespace}.devices.香`,
-                        });
-                        for (const row of result.rows) {
-                            await this.delObjectAsync(row.id);
-                        }
-                    }
-                    this.log.info('Geräteobjekte gelöscht – leere Caches und starte Discovery...');
-                } catch (err) {
-                    this.log.error(`Fehler beim Löschen: ${(err as Error).message}`);
-                }
-
-                // Caches erst nach dem Löschen leeren
-                this.createdStates.clear();
-                this.channelReady.clear();
-                this.lastValueCache.clear();
-                this.powerValueCache.clear();
-                this.cellValueCache.clear();
-                this.deviceMap.clear();
-                this.serialMap.clear();
-                this.modbusUnitMap.clear();
-
-                // Timer für Static Mode
-                if (this.setupCompleteTimer) {
-                    this.clearTimeout(this.setupCompleteTimer);
-                }
-                this.setupCompleteTimer = this.setTimeout(() => {
-                    this.setupComplete = true;
-                    this.log.info(
-                        `Scan abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Geräte → Static Mode aktiv`,
-                    );
-                    void this.setState('info.scanStatus', {
-                        val: `Abgeschlossen: ${this.createdStates.size} States, ${this.deviceMap.size} Geräte`,
-                        ack: true,
-                    });
-                }, 60 * 1000);
-            })();
+            return;
+        }
+        if (obj.command === 'openTopicMap') {
+            if (obj.callback) {
+                this.sendTo(
+                    obj.from,
+                    obj.command,
+                    { openUrl: '/adapter/victron-gx/tab_map.html', window: '_blank' },
+                    obj.callback,
+                );
+            }
+            return;
+        }
+        if (obj.command === 'downloadCatalog') {
+            const json = JSON.stringify(this.topicCatalog, null, 2);
+            if (obj.callback) {
+                this.sendTo(obj.from, obj.command, { result: json }, obj.callback);
+            }
+            return;
         }
     }
 
