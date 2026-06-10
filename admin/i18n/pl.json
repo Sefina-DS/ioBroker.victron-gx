@@ -1,8 +1,14 @@
 {
-    "victron-gx adapter settings": "Ustawienia adaptera dla victron-gx",
-    "IP Address of GX Device": "Adres IP urządzenia GX",
-    "MQTT Port": "Port MQTT",
-    "MQTT Username": "Nazwa użytkownika MQTT",
-    "MQTT Password": "Hasło MQTT",
-    "Modbus Polling Interval (ms)": "Interwał sondowania Modbus (ms)"
+  "tab_main": "Ustawienia główne",
+  "tab_devices": "Urządzenia",
+  "tab_catalog": "Wszystkie tematy",
+  "host_label": "Adres IP urządzenia GX",
+  "host_help": "np. 192.168.6.200",
+  "port_label": "Port MQTT",
+  "mqttUsername_label": "Nazwa użytkownika MQTT",
+  "mqttUsername_help": "Pozostaw puste jeśli nie skonfigurowano uwierzytelniania",
+  "mqttPassword_label": "Hasło MQTT",
+  "controlEnabled_label": "Włącz sterowanie (Modbus TCP)",
+  "modbusPort_label": "Port Modbus",
+  "modbusHint_text": "⚠️ Wymaganie na urządzeniu GX: Ustawienia → Integracje → Serwer Modbus TCP → Włączony & Poziom dostępu → Zapis dozwolony"
 }

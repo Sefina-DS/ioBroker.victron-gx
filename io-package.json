@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "news": {
       "0.7.1": {
         "en": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
@@ -81,18 +81,18 @@
         "uk": "Add localLink to instance overview for direct GX access",
         "zh-cn": "Add localLink to instance overview for direct GX access"
       },
-      "0.8.0": {
-        "en": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "de": "Topic Map und Topic Catalog als Admin-Tabs; dynamische Geräteerkennung ohne Timer; Switch CustomName aus Node-RED; Node.js >= 22, Admin >= 7.7.28 erforderlich",
-        "ru": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "pt": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "nl": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "fr": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "it": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "es": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "pl": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "uk": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required",
-        "zh-cn": "Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required"
+      "0.8.1": {
+        "en": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "de": "Fix: ungültiges nodeVersion aus io-package.json entfernt; localLinks hinzugefügt; i18n für Admin-Konfiguration",
+        "ru": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "pt": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "nl": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "fr": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "it": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "es": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "pl": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "uk": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+        "zh-cn": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config"
       }
     },
     "titleLang": {
@@ -161,8 +161,15 @@
       }
     ],
     "messagebox": true,
-    "localLink": "http://%host%",
-    "nodeVersion": ">=22"
+    "localLinks": {
+      "_default": {
+        "link": "http://%ip%",
+        "name": {
+          "en": "GX Web Interface",
+          "de": "GX Weboberflaeche"
+        }
+      }
+    }
   },
   "native": {
     "host": "",

@@ -164,6 +164,9 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 ## Changelog
 
+### 0.8.1 (2026-06-10)
+- Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config
+
 ### 0.8.0 (2026-06-10)
 - Topic Map and Topic Catalog as Admin tabs; dynamic device discovery without timer; Switch CustomName from Node-RED; Node.js >= 22, Admin >= 7.7.28 required
 

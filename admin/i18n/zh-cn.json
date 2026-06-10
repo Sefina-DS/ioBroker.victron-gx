@@ -1,8 +1,14 @@
 {
-    "victron-gx adapter settings": "victron-gx的适配器设置",
-    "IP Address of GX Device": "GX设备的IP地址",
-    "MQTT Port": "MQTT 端口",
-    "MQTT Username": "MQTT 用户名",
-    "MQTT Password": "MQTT密码",
-    "Modbus Polling Interval (ms)": "Modbus轮询间隔（毫秒）"
+  "tab_main": "主要设置",
+  "tab_devices": "设备",
+  "tab_catalog": "所有主题",
+  "host_label": "GX设备的IP地址",
+  "host_help": "例如 192.168.6.200",
+  "port_label": "MQTT端口",
+  "mqttUsername_label": "MQTT用户名",
+  "mqttUsername_help": "如果未配置认证则留空",
+  "mqttPassword_label": "MQTT密码",
+  "controlEnabled_label": "启用控制 (Modbus TCP)",
+  "modbusPort_label": "Modbus端口",
+  "modbusHint_text": "⚠️ GX设备前提条件：设置 → 集成 → Modbus TCP服务器 → 已启用 & 访问级别 → 允许写入"
 }

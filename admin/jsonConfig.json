@@ -1,31 +1,32 @@
 {
+  "i18n": true,
   "type": "tabs",
   "items": {
     "tab_main": {
       "type": "panel",
-      "label": "Haupteinstellungen",
+      "label": "tab_main",
       "items": {
         "host": {
           "type": "text",
-          "label": "IP-Adresse des GX-Geräts",
-          "help": "z.B. 192.168.6.200",
+          "label": "host_label",
+          "help": "host_help",
           "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
         },
         "port": {
           "type": "number",
-          "label": "MQTT-Port",
+          "label": "port_label",
           "default": 1883,
           "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
         },
         "mqttUsername": {
           "type": "text",
-          "label": "MQTT-Benutzername",
-          "help": "Leer lassen wenn kein Auth konfiguriert",
+          "label": "mqttUsername_label",
+          "help": "mqttUsername_help",
           "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
         },
         "mqttPassword": {
           "type": "password",
-          "label": "MQTT-Passwort",
+          "label": "mqttPassword_label",
           "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
         },
         "divider": {
@@ -33,19 +34,19 @@
         },
         "controlEnabled": {
           "type": "checkbox",
-          "label": "Steuerung aktivieren (Modbus TCP)",
+          "label": "controlEnabled_label",
           "default": false,
           "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
         },
         "modbusPort": {
           "type": "number",
-          "label": "Modbus Port",
+          "label": "modbusPort_label",
           "default": 502,
           "sm": 12, "md": 6, "xs": 12, "lg": 4, "xl": 4
         },
         "modbusHint": {
           "type": "staticText",
-          "text": "⚠️  Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
+          "text": "modbusHint_text",
           "style": { "fontSize": "14px", "fontWeight": "bold" },
           "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
         },
@@ -54,9 +55,9 @@
         }
       }
     },
-    "tab_geräte": {
+    "tab_geraete": {
       "type": "panel",
-      "label": "Geräte",
+      "label": "tab_devices",
       "items": {
         "mapFrame": {
           "type": "iframe",
@@ -68,7 +69,7 @@
     },
     "tab_catalog": {
       "type": "panel",
-      "label": "Alle Topics",
+      "label": "tab_catalog",
       "items": {
         "mapFrame": {
           "type": "iframe",
