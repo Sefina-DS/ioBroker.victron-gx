@@ -5,7 +5,9 @@
 Connects ioBroker **directly and locally** to Victron GX devices (Cerbo GX, Venus GX, Ekrano GX) – without any detour through Home Assistant or the VRM Cloud.
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
+[![Downloads](https://img.shields.io/npm/dm/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 
 ---
 
@@ -37,11 +39,30 @@ Connects ioBroker directly and locally to Victron GX devices via the local MQTT 
 
 ## Installation
 
-1. Install adapter via ioBroker Admin
-2. Configure instance:
+### Via ioBroker Admin (recommended)
+
+Since this adapter is not yet in the official ioBroker repository, install it via the npm tab in the Admin interface:
+
+1. Open ioBroker Admin
+2. Go to **Adapters**
+3. Click the **GitHub/Cat icon** (top right)
+4. Select the **npm** tab
+5. Enter `iobroker.victron-gx` and click **Install**
+
+### Via command line
+
+```bash
+iobroker add victron-gx --allow-root
+```
+
+### After installation
+
+1. Configure the instance:
    - Enter **IP address** of GX device
    - MQTT port: `1883` (default)
    - Optional: **Enable control** (activates Modbus TCP and `control.*` datapoints)
+
+> **Note:** Node.js >= 22 is required. If your ioBroker is running on Node.js 20, please update first.
 
 ---
 
@@ -163,6 +184,9 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 ---
 
 ## Changelog
+
+### 0.8.3 (2026-06-11)
+- Release 0.8.3
 
 ### 0.8.2 (2026-06-11)
 - Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message

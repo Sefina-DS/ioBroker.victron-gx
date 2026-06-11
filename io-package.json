@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.2",
+    "version": "0.8.3",
     "news": {
-      "0.7.2": {
-        "en": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "de": "Vollständige i18n-Unterstützung für alle State-Namen ergänzt (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "ru": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "pt": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "nl": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "fr": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "it": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "es": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "pl": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "uk": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
-        "zh-cn": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)"
-      },
       "0.7.3": {
         "en": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
         "de": "Performance: Static Fast-Path nach 60s Discovery reduziert RAM auf ~100MB stabil; Geräte-Scan-Button im Admin mit vollständigem Rescan; setState nur bei Wertänderung; alle Hot-Path getStateAsync durch In-Memory-Caches ersetzt",
@@ -93,6 +80,19 @@
         "pl": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
         "uk": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
         "zh-cn": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message"
+      },
+      "0.8.3": {
+        "en": "Release 0.8.3",
+        "de": "docs: improved installation instructions, added npm download badge",
+        "ru": "Release 0.8.3",
+        "pt": "Release 0.8.3",
+        "nl": "Release 0.8.3",
+        "fr": "Release 0.8.3",
+        "it": "Release 0.8.3",
+        "es": "Release 0.8.3",
+        "pl": "Release 0.8.3",
+        "uk": "Release 0.8.3",
+        "zh-cn": "Release 0.8.3"
       }
     },
     "titleLang": {
