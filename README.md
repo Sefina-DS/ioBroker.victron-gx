@@ -164,6 +164,9 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 ## Changelog
 
+### 0.8.2 (2026-06-11)
+- Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message
+
 ### 0.8.1 (2026-06-10)
 - Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config
 

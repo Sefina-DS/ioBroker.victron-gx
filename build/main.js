@@ -1469,11 +1469,13 @@ class VictronGx extends utils.Adapter {
         return;
       }
       if (this.vrmId && topic.startsWith(`N/${this.vrmId}/`)) {
-        try {
-          const parsed2 = JSON.parse(raw);
-          const shortTopic = topic.substring(`N/${this.vrmId}/`.length);
-          this.topicCatalog[shortTopic] = { value: "value" in parsed2 ? parsed2.value : parsed2 };
-        } catch {
+        const shortTopic = topic.substring(`N/${this.vrmId}/`.length);
+        if (!(shortTopic in this.topicCatalog)) {
+          try {
+            const parsed2 = JSON.parse(raw);
+            this.topicCatalog[shortTopic] = { value: "value" in parsed2 ? parsed2.value : parsed2 };
+          } catch {
+          }
         }
       }
       let parsed;
@@ -2355,7 +2357,7 @@ class VictronGx extends utils.Adapter {
     const now = Date.now();
     device.lastUpdate = now;
     if (device.staleTimer) {
-      clearTimeout(device.staleTimer);
+      this.clearTimeout(device.staleTimer);
     }
     if (!this.channelReady.has(baseId) || baseId === "overview") {
       return;
@@ -3913,7 +3915,7 @@ class VictronGx extends utils.Adapter {
       }
       for (const device of this.deviceMap.values()) {
         if (device.staleTimer) {
-          clearTimeout(device.staleTimer);
+          this.clearTimeout(device.staleTimer);
         }
       }
       if (this.mqttClient) {

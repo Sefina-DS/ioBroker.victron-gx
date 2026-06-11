@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.1",
+    "version": "0.8.2",
     "news": {
-      "0.7.1": {
-        "en": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "de": "Objektstruktur korrigiert: fehlende Zwischenobjekte ergänzt (folder/channel Hierarchie), State-Rollen korrigiert (level für schreibbare Controls, indicator für Switch-Status, value für instanceId), Switch-Geräte-Channel-Typ korrigiert",
-        "ru": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "pt": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "nl": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "fr": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "it": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "es": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "pl": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "uk": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type",
-        "zh-cn": "Fix object structure: add missing intermediate objects (folder/channel hierarchy), fix state roles (level for writable controls, indicator for switch status, value for instanceId), fix switch device channel type"
-      },
       "0.7.2": {
         "en": "Add full i18n support for all state names (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
         "de": "Vollständige i18n-Unterstützung für alle State-Namen ergänzt (ru, pt, nl, fr, it, es, pl, uk, zh-cn)",
@@ -93,6 +80,19 @@
         "pl": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
         "uk": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
         "zh-cn": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config"
+      },
+      "0.8.2": {
+        "en": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "de": "Fix: Speicherleck durch nativen clearTimeout statt this.clearTimeout bei Stale-Device-Timer behoben; Fix: Topic-Catalog speichert jetzt nur neue Topics statt bei jeder MQTT-Nachricht neu zu allokieren",
+        "ru": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "pt": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "nl": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "fr": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "it": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "es": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "pl": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "uk": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+        "zh-cn": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message"
       }
     },
     "titleLang": {
