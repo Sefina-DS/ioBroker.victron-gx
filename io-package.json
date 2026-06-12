@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.3",
+    "version": "0.8.4",
     "news": {
-      "0.7.3": {
-        "en": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "de": "Performance: Static Fast-Path nach 60s Discovery reduziert RAM auf ~100MB stabil; Geräte-Scan-Button im Admin mit vollständigem Rescan; setState nur bei Wertänderung; alle Hot-Path getStateAsync durch In-Memory-Caches ersetzt",
-        "ru": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "pt": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "nl": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "fr": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "it": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "es": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "pl": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "uk": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches",
-        "zh-cn": "Performance: static fast-path after 60s discovery reduces RAM to ~100MB stable; device scan button in admin with full rescan; setState only on value change; all hot-path getStateAsync replaced with in-memory caches"
-      },
       "0.7.4": {
         "en": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
         "de": "Meteo-Gerät hinzugefügt, Temperatursensor (Feuchte/Druck) korrigiert, CustomName für alle Geräte repariert",
@@ -93,6 +80,19 @@
         "pl": "Release 0.8.3",
         "uk": "Release 0.8.3",
         "zh-cn": "Release 0.8.3"
+      },
+      "0.8.4": {
+        "en": "Release 0.8.4",
+        "de": "docs: add Ko-fi badge and improved installation instructions",
+        "ru": "Release 0.8.4",
+        "pt": "Release 0.8.4",
+        "nl": "Release 0.8.4",
+        "fr": "Release 0.8.4",
+        "it": "Release 0.8.4",
+        "es": "Release 0.8.4",
+        "pl": "Release 0.8.4",
+        "uk": "Release 0.8.4",
+        "zh-cn": "Release 0.8.4"
       }
     },
     "titleLang": {

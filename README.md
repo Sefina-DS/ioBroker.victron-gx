@@ -8,6 +8,7 @@ Connects ioBroker **directly and locally** to Victron GX devices (Cerbo GX, Venu
 [![Downloads](https://img.shields.io/npm/dm/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=ko-fi)](https://ko-fi.com/sefinads)
 
 ---
 
@@ -185,8 +186,8 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 ## Changelog
 
-### 0.8.3 (2026-06-11)
-- Release 0.8.3
+### 0.8.4 (2026-06-12)
+- Release 0.8.4
 
 ### 0.8.2 (2026-06-11)
 - Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message
