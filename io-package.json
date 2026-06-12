@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.4",
+    "version": "0.8.5",
     "news": {
       "0.7.4": {
         "en": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
@@ -81,18 +81,18 @@
         "uk": "Release 0.8.3",
         "zh-cn": "Release 0.8.3"
       },
-      "0.8.4": {
-        "en": "Release 0.8.4",
-        "de": "docs: add Ko-fi badge and improved installation instructions",
-        "ru": "Release 0.8.4",
-        "pt": "Release 0.8.4",
-        "nl": "Release 0.8.4",
-        "fr": "Release 0.8.4",
-        "it": "Release 0.8.4",
-        "es": "Release 0.8.4",
-        "pl": "Release 0.8.4",
-        "uk": "Release 0.8.4",
-        "zh-cn": "Release 0.8.4"
+      "0.8.5": {
+        "en": "docs: add Ko-fi button and improved installation instructions",
+        "de": "docs: Ko-fi Button und verbesserte Installationsanleitung",
+        "ru": "docs: add Ko-fi button and improved installation instructions",
+        "pt": "docs: add Ko-fi button and improved installation instructions",
+        "nl": "docs: add Ko-fi button and improved installation instructions",
+        "fr": "docs: add Ko-fi button and improved installation instructions",
+        "it": "docs: add Ko-fi button and improved installation instructions",
+        "es": "docs: add Ko-fi button and improved installation instructions",
+        "pl": "docs: add Ko-fi button and improved installation instructions",
+        "uk": "docs: add Ko-fi button and improved installation instructions",
+        "zh-cn": "docs: add Ko-fi button and improved installation instructions"
       }
     },
     "titleLang": {
