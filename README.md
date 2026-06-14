@@ -187,6 +187,9 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 ## Changelog
 
+### 0.8.6 (2026-06-14)
+- Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices
+
 ### 0.8.5 (2026-06-12)
 - docs: add Ko-fi button and improved installation instructions
 

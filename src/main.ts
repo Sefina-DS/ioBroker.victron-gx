@@ -156,6 +156,7 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'CustomName',
     ],
     grid: [
+        'Ac.Power',
         'Ac.L1.Power',
         'Ac.L2.Power',
         'Ac.L3.Power',
@@ -174,6 +175,7 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'Position',
     ],
     acload: [
+        'Ac.Power',
         'Ac.L1.Power',
         'Ac.L2.Power',
         'Ac.L3.Power',
@@ -197,6 +199,7 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'NrOfPhases',
     ],
     pvinverter: [
+        'Ac.Power',
         'Ac.L1.Power',
         'Ac.L2.Power',
         'Ac.L3.Power',

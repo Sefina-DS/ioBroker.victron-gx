@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.5",
+    "version": "0.8.6",
     "news": {
-      "0.7.4": {
-        "en": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "de": "Meteo-Gerät hinzugefügt, Temperatursensor (Feuchte/Druck) korrigiert, CustomName für alle Geräte repariert",
-        "ru": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "pt": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "nl": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "fr": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "it": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "es": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "pl": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "uk": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices",
-        "zh-cn": "Add meteo device support, fix temperature device (Humidity/Pressure), fix CustomName for all devices"
-      },
       "0.7.5": {
         "en": "Fix: remove invalid supportedMessages from io-package.json",
         "de": "Fix: ungueltige supportedMessages aus io-package.json entfernt",
@@ -93,6 +80,19 @@
         "pl": "docs: add Ko-fi button and improved installation instructions",
         "uk": "docs: add Ko-fi button and improved installation instructions",
         "zh-cn": "docs: add Ko-fi button and improved installation instructions"
+      },
+      "0.8.6": {
+        "en": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "de": "Fix: Ac.Power (Gesamtleistung) für pvinverter, acload und grid Geräte wird jetzt korrekt vom GX übernommen",
+        "ru": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "pt": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "nl": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "fr": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "it": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "es": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "pl": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "uk": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+        "zh-cn": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices"
       }
     },
     "titleLang": {

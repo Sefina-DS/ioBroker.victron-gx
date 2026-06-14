@@ -149,6 +149,7 @@ const RELEVANT_PATHS = {
     "CustomName"
   ],
   grid: [
+    "Ac.Power",
     "Ac.L1.Power",
     "Ac.L2.Power",
     "Ac.L3.Power",
@@ -167,6 +168,7 @@ const RELEVANT_PATHS = {
     "Position"
   ],
   acload: [
+    "Ac.Power",
     "Ac.L1.Power",
     "Ac.L2.Power",
     "Ac.L3.Power",
@@ -190,6 +192,7 @@ const RELEVANT_PATHS = {
     "NrOfPhases"
   ],
   pvinverter: [
+    "Ac.Power",
     "Ac.L1.Power",
     "Ac.L2.Power",
     "Ac.L3.Power",
