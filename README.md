@@ -6,6 +6,7 @@ Connects ioBroker **directly and locally** to Victron GX devices (Cerbo GX, Venu
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
 [![Downloads](https://img.shields.io/npm/dm/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
+[![Installations](https://iobroker.live/badges/victron-gx-installed.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 
@@ -186,6 +187,9 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 ---
 
 ## Changelog
+
+### 0.8.7 (2026-06-14)
+- Release 0.8.7
 
 ### 0.8.6 (2026-06-14)
 - Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices

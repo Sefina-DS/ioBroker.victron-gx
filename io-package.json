@@ -1,21 +1,8 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.6",
+    "version": "0.8.7",
     "news": {
-      "0.7.5": {
-        "en": "Fix: remove invalid supportedMessages from io-package.json",
-        "de": "Fix: ungueltige supportedMessages aus io-package.json entfernt",
-        "ru": "Fix: remove invalid supportedMessages from io-package.json",
-        "pt": "Fix: remove invalid supportedMessages from io-package.json",
-        "nl": "Fix: remove invalid supportedMessages from io-package.json",
-        "fr": "Fix: remove invalid supportedMessages from io-package.json",
-        "it": "Fix: remove invalid supportedMessages from io-package.json",
-        "es": "Fix: remove invalid supportedMessages from io-package.json",
-        "pl": "Fix: remove invalid supportedMessages from io-package.json",
-        "uk": "Fix: remove invalid supportedMessages from io-package.json",
-        "zh-cn": "Fix: remove invalid supportedMessages from io-package.json"
-      },
       "0.7.7": {
         "en": "Add localLink to instance overview for direct GX access",
         "de": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
@@ -93,6 +80,19 @@
         "pl": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
         "uk": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
         "zh-cn": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices"
+      },
+      "0.8.7": {
+        "en": "Release 0.8.7",
+        "de": "docs: add German README, Ko-fi button, installation instructions via npm",
+        "ru": "Release 0.8.7",
+        "pt": "Release 0.8.7",
+        "nl": "Release 0.8.7",
+        "fr": "Release 0.8.7",
+        "it": "Release 0.8.7",
+        "es": "Release 0.8.7",
+        "pl": "Release 0.8.7",
+        "uk": "Release 0.8.7",
+        "zh-cn": "Release 0.8.7"
       }
     },
     "titleLang": {
