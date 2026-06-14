@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.8.7",
+    "version": "0.8.8",
     "news": {
       "0.7.7": {
         "en": "Add localLink to instance overview for direct GX access",
@@ -81,18 +81,18 @@
         "uk": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
         "zh-cn": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices"
       },
-      "0.8.7": {
-        "en": "Release 0.8.7",
+      "0.8.8": {
+        "en": "Release 0.8.8",
         "de": "docs: add German README, Ko-fi button, installation instructions via npm",
-        "ru": "Release 0.8.7",
-        "pt": "Release 0.8.7",
-        "nl": "Release 0.8.7",
-        "fr": "Release 0.8.7",
-        "it": "Release 0.8.7",
-        "es": "Release 0.8.7",
-        "pl": "Release 0.8.7",
-        "uk": "Release 0.8.7",
-        "zh-cn": "Release 0.8.7"
+        "ru": "Release 0.8.8",
+        "pt": "Release 0.8.8",
+        "nl": "Release 0.8.8",
+        "fr": "Release 0.8.8",
+        "it": "Release 0.8.8",
+        "es": "Release 0.8.8",
+        "pl": "Release 0.8.8",
+        "uk": "Release 0.8.8",
+        "zh-cn": "Release 0.8.8"
       }
     },
     "titleLang": {

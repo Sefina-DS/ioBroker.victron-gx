@@ -12,6 +12,8 @@ Connects ioBroker **directly and locally** to Victron GX devices (Cerbo GX, Venu
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/sefinads)
 
+🇩🇪 [Deutsche Anleitung](docs/README_de.md)
+
 ---
 
 ## What does this adapter do?
@@ -188,8 +190,8 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 ## Changelog
 
-### 0.8.7 (2026-06-14)
-- Release 0.8.7
+### 0.8.8 (2026-06-14)
+- Release 0.8.8
 
 ### 0.8.6 (2026-06-14)
 - Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices
