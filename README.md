@@ -245,6 +245,8 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 [Older changelogs](CHANGELOG_OLD.md)
 
+[Older changelogs can be found there](CHANGELOG_OLD.md)
+
 ## License
 
 MIT License
