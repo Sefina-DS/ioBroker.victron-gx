@@ -190,6 +190,9 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 ## Changelog
 
+### 0.8.9 (2026-07-02)
+- chore: bump @iobroker/adapter-core to 3.4.1
+
 ### 0.8.8 (2026-06-14)
 - Release 0.8.8
 

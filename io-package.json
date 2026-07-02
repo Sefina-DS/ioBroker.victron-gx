@@ -1,213 +1,213 @@
 {
-  "common": {
-    "name": "victron-gx",
-    "version": "0.8.8",
-    "news": {
-      "0.7.7": {
-        "en": "Add localLink to instance overview for direct GX access",
-        "de": "Direktlink zur GX-Weboberflaeche in Instanzuebersicht hinzugefuegt",
-        "ru": "Add localLink to instance overview for direct GX access",
-        "pt": "Add localLink to instance overview for direct GX access",
-        "nl": "Add localLink to instance overview for direct GX access",
-        "fr": "Add localLink to instance overview for direct GX access",
-        "it": "Add localLink to instance overview for direct GX access",
-        "es": "Add localLink to instance overview for direct GX access",
-        "pl": "Add localLink to instance overview for direct GX access",
-        "uk": "Add localLink to instance overview for direct GX access",
-        "zh-cn": "Add localLink to instance overview for direct GX access"
-      },
-      "0.8.1": {
-        "en": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "de": "Fix: ungültiges nodeVersion aus io-package.json entfernt; localLinks hinzugefügt; i18n für Admin-Konfiguration",
-        "ru": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "pt": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "nl": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "fr": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "it": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "es": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "pl": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "uk": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
-        "zh-cn": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config"
-      },
-      "0.8.2": {
-        "en": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "de": "Fix: Speicherleck durch nativen clearTimeout statt this.clearTimeout bei Stale-Device-Timer behoben; Fix: Topic-Catalog speichert jetzt nur neue Topics statt bei jeder MQTT-Nachricht neu zu allokieren",
-        "ru": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "pt": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "nl": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "fr": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "it": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "es": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "pl": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "uk": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
-        "zh-cn": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message"
-      },
-      "0.8.3": {
-        "en": "Release 0.8.3",
-        "de": "docs: improved installation instructions, added npm download badge",
-        "ru": "Release 0.8.3",
-        "pt": "Release 0.8.3",
-        "nl": "Release 0.8.3",
-        "fr": "Release 0.8.3",
-        "it": "Release 0.8.3",
-        "es": "Release 0.8.3",
-        "pl": "Release 0.8.3",
-        "uk": "Release 0.8.3",
-        "zh-cn": "Release 0.8.3"
-      },
-      "0.8.5": {
-        "en": "docs: add Ko-fi button and improved installation instructions",
-        "de": "docs: Ko-fi Button und verbesserte Installationsanleitung",
-        "ru": "docs: add Ko-fi button and improved installation instructions",
-        "pt": "docs: add Ko-fi button and improved installation instructions",
-        "nl": "docs: add Ko-fi button and improved installation instructions",
-        "fr": "docs: add Ko-fi button and improved installation instructions",
-        "it": "docs: add Ko-fi button and improved installation instructions",
-        "es": "docs: add Ko-fi button and improved installation instructions",
-        "pl": "docs: add Ko-fi button and improved installation instructions",
-        "uk": "docs: add Ko-fi button and improved installation instructions",
-        "zh-cn": "docs: add Ko-fi button and improved installation instructions"
-      },
-      "0.8.6": {
-        "en": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "de": "Fix: Ac.Power (Gesamtleistung) für pvinverter, acload und grid Geräte wird jetzt korrekt vom GX übernommen",
-        "ru": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "pt": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "nl": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "fr": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "it": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "es": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "pl": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "uk": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
-        "zh-cn": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices"
-      },
-      "0.8.8": {
-        "en": "Release 0.8.8",
-        "de": "docs: add German README, Ko-fi button, installation instructions via npm",
-        "ru": "Release 0.8.8",
-        "pt": "Release 0.8.8",
-        "nl": "Release 0.8.8",
-        "fr": "Release 0.8.8",
-        "it": "Release 0.8.8",
-        "es": "Release 0.8.8",
-        "pl": "Release 0.8.8",
-        "uk": "Release 0.8.8",
-        "zh-cn": "Release 0.8.8"
-      }
-    },
-    "titleLang": {
-      "en": "Victron GX",
-      "de": "Victron GX",
-      "ru": "Виктрон ГХ",
-      "pt": "Victron GX",
-      "nl": "Victron GX",
-      "fr": "Victron GX",
-      "it": "Victron GX",
-      "es": "Victron GX",
-      "pl": "Victron GX",
-      "uk": "Victron GX",
-      "zh-cn": "Victron GX"
-    },
-    "desc": {
-      "en": "ioBroker adapter for Victron GX devices via local MQTT and Modbus",
-      "de": "ioBroker-Adapter für Victron GX-Geräte über lokales MQTT und Modbus",
-      "ru": "Адаптер ioBroker для устройств Victron GX, работающий через локальные протоколы MQTT и Modbus.",
-      "pt": "Adaptador ioBroker para dispositivos Victron GX via MQTT e Modbus locais",
-      "nl": "ioBroker-adapter voor Victron GX-apparaten via lokale MQTT en Modbus.",
-      "fr": "Adaptateur ioBroker pour appareils Victron GX via MQTT et Modbus locaux",
-      "it": "Adattatore ioBroker per dispositivi Victron GX tramite MQTT e Modbus locali.",
-      "es": "Adaptador ioBroker para dispositivos Victron GX a través de MQTT y Modbus locales.",
-      "pl": "Adapter ioBroker dla urządzeń Victron GX przez lokalny MQTT i Modbus",
-      "uk": "Адаптер ioBroker для пристроїв Victron GX через локальний MQTT та Modbus",
-      "zh-cn": "ioBroker适配器，用于通过本地MQTT和Modbus连接Victron GX设备"
-    },
-    "authors": [
-      "Sefina-DS <ds.sefina@googlemail.com>"
-    ],
-    "keywords": [
-      "energy",
-      "victron",
-      "solar",
-      "mqtt",
-      "modbus"
-    ],
-    "licenseInformation": {
-      "type": "free",
-      "license": "MIT"
-    },
-    "platform": "Javascript/Node.js",
-    "icon": "victron-gx.png",
-    "enabled": true,
-    "extIcon": "https://raw.githubusercontent.com/Sefina-DS/ioBroker.victron-gx/main/admin/victron-gx.png",
-    "readme": "https://github.com/Sefina-DS/ioBroker.victron-gx/blob/main/README.md",
-    "loglevel": "info",
-    "tier": 3,
-    "mode": "daemon",
-    "type": "energy",
-    "compact": true,
-    "connectionType": "local",
-    "dataSource": "push",
-    "adminUI": {
-      "config": "json"
-    },
-    "dependencies": [
-      {
-        "js-controller": ">=6.0.11"
-      }
-    ],
-    "globalDependencies": [
-      {
-        "admin": ">=7.7.28"
-      }
-    ],
-    "messagebox": true,
-    "localLinks": {
-      "_default": {
-        "link": "http://%ip%",
-        "name": {
-          "en": "GX Web Interface",
-          "de": "GX Weboberflaeche"
+    "common": {
+        "name": "victron-gx",
+        "version": "0.8.9",
+        "news": {
+            "0.8.1": {
+                "en": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "de": "Fix: ungültiges nodeVersion aus io-package.json entfernt; localLinks hinzugefügt; i18n für Admin-Konfiguration",
+                "ru": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "pt": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "nl": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "fr": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "it": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "es": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "pl": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "uk": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "zh-cn": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config"
+            },
+            "0.8.2": {
+                "en": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "de": "Fix: Speicherleck durch nativen clearTimeout statt this.clearTimeout bei Stale-Device-Timer behoben; Fix: Topic-Catalog speichert jetzt nur neue Topics statt bei jeder MQTT-Nachricht neu zu allokieren",
+                "ru": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "pt": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "nl": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "fr": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "it": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "es": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "pl": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "uk": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
+                "zh-cn": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message"
+            },
+            "0.8.3": {
+                "en": "Release 0.8.3",
+                "de": "docs: improved installation instructions, added npm download badge",
+                "ru": "Release 0.8.3",
+                "pt": "Release 0.8.3",
+                "nl": "Release 0.8.3",
+                "fr": "Release 0.8.3",
+                "it": "Release 0.8.3",
+                "es": "Release 0.8.3",
+                "pl": "Release 0.8.3",
+                "uk": "Release 0.8.3",
+                "zh-cn": "Release 0.8.3"
+            },
+            "0.8.5": {
+                "en": "docs: add Ko-fi button and improved installation instructions",
+                "de": "docs: Ko-fi Button und verbesserte Installationsanleitung",
+                "ru": "docs: add Ko-fi button and improved installation instructions",
+                "pt": "docs: add Ko-fi button and improved installation instructions",
+                "nl": "docs: add Ko-fi button and improved installation instructions",
+                "fr": "docs: add Ko-fi button and improved installation instructions",
+                "it": "docs: add Ko-fi button and improved installation instructions",
+                "es": "docs: add Ko-fi button and improved installation instructions",
+                "pl": "docs: add Ko-fi button and improved installation instructions",
+                "uk": "docs: add Ko-fi button and improved installation instructions",
+                "zh-cn": "docs: add Ko-fi button and improved installation instructions"
+            },
+            "0.8.6": {
+                "en": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "de": "Fix: Ac.Power (Gesamtleistung) für pvinverter, acload und grid Geräte wird jetzt korrekt vom GX übernommen",
+                "ru": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "pt": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "nl": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "fr": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "it": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "es": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "pl": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "uk": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
+                "zh-cn": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices"
+            },
+            "0.8.8": {
+                "en": "Release 0.8.8",
+                "de": "docs: add German README, Ko-fi button, installation instructions via npm",
+                "ru": "Release 0.8.8",
+                "pt": "Release 0.8.8",
+                "nl": "Release 0.8.8",
+                "fr": "Release 0.8.8",
+                "it": "Release 0.8.8",
+                "es": "Release 0.8.8",
+                "pl": "Release 0.8.8",
+                "uk": "Release 0.8.8",
+                "zh-cn": "Release 0.8.8"
+            },
+            "0.8.9": {
+                "en": "chore: bump @iobroker/adapter-core to 3.4.1",
+                "de": "chore: adapter-core auf 3.4.1 aktualisiert",
+                "ru": "Исправления и улучшения",
+                "pt": "Correções e melhorias",
+                "nl": "Fixes en verbeteringen",
+                "fr": "Corrections et améliorations",
+                "it": "Correzioni e miglioramenti",
+                "es": "Correcciones y mejoras",
+                "pl": "Poprawki i usprawnienia",
+                "uk": "Виправлення та покращення",
+                "zh-cn": "修复和改进"
+            }
+        },
+        "titleLang": {
+            "en": "Victron GX",
+            "de": "Victron GX",
+            "ru": "Виктрон ГХ",
+            "pt": "Victron GX",
+            "nl": "Victron GX",
+            "fr": "Victron GX",
+            "it": "Victron GX",
+            "es": "Victron GX",
+            "pl": "Victron GX",
+            "uk": "Victron GX",
+            "zh-cn": "Victron GX"
+        },
+        "desc": {
+            "en": "ioBroker adapter for Victron GX devices via local MQTT and Modbus",
+            "de": "ioBroker-Adapter für Victron GX-Geräte über lokales MQTT und Modbus",
+            "ru": "Адаптер ioBroker для устройств Victron GX, работающий через локальные протоколы MQTT и Modbus.",
+            "pt": "Adaptador ioBroker para dispositivos Victron GX via MQTT e Modbus locais",
+            "nl": "ioBroker-adapter voor Victron GX-apparaten via lokale MQTT en Modbus.",
+            "fr": "Adaptateur ioBroker pour appareils Victron GX via MQTT et Modbus locaux",
+            "it": "Adattatore ioBroker per dispositivi Victron GX tramite MQTT e Modbus locali.",
+            "es": "Adaptador ioBroker para dispositivos Victron GX a través de MQTT y Modbus locales.",
+            "pl": "Adapter ioBroker dla urządzeń Victron GX przez lokalny MQTT i Modbus",
+            "uk": "Адаптер ioBroker для пристроїв Victron GX через локальний MQTT та Modbus",
+            "zh-cn": "ioBroker适配器，用于通过本地MQTT和Modbus连接Victron GX设备"
+        },
+        "authors": [
+            "Sefina-DS <ds.sefina@googlemail.com>"
+        ],
+        "keywords": [
+            "energy",
+            "victron",
+            "solar",
+            "mqtt",
+            "modbus"
+        ],
+        "licenseInformation": {
+            "type": "free",
+            "license": "MIT"
+        },
+        "platform": "Javascript/Node.js",
+        "icon": "victron-gx.png",
+        "enabled": true,
+        "extIcon": "https://raw.githubusercontent.com/Sefina-DS/ioBroker.victron-gx/main/admin/victron-gx.png",
+        "readme": "https://github.com/Sefina-DS/ioBroker.victron-gx/blob/main/README.md",
+        "loglevel": "info",
+        "tier": 3,
+        "mode": "daemon",
+        "type": "energy",
+        "compact": true,
+        "connectionType": "local",
+        "dataSource": "push",
+        "adminUI": {
+            "config": "json"
+        },
+        "dependencies": [
+            {
+                "js-controller": ">=6.0.11"
+            }
+        ],
+        "globalDependencies": [
+            {
+                "admin": ">=7.7.28"
+            }
+        ],
+        "messagebox": true,
+        "localLinks": {
+            "_default": {
+                "link": "http://%ip%",
+                "name": {
+                    "en": "GX Web Interface",
+                    "de": "GX Weboberflaeche"
+                }
+            }
         }
-      }
-    }
-  },
-  "native": {
-    "host": "",
-    "port": 1883,
-    "mqttUsername": "",
-    "mqttPassword": "",
-    "controlEnabled": false,
-    "modbusPort": 502,
-    "pollingInterval": 5000
-  },
-  "objects": [],
-  "instanceObjects": [
-    {
-      "_id": "info",
-      "type": "channel",
-      "common": {
-        "name": "Information"
-      },
-      "native": {}
     },
-    {
-      "_id": "info.connection",
-      "type": "state",
-      "common": {
-        "role": "indicator.connected",
-        "name": "Device or service connected",
-        "type": "boolean",
-        "read": true,
-        "write": false,
-        "def": false
-      },
-      "native": {}
-    }
-  ],
-  "protectedNative": [
-    "mqttPassword"
-  ],
-  "encryptedNative": [
-    "mqttPassword"
-  ]
+    "native": {
+        "host": "",
+        "port": 1883,
+        "mqttUsername": "",
+        "mqttPassword": "",
+        "controlEnabled": false,
+        "modbusPort": 502,
+        "pollingInterval": 5000
+    },
+    "objects": [],
+    "instanceObjects": [
+        {
+            "_id": "info",
+            "type": "channel",
+            "common": {
+                "name": "Information"
+            },
+            "native": {}
+        },
+        {
+            "_id": "info.connection",
+            "type": "state",
+            "common": {
+                "role": "indicator.connected",
+                "name": "Device or service connected",
+                "type": "boolean",
+                "read": true,
+                "write": false,
+                "def": false
+            },
+            "native": {}
+        }
+    ],
+    "protectedNative": [
+        "mqttPassword"
+    ],
+    "encryptedNative": [
+        "mqttPassword"
+    ]
 }
