@@ -83,7 +83,7 @@
             },
             "0.8.10": {
                 "en": "Review fixes for official repository inclusion: English-only log messages, admin tabs and state labels; sanitized serial numbers in object IDs; completed news and localLinks translations; removed unused pollingInterval; docs cleanup; updated @iobroker/types to 7.2.2",
-                "de": "Review fixes for official repository inclusion: English-only log messages, admin tabs and state labels; sanitized serial numbers in object IDs; completed news and localLinks translations; removed unused pollingInterval; docs cleanup; updated @iobroker/types to 7.2.2",
+                "de": "Review-Korrekturen für die Aufnahme ins offizielle Repository: Log-Meldungen, Admin-Tabs und Zustandsbezeichnungen auf Englisch; Seriennummern in Objekt-IDs bereinigt; Übersetzungen vervollständigt; Dokumentation überarbeitet; Abhängigkeiten aktualisiert",
                 "ru": "Исправления и улучшения",
                 "pt": "Correções e melhorias",
                 "nl": "Fixes en verbeteringen",
