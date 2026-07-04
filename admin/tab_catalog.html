@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Victron GX – Topic Catalog</title>
@@ -56,17 +56,17 @@
 </head>
 <body>
     <h2>📡 Topic Catalog</h2>
-    <p class="subtitle">Alle MQTT-Topics die das GX-Gerät seit dem letzten Adapterstart gesendet hat</p>
+    <p class="subtitle">All MQTT topics published by the GX device since the last adapter start</p>
     <div class="toolbar">
         <button class="btn" onclick="downloadCatalog()">⬇ Download</button>
-        <input class="search" type="text" id="search" placeholder="Topic suchen..." oninput="filterTable()">
+        <input class="search" type="text" id="search" placeholder="Search topics..." oninput="filterTable()">
         <span class="status" id="status"></span>
         <span class="count" id="count"></span>
     </div>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Topic</th><th>Letzter Wert</th><th>In Whitelist</th></tr></thead>
-            <tbody id="tbody"><tr><td colspan="3" class="loading">⏳ Lade Daten...</td></tr></tbody>
+            <thead><tr><th>Topic</th><th>Last Value</th><th>In Whitelist</th></tr></thead>
+            <tbody id="tbody"><tr><td colspan="3" class="loading">⏳ Loading data...</td></tr></tbody>
         </table>
     </div>
     <script>
@@ -90,14 +90,14 @@
                 var inWl = whitelistTopics.has(topic) ? '<span class="badge badge-yes">✓</span>' : '';
                 rows += '<tr><td><code>' + topic + '</code></td><td>' + val + '</td><td>' + inWl + '</td></tr>';
             }
-            document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="3" class="empty">Keine Topics</td></tr>';
-            document.getElementById('count').textContent = count + ' Topics';
+            document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="3" class="empty">No topics</td></tr>';
+            document.getElementById('count').textContent = count + ' topics';
         }
         function filterTable() { if (catalogData) renderTable(catalogData); }
         function downloadCatalog() {
             if (!catalogData) return;
             var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(catalogData, null, 2)], {type:'application/json'})); a.download = 'victron-gx-catalog.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            document.getElementById('status').textContent = '✅ Download gestartet';
+            document.getElementById('status').textContent = '✅ Download started';
         }
         window.addEventListener('load', function() {
             sendTo('downloadMap', {}, function(mapResult) {
@@ -106,7 +106,7 @@
                 }
                 sendTo('downloadCatalog', {}, function(result) {
                     if (result && result.result) { try { catalogData = JSON.parse(result.result); renderTable(catalogData); } catch(e) { document.getElementById('tbody').innerHTML = '<tr><td colspan="3" class="empty">❌ ' + e.message + '</td></tr>'; } }
-                    else { document.getElementById('tbody').innerHTML = '<tr><td colspan="3" class="empty">❌ Adapter nicht erreichbar</td></tr>'; }
+                    else { document.getElementById('tbody').innerHTML = '<tr><td colspan="3" class="empty">❌ Adapter not reachable</td></tr>'; }
                 });
             });
         });

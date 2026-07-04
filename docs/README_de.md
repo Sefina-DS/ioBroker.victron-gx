@@ -2,7 +2,7 @@
 
 <img src="../admin/victron-gx.png" width="100" align="right">
 
-Verbindet ioBroker **direkt und lokal** mit Victron GX Geräten (Cerbo GX, Venus GX, Ekrano GX) – ohne Umweg über Home Assistant oder die VRM Cloud.
+Dieser Adapter verbindet ioBroker **direkt und lokal** mit [Victron Energy](https://www.victronenergy.com/) GX-Geräten ([Cerbo GX, Venus GX, Ekrano GX](https://www.victronenergy.com/communication-centres)) – ohne Umweg über Home Assistant oder die VRM Cloud.
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
 [![Downloads](https://img.shields.io/npm/dm/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
@@ -50,12 +50,6 @@ Da dieser Adapter noch nicht im offiziellen ioBroker Repository enthalten ist, w
 3. Oben rechts auf das **GitHub/Katzen-Symbol** klicken
 4. Den **npm** Tab auswählen
 5. `iobroker.victron-gx` eingeben und auf **Installieren** klicken
-
-### Über die Kommandozeile
-
-```bash
-iobroker add victron-gx --allow-root
-```
 
 ### Nach der Installation
 

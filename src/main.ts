@@ -30,18 +30,18 @@ type TopicMap = Record<string, TopicMapDevice>;
 
 // ── Gerätetypen ──────────────────────────────────────────────────────────────
 const KNOWN_DEVICE_TYPES: Record<string, string> = {
-    battery: 'Batterie',
-    vebus: 'Wechselrichter',
-    solarcharger: 'Solarladeregler (MPPT)',
-    acload: 'AC Last',
-    grid: 'Netzanschluss',
-    pvinverter: 'PV Wechselrichter',
-    switch: 'Virtueller Schalter',
-    overview: 'Übersicht',
-    platform: 'GX Gerät',
-    temperature: 'Temperatursensor',
-    tank: 'Tanksensor',
-    meteo: 'Wetterstation',
+    battery: 'Battery',
+    vebus: 'Inverter/Charger',
+    solarcharger: 'Solar Charger (MPPT)',
+    acload: 'AC Load',
+    grid: 'Grid Meter',
+    pvinverter: 'PV Inverter',
+    switch: 'Virtual Switch',
+    overview: 'Overview',
+    platform: 'GX Device',
+    temperature: 'Temperature Sensor',
+    tank: 'Tank Sensor',
+    meteo: 'Weather Station',
 };
 
 // ── Relevante MQTT-Pfade pro Gerätetyp ──────────────────────────────────────
@@ -436,7 +436,7 @@ const CONTROL_REGISTERS: Record<
             'zh-cn': 'Operating mode',
         },
         write: true,
-        states: { 1: 'Nur Laden', 2: 'Nur Wechselrichter', 3: 'Ein (Normal)', 4: 'Aus (APS)' },
+        states: { 1: 'Charger Only', 2: 'Inverter Only', 3: 'On', 4: 'Off' },
     },
     'inverter.AcIn1CurrentLimit': {
         register: 22,
@@ -502,7 +502,7 @@ const CONTROL_REGISTERS: Record<
             'zh-cn': 'Disable charge',
         },
         write: true,
-        states: { 0: 'Laden erlaubt', 1: 'Laden gesperrt' },
+        states: { 0: 'Charging Allowed', 1: 'Charging Disabled' },
     },
     'inverter.DisableFeedIn': {
         register: 39,
@@ -524,7 +524,7 @@ const CONTROL_REGISTERS: Record<
             'zh-cn': 'Disable AC feed-in',
         },
         write: true,
-        states: { 0: 'Einspeisung erlaubt', 1: 'Einspeisung gesperrt' },
+        states: { 0: 'Feed-In Allowed', 1: 'Feed-In Disabled' },
     },
 
     // ── System / ESS-Einstellungen (Unit 100) ────────────────────────────────
@@ -571,7 +571,7 @@ const CONTROL_REGISTERS: Record<
             'zh-cn': 'ESS phase mode',
         },
         write: true,
-        states: { 1: 'Mit Phasenkompensation', 2: 'Ohne Phasenkompensation', 3: 'Externe Steuerung' },
+        states: { 1: 'With Phase Compensation', 2: 'Without Phase Compensation', 3: 'External Control' },
     },
     'system.BatteryLifeState': {
         register: 2900,
@@ -594,18 +594,18 @@ const CONTROL_REGISTERS: Record<
         },
         write: true,
         states: {
-            0: 'Deaktiviert',
+            0: 'Disabled',
             2: 'Self-consumption',
             3: 'Self-consumption',
-            4: 'Self-consumption (mit BatteryLife)',
-            5: 'Entladung deaktiviert',
-            6: 'Zwangsladen',
+            4: 'Self-consumption (with BatteryLife)',
+            5: 'Discharge Disabled',
+            6: 'Forced Charge',
             7: 'Sustain',
-            8: 'Low SoC Nachladen',
-            9: 'Batterie geladen halten',
-            10: 'Ohne BatteryLife',
-            11: 'Ohne BatteryLife (Low SoC)',
-            12: 'Ohne BatteryLife (Low SoC Nachladen)',
+            8: 'Low SoC Recharge',
+            9: 'Keep Battery Charged',
+            10: 'Without BatteryLife',
+            11: 'Without BatteryLife (Low SoC)',
+            12: 'Without BatteryLife (Low SoC Recharge)',
         },
     },
     'system.MinimumSoc': {
@@ -692,7 +692,7 @@ const CONTROL_REGISTERS: Record<
             'zh-cn': 'AC feed-in to grid',
         },
         write: true,
-        states: { 0: 'Einspeisung erlaubt', 1: 'Einspeisung gesperrt' },
+        states: { 0: 'Feed-In Allowed', 1: 'Feed-In Disabled' },
     },
     'system.DcFeedInEnabled': {
         register: 2707,
@@ -714,7 +714,7 @@ const CONTROL_REGISTERS: Record<
             'zh-cn': 'DC surplus to grid (overvoltage feed-in)',
         },
         write: true,
-        states: { 0: 'Deaktiviert', 1: 'Aktiviert' },
+        states: { 0: 'Disabled', 1: 'Enabled' },
     },
     'system.FeedInLimitActive': {
         register: 2709,
@@ -736,7 +736,7 @@ const CONTROL_REGISTERS: Record<
             'zh-cn': 'Feed-in limit active',
         },
         write: false,
-        states: { 0: 'Nein', 1: 'Ja' },
+        states: { 0: 'No', 1: 'Yes' },
     },
     'system.DvccMaxChargeCurrent': {
         register: 2705,
@@ -787,52 +787,52 @@ const CONTROL_REGISTERS: Record<
 
 // ── StatusCode Bedeutungen (pvinverter) ──────────────────────────────────────
 const PVINVERTER_STATUS: Record<number, string> = {
-    0: 'Aus',
-    1: 'Keine Verbindung',
-    2: 'Fehler',
-    3: 'Aus (Nacht)',
-    7: 'In Betrieb',
-    8: 'Normalbetrieb',
-    9: 'Temporäre Last-Reduzierung',
-    10: 'Maximale Ausgangsleistung',
+    0: 'Off',
+    1: 'No Connection',
+    2: 'Error',
+    3: 'Off (Night)',
+    7: 'Running',
+    8: 'Running (MPPT)',
+    9: 'Temporary Derating',
+    10: 'Maximum Output Power',
 };
 
 // ── States-Definitionen für MQTT-Datenpunkte ─────────────────────────────────
 const STATES_MAP: Record<string, Record<string, Record<number, string>>> = {
     vebus: {
-        Mode: { 1: 'Nur Laden', 2: 'Nur Wechselrichter', 3: 'Ein (Normal)', 4: 'Aus (APS)' },
+        Mode: { 1: 'Charger Only', 2: 'Inverter Only', 3: 'On', 4: 'Off' },
         State: {
-            0: 'Aus',
-            1: 'Niedriglast',
-            2: 'Fehler',
-            3: 'Bulk (Laden)',
+            0: 'Off',
+            1: 'Low Power',
+            2: 'Fault',
+            3: 'Bulk',
             4: 'Absorption',
             5: 'Float',
-            6: 'Speicher',
-            7: 'Ausgleichsladen',
-            8: 'Passthrough',
-            9: 'Wechselrichter aktiv',
+            6: 'Storage',
+            7: 'Equalize',
+            8: 'Passthru',
+            9: 'Inverting',
             10: 'Power Assist',
-            11: 'Stromversorgung',
+            11: 'Power Supply',
             244: 'Sustain',
-            252: 'Externe Steuerung',
+            252: 'External Control',
         },
-        'Hub4.DisableFeedIn': { 0: 'Einspeisung erlaubt', 1: 'Einspeisung gesperrt' },
-        'Hub4.DisableCharge': { 0: 'Laden erlaubt', 1: 'Laden gesperrt' },
+        'Hub4.DisableFeedIn': { 0: 'Feed-In Allowed', 1: 'Feed-In Disabled' },
+        'Hub4.DisableCharge': { 0: 'Charging Allowed', 1: 'Charging Disabled' },
         VebusChargeState: {
-            0: 'Initialisierung',
+            0: 'Initializing',
             1: 'Bulk',
             2: 'Absorption',
             3: 'Float',
-            4: 'Speicher',
-            5: 'Ausgleichsladen',
-            6: 'Wiederherstellen',
+            4: 'Storage',
+            5: 'Equalize',
+            6: 'Recovery',
         },
     },
     battery: {
-        'alarms.lowVoltage': { 0: 'OK', 1: 'Warnung', 2: 'Alarm' },
-        'alarms.highVoltage': { 0: 'OK', 1: 'Warnung', 2: 'Alarm' },
-        'alarms.lowSoc': { 0: 'OK', 1: 'Warnung', 2: 'Alarm' },
+        'alarms.lowVoltage': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
+        'alarms.highVoltage': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
+        'alarms.lowSoc': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
     },
     tank: {
         FluidType: {
@@ -1087,14 +1087,14 @@ class VictronGx extends utils.Adapter {
         const host = this.config.host;
         const port = this.config.port || 1883;
         if (!host) {
-            this.log.error('Keine IP-Adresse konfiguriert!');
+            this.log.error('No IP address configured!');
             return;
         }
-        this.log.info(`Verbinde mit Victron GX unter ${host}:${port}...`);
+        this.log.info(`Connecting to Victron GX at ${host}:${port}...`);
         this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
         if (this.config.controlEnabled) {
             const modbusPort = this.config.modbusPort || 502;
-            this.log.info(`Steuerung aktiviert – verbinde Modbus TCP ${host}:${modbusPort}...`);
+            this.log.info(`Control enabled – connecting Modbus TCP ${host}:${modbusPort}...`);
             void this.connectModbus(host, modbusPort);
         }
     }
@@ -1104,7 +1104,7 @@ class VictronGx extends utils.Adapter {
         // ess.* und ess.control.* aus alten Versionen löschen
         try {
             await this.delObjectAsync('ess', { recursive: true });
-            this.log.info('Alte ess.* Struktur bereinigt');
+            this.log.info('Legacy ess.* structure cleaned up');
         } catch {
             /* existierte nicht */
         }
@@ -1123,7 +1123,7 @@ class VictronGx extends utils.Adapter {
                     continue;
                 }
                 if (/^\d{1,3}$/.test(parts[2])) {
-                    this.log.debug(`Bereinige numerischen Channel: ${id}`);
+                    this.log.debug(`Cleaning up numeric channel: ${id}`);
                     await this.delObjectAsync(id, { recursive: true }).catch(() => {});
                 }
             }
@@ -1149,11 +1149,11 @@ class VictronGx extends utils.Adapter {
 
         this.mqttClient = mqtt.connect(`mqtt://${host}`, options);
         this.mqttClient.on('connect', () => {
-            this.log.info('MQTT verbunden mit Victron GX!');
+            this.log.info('MQTT connected to Victron GX!');
             void this.setState('info.connection', true, true);
             this.mqttClient!.subscribe('N/#', err => {
                 if (err) {
-                    this.log.error(`Subscribe Fehler: ${err.message}`);
+                    this.log.error(`Subscribe error: ${err.message}`);
                 }
             });
         });
@@ -1161,15 +1161,15 @@ class VictronGx extends utils.Adapter {
             void this.handleMessage(topic, payload);
         });
         this.mqttClient.on('error', err => {
-            this.log.error(`MQTT Fehler: ${err.message}`);
+            this.log.error(`MQTT error: ${err.message}`);
             void this.setState('info.connection', false, true);
         });
         this.mqttClient.on('offline', () => {
-            this.log.warn('MQTT Verbindung getrennt');
+            this.log.warn('MQTT connection lost');
             void this.setState('info.connection', false, true);
         });
         this.mqttClient.on('reconnect', () => {
-            this.log.info('MQTT verbindet neu...');
+            this.log.info('MQTT reconnecting...');
             if (this.vrmId) {
                 this.startKeepAlive();
             }
@@ -1202,12 +1202,12 @@ class VictronGx extends utils.Adapter {
             this.modbusClient = new ModbusRTU();
             await this.modbusClient.connectTCP(host, { port });
             this.modbusClient.setTimeout(3000);
-            this.log.info('Modbus TCP verbunden!');
+            this.log.info('Modbus TCP connected!');
             void this.setState('info.modbusConnected', true, true);
             void this.testModbusWrite();
             this.setTimeout(() => void this.discoverModbusUnits(), 20000);
         } catch (err) {
-            this.log.error(`Modbus Verbindungsfehler: ${(err as Error).message}`);
+            this.log.error(`Modbus connection error: ${(err as Error).message}`);
             void this.setState('info.modbusConnected', false, true);
             void this.setState('info.modbusWritable', false, true);
             this.setTimeout(() => void this.connectModbus(host, port), 30000);
@@ -1229,7 +1229,7 @@ class VictronGx extends utils.Adapter {
             });
         }
         if (!vebusEntry) {
-            this.log.warn('Modbus Schreibtest: vebus Unit ID nicht bekannt');
+            this.log.warn('Modbus write test: vebus unit ID not known');
             return;
         }
         const [, vebusUnitId] = vebusEntry;
@@ -1242,11 +1242,11 @@ class VictronGx extends utils.Adapter {
             const result = await this.modbusClient.readHoldingRegisters(37, 1);
             await this.modbusClient.writeRegister(37, result.data[0]);
             this.modbusBusy = false;
-            this.log.info(`Modbus Schreibzugriff bestätigt! (vebus Unit ID ${vebusUnitId})`);
+            this.log.info(`Modbus write access confirmed! (vebus unit ID ${vebusUnitId})`);
             void this.setState('info.modbusWritable', true, true);
         } catch (err) {
             this.modbusBusy = false;
-            this.log.warn(`Modbus Schreibzugriff nicht möglich: ${(err as Error).message}`);
+            this.log.warn(`Modbus write access not possible: ${(err as Error).message}`);
             void this.setState('info.modbusWritable', false, true);
         }
     }
@@ -1255,7 +1255,7 @@ class VictronGx extends utils.Adapter {
         if (!this.modbusClient) {
             return;
         }
-        this.log.info(`Starte Modbus Unit ID Discovery... (deviceMap: ${this.deviceMap.size} Geräte)`);
+        this.log.info(`Starting Modbus unit ID discovery... (deviceMap: ${this.deviceMap.size} devices)`);
         const TYPE_TEST_REGISTER: Record<string, number> = {
             vebus: 3,
             battery: 259,
@@ -1282,7 +1282,7 @@ class VictronGx extends utils.Adapter {
                         const [deviceKey, device] = matchingEntry;
                         this.modbusUnitMap.set(deviceKey, unitId);
                         neededTypes.delete(type);
-                        this.log.info(`Modbus Discovery: ${type} → Unit ID ${unitId}`);
+                        this.log.info(`Modbus discovery: ${type} → unit ID ${unitId}`);
                         const serial = this.serialMap.get(deviceKey);
                         const baseId = this.getBaseId(device.type, device.instance, serial, device);
                         if (baseId) {
@@ -1321,7 +1321,7 @@ class VictronGx extends utils.Adapter {
                 this.setTimeout(() => resolve(), 50);
             });
         }
-        this.log.info(`Modbus Discovery abgeschlossen. ${this.modbusUnitMap.size} Geräte gefunden.`);
+        this.log.info(`Modbus discovery completed. ${this.modbusUnitMap.size} devices found.`);
 
         // ESS/settings ist immer Unit 100
         if (this.config.controlEnabled) {
@@ -1334,11 +1334,11 @@ class VictronGx extends utils.Adapter {
                 await this.modbusClient.readHoldingRegisters(2902, 1);
                 this.modbusBusy = false;
                 this.modbusUnitMap.set('ess/0', 100);
-                this.log.info('Modbus Discovery: ess/settings → Unit ID 100');
+                this.log.info('Modbus discovery: ess/settings → unit ID 100');
                 await this.initControlDatapoints();
             } catch (err) {
                 this.modbusBusy = false;
-                this.log.warn(`ESS Unit 100 nicht erreichbar: ${(err as Error).message}`);
+                this.log.warn(`ESS unit 100 not reachable: ${(err as Error).message}`);
             }
         }
     }
@@ -1446,7 +1446,7 @@ class VictronGx extends utils.Adapter {
 
             // Initial per Modbus lesen (kein Default schreiben!)
             if (unitId === undefined) {
-                this.log.warn(`control.${dpId}: keine Unit ID bekannt, überspringe Modbus-Read`);
+                this.log.warn(`control.${dpId}: no unit ID known, skipping Modbus read`);
                 continue;
             }
             try {
@@ -1466,10 +1466,10 @@ class VictronGx extends utils.Adapter {
                 this.log.info(`control.${dpId} = ${val}${reg.unit} (Reg ${reg.register})`);
             } catch (err) {
                 this.modbusBusy = false;
-                this.log.warn(`control.${dpId} Modbus-Read Fehler: ${(err as Error).message}`);
+                this.log.warn(`control.${dpId} Modbus read error: ${(err as Error).message}`);
             }
         }
-        this.log.info('control.* Datenpunkte initialisiert');
+        this.log.info('control.* datapoints initialized');
     }
 
     // ── Modbus Write ─────────────────────────────────────────────────────────
@@ -1479,7 +1479,7 @@ class VictronGx extends utils.Adapter {
         }
         const reg = CONTROL_REGISTERS[dpId];
         if (!reg) {
-            this.log.warn(`Kein Register für control.${dpId}`);
+            this.log.warn(`No register for control.${dpId}`);
             return;
         }
 
@@ -1492,7 +1492,7 @@ class VictronGx extends utils.Adapter {
             unitId = this.modbusUnitMap.get('ess/0');
         }
         if (unitId === undefined) {
-            this.log.warn(`control.${dpId}: keine Modbus Unit ID bekannt`);
+            this.log.warn(`control.${dpId}: no Modbus unit ID known`);
             return;
         }
 
@@ -1510,13 +1510,13 @@ class VictronGx extends utils.Adapter {
             await this.modbusClient.writeRegister(reg.register, writeValue);
             this.modbusBusy = false;
             this.log.info(
-                `Modbus Write: control.${dpId} = ${value}${reg.unit} → Reg ${reg.register} = ${writeValue} (Unit ${unitId})`,
+                `Modbus write: control.${dpId} = ${value}${reg.unit} → reg ${reg.register} = ${writeValue} (unit ${unitId})`,
             );
             // Bestätigung zurückschreiben
             await this.setState(`control.${dpId}`, { val: value, ack: true });
         } catch (err) {
             this.modbusBusy = false;
-            this.log.error(`Modbus Write Fehler control.${dpId}: ${(err as Error).message}`);
+            this.log.error(`Modbus write error control.${dpId}: ${(err as Error).message}`);
         }
     }
 
@@ -1532,7 +1532,7 @@ class VictronGx extends utils.Adapter {
         }
         if (value === 0) {
             this.acPowerSetpointInterval = null;
-            this.log.info('AcPowerSetpoint Keepalive gestoppt');
+            this.log.info('AcPowerSetpoint keepalive stopped');
             return;
         }
         this.acPowerSetpointInterval = this.setInterval(() => {
@@ -1565,14 +1565,14 @@ class VictronGx extends utils.Adapter {
                     this.modbusClient.setID(unitId);
                     await this.modbusClient.writeRegister(reg.register, writeValue);
                     this.modbusBusy = false;
-                    this.log.debug(`AcPowerSetpoint Keepalive: ${v}W → Reg 37 = ${writeValue}`);
+                    this.log.debug(`AcPowerSetpoint keepalive: ${v}W → reg 37 = ${writeValue}`);
                 } catch (err) {
                     this.modbusBusy = false;
-                    this.log.warn(`AcPowerSetpoint Keepalive Fehler: ${(err as Error).message}`);
+                    this.log.warn(`AcPowerSetpoint keepalive error: ${(err as Error).message}`);
                 }
             })();
         }, 800);
-        this.log.info(`AcPowerSetpoint Keepalive gestartet: ${value}W`);
+        this.log.info(`AcPowerSetpoint keepalive started: ${value}W`);
     }
 
     private startKeepAlive(): void {
@@ -1582,7 +1582,7 @@ class VictronGx extends utils.Adapter {
         this.keepAliveInterval = this.setInterval(() => {
             if (this.mqttClient && this.vrmId) {
                 this.mqttClient.publish(`R/${this.vrmId}/keepalive`, '');
-                this.log.debug('MQTT Keepalive gesendet');
+                this.log.debug('MQTT keepalive sent');
             }
         }, 50000);
         if (this.vrmId) {
@@ -1628,7 +1628,7 @@ class VictronGx extends utils.Adapter {
             const vrmId = topicParts[1];
             if (!this.vrmId && vrmId) {
                 this.vrmId = vrmId;
-                this.log.info(`VRM ID erkannt: ${vrmId}`);
+                this.log.info(`VRM ID detected: ${vrmId}`);
                 this.startKeepAlive();
             }
 
@@ -1902,7 +1902,7 @@ class VictronGx extends utils.Adapter {
                 void this.updateActivePhase(deviceType, baseId);
             }
         } catch (err) {
-            this.log.debug(`Fehler bei Topic ${topic}: ${(err as Error).message}`);
+            this.log.debug(`Error processing topic ${topic}: ${(err as Error).message}`);
         }
     }
 
@@ -2002,21 +2002,22 @@ class VictronGx extends utils.Adapter {
         switch (field) {
             case 'Serial':
             case 'Devices.0.SerialNumber': {
-                device.serial = value;
+                const safeSerial = String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
+                device.serial = safeSerial;
                 device.ready = true;
-                this.serialMap.set(deviceKey, value);
+                this.serialMap.set(deviceKey, safeSerial);
                 const k = `serial:${deviceKey}`;
                 if (!this.loggedDevices.has(k)) {
                     this.loggedDevices.add(k);
-                    this.log.info(`Gerät erkannt: ${KNOWN_DEVICE_TYPES[type] || type} → Serial: ${value}`);
+                    this.log.info(`Device detected: ${KNOWN_DEVICE_TYPES[type] || type} → serial: ${value}`);
                 }
                 const oldId = `devices.${type}.${instance}`;
-                const newId = `devices.${type}.${value}`;
+                const newId = `devices.${type}.${safeSerial}`;
                 const deleteKey = `deleted:${oldId}`;
                 if (type !== 'system' && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
                     this.loggedDevices.add(deleteKey);
                     void this.delObjectAsync(oldId, { recursive: true })
-                        .then(() => this.log.debug(`Alter Channel gelöscht: ${oldId}`))
+                        .then(() => this.log.debug(`Old channel deleted: ${oldId}`))
                         .catch(() => {});
                 }
                 break;
@@ -2029,7 +2030,7 @@ class VictronGx extends utils.Adapter {
                     const k = `virtual:${deviceKey}`;
                     if (!this.loggedDevices.has(k)) {
                         this.loggedDevices.add(k);
-                        this.log.info(`Virtuelles Gerät: ${type}/${instance} → "${value}"`);
+                        this.log.info(`Virtual device: ${type}/${instance} → "${value}"`);
                     }
                     const deleteKey = `deleted:devices.${type}.${instance}`;
                     if (type !== 'system' && !this.loggedDevices.has(deleteKey)) {
@@ -2098,7 +2099,7 @@ class VictronGx extends utils.Adapter {
                     const k = `nodered:${deviceKey}`;
                     if (!this.loggedDevices.has(k)) {
                         this.loggedDevices.add(k);
-                        this.log.info(`Node-RED Gerät: ${type}/${instance}`);
+                        this.log.info(`Node-RED device: ${type}/${instance}`);
                     }
                 }
                 break;
@@ -2134,9 +2135,9 @@ class VictronGx extends utils.Adapter {
                                 type: 'number',
                                 role: 'value',
                                 states: {
-                                    0: 'AC Ausgang (hinter MultiPlus)',
-                                    1: 'AC Eingang (Netz)',
-                                    2: 'AC Eingang 2',
+                                    0: 'AC Output (behind MultiPlus)',
+                                    1: 'AC Input (Grid)',
+                                    2: 'AC Input 2',
                                 },
                                 read: true,
                                 write: false,
@@ -2471,7 +2472,7 @@ class VictronGx extends utils.Adapter {
                     },
                     type: 'number',
                     role: 'value',
-                    states: { 0: 'Ruhend', 1: 'Laden', 2: 'Entladen' },
+                    states: { 0: 'Idle', 1: 'Charging', 2: 'Discharging' },
                     read: true,
                     write: false,
                 },
@@ -2547,7 +2548,7 @@ class VictronGx extends utils.Adapter {
         }
 
         this.channelReady.add(baseId);
-        this.log.debug(`Channel angelegt: ${baseId}`);
+        this.log.debug(`Channel created: ${baseId}`);
     }
 
     // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────
@@ -2589,7 +2590,7 @@ class VictronGx extends utils.Adapter {
             void this.setState(`${baseId}.info.stale`, { val: false, ack: true });
         }
         device.staleTimer = this.setTimeout(() => {
-            this.log.warn(`Gerät ${device.type}/${device.instance} antwortet nicht mehr (stale)`);
+            this.log.warn(`Device ${device.type}/${device.instance} no longer responding (stale)`);
             device.isStale = true;
             void this.setState(`${baseId}.info.stale`, { val: true, ack: true });
         }, STALE_TIMEOUT_MS);
@@ -2622,7 +2623,7 @@ class VictronGx extends utils.Adapter {
         if (parts[2] === 'control') {
             const dpId = parts.slice(3).join('.'); // z.B. "inverter.Mode"
             if (!this.config.controlEnabled || !this.modbusClient) {
-                this.log.warn('Steuerung: Modbus nicht aktiviert oder nicht verbunden');
+                this.log.warn('Control: Modbus not enabled or not connected');
                 return;
             }
             void (async () => {
@@ -2668,14 +2669,14 @@ class VictronGx extends utils.Adapter {
             }
         }
         if (instance === null) {
-            this.log.warn(`Konnte Instanz für ${id} nicht ermitteln`);
+            this.log.warn(`Could not determine instance for ${id}`);
             return;
         }
 
         if (deviceType === 'switch') {
             const writeVal = state.val ? 1 : 0;
             const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
-            this.log.info(`MQTT Write: ${mqttTopic} = ${writeVal}`);
+            this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
             this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
         }
     }
@@ -4183,7 +4184,7 @@ class VictronGx extends utils.Adapter {
             }
             callback();
         } catch (error) {
-            this.log.error(`Fehler beim Beenden: ${(error as Error).message}`);
+            this.log.error(`Error during shutdown: ${(error as Error).message}`);
             callback();
         }
     }

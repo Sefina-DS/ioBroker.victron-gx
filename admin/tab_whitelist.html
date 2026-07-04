@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Victron GX – Geräte</title>
+    <title>Victron GX – Devices</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -55,23 +55,23 @@
     </style>
 </head>
 <body>
-    <h2>⚡ Erkannte Geräte (Whitelist)</h2>
-    <p class="subtitle">Alle Geräte und Datenpunkte die der Adapter aktuell verarbeitet</p>
+    <h2>⚡ Detected Devices (Whitelist)</h2>
+    <p class="subtitle">All devices and datapoints currently processed by the adapter</p>
     <div class="toolbar">
         <button class="btn" onclick="downloadMap()">⬇ Download</button>
-        <input class="search" type="text" id="search" placeholder="Suchen..." oninput="filterTable()">
+        <input class="search" type="text" id="search" placeholder="Search..." oninput="filterTable()">
         <span class="status" id="status"></span>
         <span class="count" id="count"></span>
     </div>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Gerät</th><th>Typ</th><th>Seriennummer</th><th>Name</th><th>Art</th><th>Datenpunkte</th></tr></thead>
-            <tbody id="tbody"><tr><td colspan="6" class="loading">⏳ Lade Daten...</td></tr></tbody>
+            <thead><tr><th>Device</th><th>Type</th><th>Serial Number</th><th>Name</th><th>Kind</th><th>Datapoints</th></tr></thead>
+            <tbody id="tbody"><tr><td colspan="6" class="loading">⏳ Loading data...</td></tr></tbody>
         </table>
     </div>
     <script>
         var mapData = null;
-        var TYPES = { battery:'Batterie', vebus:'Wechselrichter', grid:'Netz', pvinverter:'PV-Wechselrichter', acload:'AC-Last', switch:'Schalter', temperature:'Temperatursensor', meteo:'Wetterstation', tank:'Tank', system:'System' };
+        var TYPES = { battery:'Battery', vebus:'Inverter/Charger', grid:'Grid Meter', pvinverter:'PV Inverter', acload:'AC Load', switch:'Switch', temperature:'Temperature Sensor', meteo:'Weather Station', tank:'Tank', system:'System' };
         function getInstance() { var m = location.search.match(/[?&]instance=([^&#]+)/); return 'victron-gx.' + (m ? decodeURIComponent(m[1]) : '0'); }
         function sendTo(cmd, data, cb) {
             var inst = getInstance();
@@ -84,24 +84,24 @@
             for (var key in map) {
                 var dev = map[key], type = key.split('/')[0];
                 var name = dev.customName || dev.productName || '-';
-                var badge = dev.virtual ? '<span class="badge badge-virtual">Virtuell</span>' : '<span class="badge badge-real">Real</span>';
+                var badge = dev.virtual ? '<span class="badge badge-virtual">Virtual</span>' : '<span class="badge badge-real">Real</span>';
                 if (search && key.toLowerCase().indexOf(search) < 0 && name.toLowerCase().indexOf(search) < 0 && (dev.serial||'').toLowerCase().indexOf(search) < 0) continue;
                 count++;
                 rows += '<tr><td><code>' + key + '</code></td><td>' + (TYPES[type]||type) + '</td><td><code>' + (dev.serial||'-') + '</code></td><td>' + name + '</td><td>' + badge + '</td><td>' + Object.keys(dev.paths).length + '</td></tr>';
             }
-            document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="6" class="empty">Keine Einträge</td></tr>';
-            document.getElementById('count').textContent = count + ' Geräte';
+            document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="6" class="empty">No entries</td></tr>';
+            document.getElementById('count').textContent = count + ' devices';
         }
         function filterTable() { if (mapData) renderTable(mapData); }
         function downloadMap() {
             if (!mapData) return;
             var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(mapData, null, 2)], {type:'application/json'})); a.download = 'victron-gx-whitelist.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            document.getElementById('status').textContent = '✅ Download gestartet';
+            document.getElementById('status').textContent = '✅ Download started';
         }
         window.addEventListener('load', function() {
             sendTo('downloadMap', {}, function(result) {
                 if (result && result.result) { try { mapData = JSON.parse(result.result); renderTable(mapData); } catch(e) { document.getElementById('tbody').innerHTML = '<tr><td colspan="6" class="empty">❌ ' + e.message + '</td></tr>'; } }
-                else { document.getElementById('tbody').innerHTML = '<tr><td colspan="6" class="empty">❌ Adapter nicht erreichbar</td></tr>'; }
+                else { document.getElementById('tbody').innerHTML = '<tr><td colspan="6" class="empty">❌ Adapter not reachable</td></tr>'; }
             });
         });
     </script>
