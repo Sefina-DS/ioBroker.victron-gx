@@ -2,7 +2,7 @@
 
 <img src="admin/victron-gx.png" width="100" align="right">
 
-Connects ioBroker **directly and locally** to Victron GX devices (Cerbo GX, Venus GX, Ekrano GX) – without any detour through Home Assistant or the VRM Cloud.
+This adapter connects ioBroker **directly and locally** to [Victron Energy](https://www.victronenergy.com/) GX devices ([Cerbo GX, Venus GX, Ekrano GX](https://www.victronenergy.com/communication-centres)) – without any detour through Home Assistant or the VRM Cloud.
 
 [![NPM version](https://img.shields.io/npm/v/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
 [![Downloads](https://img.shields.io/npm/dm/iobroker.victron-gx.svg)](https://www.npmjs.com/package/iobroker.victron-gx)
@@ -53,12 +53,6 @@ Since this adapter is not yet in the official ioBroker repository, install it vi
 3. Click the **GitHub/Cat icon** (top right)
 4. Select the **npm** tab
 5. Enter `iobroker.victron-gx` and click **Install**
-
-### Via command line
-
-```bash
-iobroker add victron-gx --allow-root
-```
 
 ### After installation
 
@@ -190,6 +184,9 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 
 ## Changelog
 
+### 0.8.10 (2026-07-04)
+- Review fixes for official repository inclusion: English-only log messages, admin tabs and state labels; sanitized serial numbers in object IDs; completed news and localLinks translations; removed unused pollingInterval; docs cleanup; updated @iobroker/types to 7.2.2
+
 ### 0.8.9 (2026-07-02)
 - chore: bump @iobroker/adapter-core to 3.4.1
 
@@ -203,10 +200,10 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 - docs: add Ko-fi button and improved installation instructions
 
 ### 0.8.4 (2026-06-11)
-- Coffe
+- docs: add Ko-fi support badge
 
 ### 0.8.3 (2026-06-11)
-- NPN
+- docs: improved installation instructions, added npm download badge
 
 ### 0.8.2 (2026-06-11)
 - Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message
