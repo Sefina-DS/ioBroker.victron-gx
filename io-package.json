@@ -30,7 +30,7 @@
                 "zh-cn": "修复：由过期设备计时器使用原生 clearTimeout 而非 this.clearTimeout 导致的内存泄漏；修复：主题目录现在仅存储新主题，而不是在每条 MQTT 消息时重新分配"
             },
             "0.8.3": {
-                "en": "Release 0.8.3",
+                "en": "docs: improved installation instructions, added npm download badge",
                 "de": "Doku: Installationsanleitung verbessert, npm-Download-Badge ergänzt",
                 "ru": "Выпуск 0.8.3",
                 "pt": "Versão 0.8.3",
