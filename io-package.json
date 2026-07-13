@@ -3,6 +3,19 @@
         "name": "victron-gx",
         "version": "0.8.10",
         "news": {
+            "0.8.1": {
+                "en": "Fix: remove invalid nodeVersion from io-package.json; add localLinks; add i18n for admin config",
+                "de": "Fix: ungültige nodeVersion aus io-package.json entfernt; localLinks hinzugefügt; i18n für Admin-Konfiguration hinzugefügt",
+                "ru": "Исправление: удалена недопустимая nodeVersion из io-package.json; добавлены localLinks; добавлена локализация (i18n) для конфигурации администратора",
+                "pt": "Correção: remoção da nodeVersion inválida do io-package.json; adição de localLinks; adição de i18n para a configuração do admin",
+                "nl": "Fix: ongeldige nodeVersion verwijderd uit io-package.json; localLinks toegevoegd; i18n toegevoegd voor de admin-configuratie",
+                "fr": "Correctif : suppression de la nodeVersion invalide dans io-package.json ; ajout de localLinks ; ajout de l'i18n pour la configuration admin",
+                "it": "Fix: rimossa la nodeVersion non valida da io-package.json; aggiunto localLinks; aggiunto i18n per la configurazione admin",
+                "es": "Corrección: se elimina la nodeVersion no válida de io-package.json; se añade localLinks; se añade i18n para la configuración del admin",
+                "pl": "Poprawka: usunięto nieprawidłową nodeVersion z io-package.json; dodano localLinks; dodano i18n dla konfiguracji admina",
+                "uk": "Виправлення: видалено недійсну nodeVersion з io-package.json; додано localLinks; додано i18n для конфігурації адміністратора",
+                "zh-cn": "修复：从 io-package.json 中移除无效的 nodeVersion；添加 localLinks；为管理配置添加 i18n"
+            },
             "0.8.2": {
                 "en": "Fix: memory leak caused by stale device timer using native clearTimeout instead of this.clearTimeout; fix: topic catalog now only stores new topics instead of re-allocating on every MQTT message",
                 "de": "Fix: Speicherleck durch nativen clearTimeout statt this.clearTimeout bei Stale-Device-Timer behoben; Fix: Topic-Catalog speichert jetzt nur neue Topics statt bei jeder MQTT-Nachricht neu zu allokieren",
@@ -18,7 +31,7 @@
             },
             "0.8.3": {
                 "en": "Release 0.8.3",
-                "de": "docs: improved installation instructions, added npm download badge",
+                "de": "Doku: Installationsanleitung verbessert, npm-Download-Badge ergänzt",
                 "ru": "Выпуск 0.8.3",
                 "pt": "Versão 0.8.3",
                 "nl": "Versie 0.8.3",
@@ -28,6 +41,19 @@
                 "pl": "Wydanie 0.8.3",
                 "uk": "Випуск 0.8.3",
                 "zh-cn": "发布 0.8.3"
+            },
+            "0.8.4": {
+                "en": "docs: add Ko-fi support badge",
+                "de": "docs: Ko-fi-Unterstützungs-Badge hinzugefügt",
+                "ru": "docs: добавлен значок поддержки Ko-fi",
+                "pt": "docs: adição do selo de apoio Ko-fi",
+                "nl": "docs: Ko-fi-ondersteuningsbadge toegevoegd",
+                "fr": "docs : ajout du badge de soutien Ko-fi",
+                "it": "docs: aggiunto il badge di supporto Ko-fi",
+                "es": "docs: se añade la insignia de apoyo de Ko-fi",
+                "pl": "docs: dodano odznakę wsparcia Ko-fi",
+                "uk": "docs: додано значок підтримки Ko-fi",
+                "zh-cn": "文档：添加 Ko-fi 支持徽章"
             },
             "0.8.5": {
                 "en": "docs: add Ko-fi button and improved installation instructions",
