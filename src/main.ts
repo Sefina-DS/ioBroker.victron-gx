@@ -4125,7 +4125,7 @@ class VictronGx extends utils.Adapter {
             return 'value.direction.wind';
         }
         if (path.startsWith('alarms.')) {
-            return 'indicator.alarm';
+            return 'value.warning';
         }
         if (path === 'cells.minId' || path === 'cells.maxId') {
             return 'text';
