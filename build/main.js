@@ -3770,6 +3770,9 @@ class VictronGx extends utils.Adapter {
     return path;
   }
   getUnit(path) {
+    if (path.startsWith("alarms.")) {
+      return "";
+    }
     if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) {
       return "V";
     }
@@ -3830,6 +3833,9 @@ class VictronGx extends utils.Adapter {
     return "";
   }
   getRole(path) {
+    if (path.startsWith("alarms.")) {
+      return "value.warning";
+    }
     if (path === "State") {
       return "value";
     }
@@ -3871,9 +3877,6 @@ class VictronGx extends utils.Adapter {
     }
     if (path === "WindDirection") {
       return "value.direction.wind";
-    }
-    if (path.startsWith("alarms.")) {
-      return "value.warning";
     }
     if (path === "cells.minId" || path === "cells.maxId") {
       return "text";

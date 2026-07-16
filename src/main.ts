@@ -3995,6 +3995,9 @@ class VictronGx extends utils.Adapter {
     }
 
     private getUnit(path: string): string {
+        if (path.startsWith('alarms.')) {
+            return '';
+        }
         if (
             path.startsWith('cells.cell') ||
             path === 'cells.min' ||
@@ -4069,6 +4072,9 @@ class VictronGx extends utils.Adapter {
     }
 
     private getRole(path: string): string {
+        if (path.startsWith('alarms.')) {
+            return 'value.warning';
+        }
         if (path === 'State') {
             return 'value';
         }
@@ -4123,9 +4129,6 @@ class VictronGx extends utils.Adapter {
         }
         if (path === 'WindDirection') {
             return 'value.direction.wind';
-        }
-        if (path.startsWith('alarms.')) {
-            return 'value.warning';
         }
         if (path === 'cells.minId' || path === 'cells.maxId') {
             return 'text';
