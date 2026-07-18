@@ -188,15 +188,27 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'Ac.L1.Energy.Forward',
         'Ac.L2.Energy.Forward',
         'Ac.L3.Energy.Forward',
+        'Ac.L1.Energy.Reverse',
+        'Ac.L2.Energy.Reverse',
+        'Ac.L3.Energy.Reverse',
+        'Ac.L1.PowerFactor',
+        'Ac.L2.PowerFactor',
+        'Ac.L3.PowerFactor',
         'Ac.Energy.Forward',
+        'Ac.Energy.Reverse',
         'Serial',
         'ProductName',
+        'ProductId',
         'CustomName',
         'Mgmt.Connection',
         'Mgmt.ProcessName',
         'Connected',
         'Position',
         'NrOfPhases',
+        'Role',
+        'IsGenericEnergyMeter',
+        'PhaseSetting',
+        // SwitchableOutput.*.* wird dynamisch akzeptiert (siehe SUPPORTS_OUTPUTS / isRelevantPath, Schritt S4a)
     ],
     pvinverter: [
         'Ac.Power',
@@ -229,16 +241,16 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'NrOfPhases',
     ],
     switch: [
-        'SwitchableOutput.output_1.State',
-        'SwitchableOutput.output_1.Status',
+        // Statische Metadaten (Device-Level). SwitchableOutput.*.* wird dynamisch akzeptiert
+        // (siehe SUPPORTS_OUTPUTS / isRelevantPath, Schritt S4a) - die alten hartcodierten
+        // output_1-Einträge entfallen hier bewusst, PATH_REMAP.switch bleibt bis S7 als Fallback.
         'Connected',
         'Serial',
         'ProductName',
+        'ProductId',
         'CustomName',
         'Mgmt.Connection',
         'Mgmt.ProcessName',
-        'SwitchableOutput.output_1.Settings.CustomName',
-        'SwitchableOutput.output_1.Settings.Group',
     ],
     system: [
         'Dc.Battery.Soc',
