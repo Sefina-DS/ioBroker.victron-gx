@@ -396,6 +396,51 @@ const WRITABLE_PATHS: Record<string, string[]> = {
     // ess:   read-only via MQTT; schreibbar nur via Modbus über control.*
 };
 
+// ── Shelly/Output-Multi-Channel-Support ─────────────────────────────────────
+// Additiv angelegt für die Shelly-Integration (SHELLY_INTEGRATION_PLAN.md, Schritt S1).
+// Verdrahtung folgt schrittweise: remapOutputPath()/SUPPORTS_OUTPUTS ab S4a, WRITABLE_TYPES/
+// WRITABLE_OUTPUT_REGEX/OutputRoute ab S5. Der bestehende switch-Handling-Pfad
+// (RELEVANT_PATHS_SET, PATH_REMAP.switch, WRITE_PATH_REMAP, WRITABLE_PATHS) bleibt bis
+// Schritt S7 parallel aktiv. Bis dahin sind die Symbole unten absichtlich ungenutzt.
+/* eslint-disable @typescript-eslint/no-unused-vars */
+const OUTPUT_PATH_REGEX = /^SwitchableOutput\.([^.]+)\.(.+)$/;
+const OUTPUT_KEY_NORMALIZE = /^output_(\d+)$/;
+
+/**
+ * Wandelt Victron MQTT-Pfad SwitchableOutput.<key>.<rest> in den ioBroker-Sub-Pfad
+ * outputs.<normKey>.<rest> um. Node-RED "output_1" wird zu "1" normiert; Shelly-Ziffern
+ * bleiben unverändert.
+ *
+ * @param normPath Normierter MQTT-Pfad (Slashes durch Punkte ersetzt)
+ * @returns Key/Sub/ioPath-Aufschlüsselung, oder null wenn kein Output-Pfad
+ */
+function remapOutputPath(normPath: string): { key: string; sub: string; ioPath: string } | null {
+    const m = OUTPUT_PATH_REGEX.exec(normPath);
+    if (!m) {
+        return null;
+    }
+    const rawKey = m[1];
+    const norm = OUTPUT_KEY_NORMALIZE.exec(rawKey);
+    const key = norm ? norm[1] : rawKey; // "output_1" → "1", "0" → "0"
+    const sub = m[2].replace(/^Settings\./, ''); // Settings.CustomName → CustomName
+    return { key, sub, ioPath: `outputs.${key}.${sub}` };
+}
+
+// Gerätetypen, die SwitchableOutput-Kanäle tragen dürfen (switch/acload/GX-internes Relais).
+const SUPPORTS_OUTPUTS = new Set(['switch', 'acload', 'system']);
+// Gerätetypen, deren outputs.<key>.State per MQTT schreibbar ist.
+const WRITABLE_TYPES = new Set(['switch', 'acload', 'system']);
+// Erkennt schreibbare Output-Pfade im ioBroker-Namensraum (nach BaseId, vor dem Segment "State").
+const WRITABLE_OUTPUT_REGEX = /^outputs\.([^.]+)\.State$/;
+
+// Merkt sich pro Serial+OutputKey die MQTT-DeviceInstance sowie den originalen MQTT-Segmentnamen
+// (Node-RED "output_1" bleibt als mqttKey erhalten, auch wenn der ioBroker-Pfad "1" normiert).
+interface OutputRoute {
+    instance: number;
+    mqttKey: string;
+}
+/* eslint-enable @typescript-eslint/no-unused-vars */
+
 // ── Modbus Register-Mapping ──────────────────────────────────────────────────
 // vebus: Unit ID 238 (com.victronenergy.vebus)
 // system: Unit ID 100 (com.victronenergy.settings / ESS)
@@ -971,6 +1016,9 @@ class VictronGx extends utils.Adapter {
     private mqttMsgCount: number = 0;
     private topicMap: TopicMap = {};
     private topicCatalog: Record<string, { value: unknown }> = {};
+    // Serial → OutputKey → { instance, mqttKey } - additiv für Shelly-Multi-Channel (Schritt S1),
+    // wird erst ab Schritt S4b befüllt und ab S5 für die Write-Route gelesen.
+    private outputToInstance: Map<string, Map<string, OutputRoute>> = new Map();
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'victron-gx' });
