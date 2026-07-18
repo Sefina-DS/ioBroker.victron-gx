@@ -91,8 +91,8 @@ The adapter automatically discovers all devices connected to the GX device:
 | `vebus` | MultiPlus/Quattro inverters |
 | `grid` | Grid meters (e.g. Shelly 3EM, Carlo Gavazzi) |
 | `pvinverter` | PV inverters |
-| `acload` | AC loads |
-| `switch` | Virtual switches (Node-RED) |
+| `acload` | AC loads (incl. Shelly 1PM, with switchable output) |
+| `switch` | Switchable outputs (Node-RED virtual switches, Shelly Pro3/Pro4/1PM, GX internal relay) |
 | `temperature` | Temperature sensors |
 | `meteo` | Weather stations |
 | `tank` | Tank level sensors |
@@ -112,15 +112,25 @@ victron-gx.0
 │   ├── vebus.*
 │   ├── grid.*
 │   ├── pvinverter.*
-│   ├── acload.*
-│   ├── switch.*
+│   ├── acload.<Group>.<Serial>.
+│   │   ├── Ac.*                     → measurements (unchanged)
+│   │   └── outputs.<N>.             → switchable output, if the device has one (e.g. Shelly 1PM)
+│   │       ├── State                    bool, writable
+│   │       ├── Status                   bool, read-only
+│   │       ├── Name / CustomName        string
+│   │       └── Group                    string
+│   ├── switch.<Group>.<Serial>.
+│   │   └── outputs.<N>.             → one sub-channel per output (Node-RED: one, Shelly Pro3/4: up to four)
+│   │       ├── State / Status / Name / CustomName / Group   (same as above)
 │   ├── temperature.*
 │   ├── meteo.*
 │   ├── tank.*
-│   └── system.*
-├── overview.*         → System overview (from system/0)
+│   └── system.*                     → also carries outputs.0.* for the GX internal relay
+├── overview.*         → System overview (from system/0), read-only
 └── info.*             → Connection status
 ```
+
+`<Group>` is an optional intermediate folder – only present if a group name is configured for that channel/device. See [Shelly Integration & Multi-Channel Support](#shelly-integration--multi-channel-support) below for details.
 
 ---
 
@@ -179,6 +189,52 @@ The adapter fully supports virtual devices created via Node-RED with the `dbus-v
 - Virtual temperature sensors
 - Virtual weather stations
 - Virtual tank sensors
+
+---
+
+## Shelly Integration & Multi-Channel Support
+
+Shelly devices connected to the GX (Cerbo/Venus/Ekrano) integration are now fully supported, alongside Node-RED virtual switches:
+
+- **Shelly Pro3 / Pro4**: each physical device reports its channels as separate MQTT device instances that share the same serial number. The adapter automatically merges them into a single object tree (`devices.switch.<Group>.<Serial>.outputs.<0..3>.*`).
+- **Shelly 1PM**: measurement values (`Ac.*`) and the switchable output (`outputs.0.*`) live on the same device tree under `devices.acload.<Group>.<Serial>`.
+- **GX internal relay**: the relay built into the GX device itself (`system/0`) is now switchable under `devices.system.<Serial>.outputs.0.State`, without any extra configuration.
+
+All switchable outputs – regardless of device type – share the same sub-structure, so wildcard selectors work across your whole installation:
+
+```javascript
+// Every switchable output, any device type, any group
+'victron-gx.0.devices.*.*.*.outputs.*.State'
+
+// Just the custom names, for a device overview
+'victron-gx.0.devices.*.*.*.outputs.*.CustomName'
+```
+
+### ⚠️ Breaking change (v0.9.x)
+
+Switch outputs used to live directly under the device channel; they now live under an `outputs.<N>` sub-channel. Node-RED's `output_1` is normalized to `outputs.1`:
+
+| Old (v0.8.x) | New (v0.9.x) |
+|---|---|
+| `devices.switch.<Group>.<Serial>.State` | `devices.switch.<Group>.<Serial>.outputs.1.State` |
+| `devices.switch.<Group>.<Serial>.Status` | `devices.switch.<Group>.<Serial>.outputs.1.Status` |
+
+Update any scripts, Vis widgets, or Blockly rules that reference the old paths directly.
+
+If you want to remove the leftover old objects, run this in the ioBroker CLI (the trailing loop works around the known "Invalid ID: undefined" error when deleting via the Admin UI):
+
+```bash
+iobroker object list | grep -oP 'victron-gx\.0\.devices\.switch\.[^.]+\.[^.]+\.(State|Status)$' \
+  | while read id; do iobroker object del "$id"; done
+```
+
+### Auto-cleanup of orphaned channels (optional)
+
+If you move a channel to a different group, disable a Shelly channel, or delete a Node-RED switch, its MQTT topic disappears – but the ioBroker objects stay behind. Enable **Remove orphaned channels on startup** (Main Settings tab, off by default) to have the adapter delete them automatically:
+
+- Runs once per adapter start, only after ~30 seconds without a newly-discovered channel (so multi-channel devices like the Shelly Pro3, whose instances report in at slightly different times, aren't affected mid-startup).
+- Only touches `outputs.<N>` channels. Device-level metadata, `Ac.*` measurements, and `overview.*` are never removed by this.
+- Leave it off if your devices are frequently offline – a channel that hasn't reported back yet by the time the sweep runs looks orphaned and would be deleted.
 
 ---
 
