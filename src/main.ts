@@ -242,8 +242,7 @@ const RELEVANT_PATHS: Record<string, string[]> = {
     ],
     switch: [
         // Statische Metadaten (Device-Level). SwitchableOutput.*.* wird dynamisch akzeptiert
-        // (siehe SUPPORTS_OUTPUTS / isRelevantPath, Schritt S4a) - die alten hartcodierten
-        // output_1-Einträge entfallen hier bewusst, PATH_REMAP.switch bleibt bis S7 als Fallback.
+        // (siehe SUPPORTS_OUTPUTS / isRelevantPath, Schritt S4a).
         'Connected',
         'Serial',
         'ProductName',
@@ -326,21 +325,22 @@ const REGISTRATION_PATHS = new Set([
     'NrOfPhases',
     'Mgmt.Connection',
     'Mgmt.ProcessName',
-    'SwitchableOutput.output_1.Settings.CustomName',
-    'SwitchableOutput.output_1.Settings.Group',
+    // Output-Metadaten (CustomName/Group) laufen seit S4b/S4c dynamisch über remapOutputPath()
+    // im Message-Handler, nicht mehr über hartcodierte output_1-Einträge hier (S7-Cleanup).
 ]);
 
 // Konstanten für Hot-Path Checks (verhindert Memory Allocation bei jeder MQTT-Message)
 const NO_SERIAL_TYPES_HANDLE = new Set(['system', 'platform']);
-const NO_SERIAL_TYPES_REGISTER = new Set(['system', 'platform', 'switch']);
+// 'switch' stand hier bis S7 mit drin (Fake-ready ohne Serial), weil getBaseId früher ohne
+// Serial keinen Pfad bauen konnte. Seit S3/S7 braucht switch wie alle anderen Typen eine
+// echte Serial für die BaseId - kein Sonderfall mehr nötig.
+const NO_SERIAL_TYPES_REGISTER = new Set(['system', 'platform']);
 const MODBUS_NEEDED_TYPES = new Set(['vebus', 'battery', 'grid', 'pvinverter', 'solarcharger']);
 
 // ── Victron-Pfade → ioBroker-Pfade ──────────────────────────────────────────
+// switch/acload.SwitchableOutput.* laufen seit S4a/S4c über remapOutputPath() (dynamisch),
+// das alte statische output_1-Mapping ist damit unerreichbar geworden und entfernt (S7).
 const PATH_REMAP: Record<string, Record<string, string>> = {
-    switch: {
-        'SwitchableOutput.output_1.State': 'State',
-        'SwitchableOutput.output_1.Status': 'Status',
-    },
     battery: {
         'Dc.0.Temperature': 'temperatures.main',
         'System.Temperature1': 'temperatures.temp1',
@@ -1719,7 +1719,8 @@ class VictronGx extends utils.Adapter {
             }
 
             // Output-Pfad (SwitchableOutput.<key>.*)? Dann dynamisch remappen, sonst statische
-            // RELEVANT_PATHS_SET-Liste + PATH_REMAP wie bisher (S7 räumt PATH_REMAP.switch auf).
+            // RELEVANT_PATHS_SET-Liste + PATH_REMAP (nur noch battery, switch/acload laufen seit
+            // S7 ausschließlich über remapOutputPath()).
             let remappedPath: string;
             const out = remapOutputPath(normPath);
             if (out && SUPPORTS_OUTPUTS.has(deviceType)) {
@@ -2089,7 +2090,7 @@ class VictronGx extends utils.Adapter {
                 phaseVoltage: { L1: 0, L2: 0, L3: 0 },
                 lastUpdate: Date.now(),
                 staleTimer: null,
-                ready: NO_SERIAL_TYPES_REGISTER.has(type), // system/platform/switch sofort ready
+                ready: NO_SERIAL_TYPES_REGISTER.has(type), // system/platform sofort ready
             });
         }
         const device = this.deviceMap.get(deviceKey)!;
@@ -2285,60 +2286,6 @@ class VictronGx extends utils.Adapter {
                         void this.setState(phasesStateId, { val: parseInt(value, 10), ack: true });
                     }
                 }
-                break;
-            }
-            case 'SwitchableOutput.output_1.Settings.Group': {
-                if (!device.group) {
-                    device.group = value;
-                }
-                const groupKey = value.replace(/[^a-zA-Z0-9_]/g, '_');
-                void this.setObjectNotExistsAsync(`devices.switch.${groupKey}`, {
-                    type: 'channel',
-                    common: { name: value },
-                    native: {},
-                });
-                break;
-            }
-            case 'SwitchableOutput.output_1.Settings.CustomName': {
-                if (!device.serial) {
-                    break;
-                }
-                // customName in Map auf individuellen Namen setzen
-                const deviceKeyC = `${type}/${instance}`;
-                if (this.topicMap[deviceKeyC] && value) {
-                    this.topicMap[deviceKeyC].customName = value;
-                }
-                const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, '_');
-                const channelId = `devices.switch.${groupKey}.${device.serial}`;
-                const suffix = value ? ` (${value})` : '';
-                // Sicherstellen dass der Channel korrekt angelegt ist (type + native)
-                void this.setObjectNotExistsAsync(channelId, {
-                    type: 'channel',
-                    common: { name: `${device.productName}${suffix}` },
-                    native: {},
-                }).then(() => {
-                    void this.extendObjectAsync(channelId, { common: { name: `${device.productName}${suffix}` } });
-                });
-                // info sub-channel für Switch
-                void this.setObjectNotExistsAsync(`${channelId}.info`, {
-                    type: 'channel',
-                    common: {
-                        name: {
-                            en: 'Info',
-                            de: 'Info',
-                            ru: 'Info',
-                            pt: 'Info',
-                            nl: 'Info',
-                            fr: 'Info',
-                            it: 'Info',
-                            es: 'Info',
-                            pl: 'Info',
-                            uk: 'Info',
-                            'zh-cn': 'Info',
-                        },
-                    },
-                    native: {},
-                });
                 break;
             }
         }
