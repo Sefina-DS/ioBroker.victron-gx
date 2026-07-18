@@ -1022,8 +1022,13 @@ class VictronGx extends utils.Adapter {
     // wird erst ab Schritt S4b befüllt und ab S5 für die Write-Route gelesen.
     private outputToInstance: Map<string, Map<string, OutputRoute>> = new Map();
     // Auto-Cleanup verwaister outputs.*-Kanäle beim Start, Config-Toggle (Default aus, §10.1/10.2).
-    // Sweep-Implementierung folgt ab S10c.
     private cleanupEnabled = false;
+    private cleanupTimer: ioBroker.Timeout | null | undefined = null;
+    private cleanupDoneOnce = false;
+    // Ruhezeit: Sweep läuft erst, wenn seit dem letzten neu erkannten Kanal in outputToInstance
+    // mindestens so lange nichts mehr reinkam - schützt Multi-Instance-Devices (Shelly Pro3),
+    // deren Instances zeitlich gestaffelt reinkommen (§10.1).
+    private readonly CLEANUP_QUIET_MS = 30_000;
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'victron-gx' });
@@ -1190,6 +1195,92 @@ class VictronGx extends utils.Adapter {
         } catch {
             /* ignorieren */
         }
+    }
+
+    // \u2500\u2500 Auto-Cleanup verwaister Output-Kan\u00e4le (\u00a710.4) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // Sucht das DeviceInfo, das f\u00fcr eine gegebene (Serial, MQTT-Instance)-Kombination die
+    // Output-Metadaten (Type, Group) tr\u00e4gt. Genauer als eine reine Serial-Suche: bei
+    // Multi-Instance-Merging (Shelly Pro3) teilen sich mehrere DeviceInfos dieselbe Serial,
+    // aber nur eine davon passt zur konkreten Instance des gesuchten Outputs.
+    private findDeviceForOutput(serial: string, instance: number): DeviceInfo | undefined {
+        for (const device of this.deviceMap.values()) {
+            if (device.serial === serial && device.instance === instance) {
+                return device;
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * Wird bei jedem neu erkannten Output-Kanal aufgerufen (Message-Handler) sowie initial nach
+     * dem Subscribe. Setzt den Ruhezeit-Timer zur\u00fcck; erst wenn CLEANUP_QUIET_MS ohne neuen Kanal
+     * verstrichen sind, l\u00e4uft der Sweep - aber nur einmal pro Adapter-Start.
+     */
+    private armCleanupTimer(): void {
+        if (!this.cleanupEnabled || this.cleanupDoneOnce) {
+            return;
+        }
+        if (this.cleanupTimer) {
+            this.clearTimeout(this.cleanupTimer);
+        }
+        this.cleanupTimer = this.setTimeout(() => {
+            this.cleanupTimer = null;
+            void this.runOrphanSweep();
+        }, this.CLEANUP_QUIET_MS);
+    }
+
+    /**
+     * L\u00f6scht alle outputs.<key>-Kan\u00e4le, deren (BaseId, OutputKey)-Kombination nicht mehr mit dem
+     * aktuellen outputToInstance-Zustand \u00fcbereinstimmt (Kanal umgruppiert, Ger\u00e4t entfernt/offline
+     * deaktiviert). Betrifft ausschlie\u00dflich outputs.*-Objekte - Device-Level-Metadaten, Ac.*-
+     * Messwerte, overview.* und alles au\u00dferhalb devices.<type>.**.outputs.<key> bleiben unber\u00fchrt.
+     */
+    private async runOrphanSweep(): Promise<void> {
+        this.cleanupDoneOnce = true;
+        this.log.info('Starting cleanup of orphaned output channels...');
+
+        // Aktive (BaseId, OutputKey)-Kombinationen aus dem laufenden outputToInstance-Zustand.
+        const activeKeys = new Set<string>();
+        for (const [serial, keyMap] of this.outputToInstance.entries()) {
+            for (const [outputKey, route] of keyMap.entries()) {
+                const device = this.findDeviceForOutput(serial, route.instance);
+                if (!device) {
+                    continue;
+                }
+                const baseId = this.getBaseId(device.type, device.instance, serial, device, true);
+                if (baseId) {
+                    activeKeys.add(`${baseId}|${outputKey}`);
+                }
+            }
+        }
+
+        let deleted = 0;
+        try {
+            const allObjects = await this.getObjectListAsync({
+                startkey: `${this.namespace}.devices.`,
+                endkey: `${this.namespace}.devices.\u9999`,
+            });
+            const outputChannelRegex = /^(.+)\.outputs\.([^.]+)$/;
+            for (const obj of allObjects.rows) {
+                if (obj.value?.type !== 'channel') {
+                    continue;
+                }
+                const id = obj.id.replace(`${this.namespace}.`, '');
+                const m = outputChannelRegex.exec(id);
+                if (!m) {
+                    continue;
+                }
+                if (activeKeys.has(`${m[1]}|${m[2]}`)) {
+                    continue;
+                }
+                await this.delObjectAsync(id, { recursive: true }).catch(() => {});
+                deleted++;
+            }
+        } catch (e) {
+            this.log.warn(`Orphan cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
+        this.log.info(`Cleanup finished: removed ${deleted} orphaned output channel(s).`);
     }
 
     // ── MQTT ─────────────────────────────────────────────────────────────────
