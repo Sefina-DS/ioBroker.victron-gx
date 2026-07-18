@@ -425,7 +425,7 @@ const OUTPUT_KEY_NORMALIZE = /^output_(\d+)$/;
  * @param normPath Normierter MQTT-Pfad (Slashes durch Punkte ersetzt)
  * @returns Key/Sub/ioPath-Aufschlüsselung, oder null wenn kein Output-Pfad
  */
-function remapOutputPath(normPath: string): { key: string; sub: string; ioPath: string } | null {
+function remapOutputPath(normPath: string): { key: string; mqttKey: string; sub: string; ioPath: string } | null {
     const m = OUTPUT_PATH_REGEX.exec(normPath);
     if (!m) {
         return null;
@@ -434,7 +434,9 @@ function remapOutputPath(normPath: string): { key: string; sub: string; ioPath: 
     const norm = OUTPUT_KEY_NORMALIZE.exec(rawKey);
     const key = norm ? norm[1] : rawKey; // "output_1" → "1", "0" → "0"
     const sub = m[2].replace(/^Settings\./, ''); // Settings.CustomName → CustomName
-    return { key, sub, ioPath: `outputs.${key}.${sub}` };
+    // mqttKey ist der Original-Segmentname (z.B. "output_1"), wird für die Write-Route (S5)
+    // gebraucht, weil der MQTT-Topic beim Zurückschreiben den unnormierten Key erwartet.
+    return { key, mqttKey: rawKey, sub, ioPath: `outputs.${key}.${sub}` };
 }
 
 // Gerätetypen, die SwitchableOutput-Kanäle tragen dürfen (switch/acload/GX-internes Relais).
@@ -1744,9 +1746,38 @@ class VictronGx extends utils.Adapter {
                 return;
             }
 
-            const baseId = this.getBaseId(deviceType, instance, serial, device);
+            const isOutputPath = out !== null && SUPPORTS_OUTPUTS.has(deviceType);
+            const baseId = this.getBaseId(deviceType, instance, serial, device, isOutputPath);
             if (!baseId) {
                 return;
+            }
+
+            // Output-Sub-Channel + Metadaten-Handling (Multi-Channel-Merging, siehe §4.9/4.11).
+            // isOutputPath === true garantiert hier serial !== undefined (siehe getBaseId/S3).
+            if (isOutputPath && out && serial) {
+                let keyMap = this.outputToInstance.get(serial);
+                if (!keyMap) {
+                    keyMap = new Map();
+                    this.outputToInstance.set(serial, keyMap);
+                }
+                if (!keyMap.has(out.key)) {
+                    keyMap.set(out.key, { instance, mqttKey: out.mqttKey });
+                    void this.setObjectNotExistsAsync(`${baseId}.outputs.${out.key}`, {
+                        type: 'channel',
+                        common: { name: `Output ${out.key}` },
+                        native: {},
+                    });
+                }
+                if (out.sub === 'CustomName' && typeof rawValue === 'string' && rawValue && device) {
+                    void this.extendObjectAsync(`${baseId}.outputs.${out.key}`, {
+                        common: { name: `${device.productName} — ${rawValue}` },
+                    });
+                }
+                if (out.sub === 'Group' && typeof rawValue === 'string' && rawValue && device && !device.group) {
+                    // Erste Group "gewinnt" für die BaseId (siehe getBaseId) - Group-Änderungen
+                    // zur Laufzeit erzeugen bewusst KEINEN neuen Ordner (Objekt-Umzug zu invasiv).
+                    device.group = rawValue;
+                }
             }
 
             // Phasen-Filterung für virtuelle Geräte
