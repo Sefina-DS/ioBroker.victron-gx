@@ -2018,25 +2018,30 @@ class VictronGx extends utils.Adapter {
     }
 
     // ── baseId berechnen ─────────────────────────────────────────────────────
+    // isOutputPath: true, wenn der Aufrufer einen SwitchableOutput-Pfad auflöst. Steuert das
+    // Routing für type==='system': Messwerte/Systemübersicht bleiben unter 'overview' (read-only),
+    // Schaltausgänge (z.B. GX internal relay) landen unter devices.system.<Serial> (schreibbar).
+    // Group ist ab hier ein optionaler Zwischenordner, einheitlich für alle Typen; Serial ist
+    // Pflicht (außer für system ohne Output-Pfad, das weiterhin nach 'overview' mappt). Aufrufer
+    // ohne isOutputPath-Argument (Default false) verhalten sich unverändert zum Vorzustand.
     private getBaseId(
         type: string,
         instance: number,
         serial: string | undefined,
         device: DeviceInfo | undefined,
+        isOutputPath: boolean = false,
     ): string | null {
-        if (type === 'system') {
+        if (type === 'system' && !isOutputPath) {
             return 'overview';
         }
-        if (type === 'switch') {
-            if (!serial || !device?.group) {
-                return null;
-            }
-            return `devices.switch.${device.group.replace(/[^a-zA-Z0-9_]/g, '_')}.${serial}`;
+        if (!serial) {
+            return null;
         }
-        if (serial) {
-            return `devices.${type}.${serial}`;
+        if (device?.group) {
+            const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, '_');
+            return `devices.${type}.${groupKey}.${serial}`;
         }
-        return `devices.${type}.${instance}`;
+        return `devices.${type}.${serial}`;
     }
 
     // ── Metadaten sammeln ────────────────────────────────────────────────────
