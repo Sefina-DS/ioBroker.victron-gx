@@ -1,14 +1,16 @@
 {
-  "tab_main": "Haupteinstellungen",
-  "tab_devices": "Geräte",
-  "tab_catalog": "Alle Topics",
-  "host_label": "IP-Adresse des GX-Geräts",
-  "host_help": "z.B. 192.168.6.200",
-  "port_label": "MQTT-Port",
-  "mqttUsername_label": "MQTT-Benutzername",
-  "mqttUsername_help": "Leer lassen wenn kein Auth konfiguriert",
-  "mqttPassword_label": "MQTT-Passwort",
-  "controlEnabled_label": "Steuerung aktivieren (Modbus TCP)",
-  "modbusPort_label": "Modbus Port",
-  "modbusHint_text": "⚠️ Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt"
+    "tab_main": "Haupteinstellungen",
+    "tab_devices": "Geräte",
+    "tab_catalog": "Alle Topics",
+    "host_label": "IP-Adresse des GX-Geräts",
+    "host_help": "z.B. 192.168.6.200",
+    "port_label": "MQTT-Port",
+    "mqttUsername_label": "MQTT-Benutzername",
+    "mqttUsername_help": "Leer lassen wenn kein Auth konfiguriert",
+    "mqttPassword_label": "MQTT-Passwort",
+    "controlEnabled_label": "Steuerung aktivieren (Modbus TCP)",
+    "modbusPort_label": "Modbus Port",
+    "modbusHint_text": "⚠️ Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
+    "cleanupOrphanedOutputs_label": "Verwaiste Kanäle beim Start entfernen",
+    "cleanupOrphanedOutputs_help": "Beim Adapter-Start werden Objekte von Kanälen, die vom GX nicht mehr gemeldet werden, automatisch gelöscht. Empfohlen nach Umbauten (Gruppe geändert, Kanal deaktiviert). Nicht aktivieren, wenn Geräte häufig offline sind."
 }

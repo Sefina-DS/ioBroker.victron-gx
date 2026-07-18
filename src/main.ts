@@ -1021,6 +1021,9 @@ class VictronGx extends utils.Adapter {
     // Serial → OutputKey → { instance, mqttKey } - additiv für Shelly-Multi-Channel (Schritt S1),
     // wird erst ab Schritt S4b befüllt und ab S5 für die Write-Route gelesen.
     private outputToInstance: Map<string, Map<string, OutputRoute>> = new Map();
+    // Auto-Cleanup verwaister outputs.*-Kanäle beim Start, Config-Toggle (Default aus, §10.1/10.2).
+    // Sweep-Implementierung folgt ab S10c.
+    private cleanupEnabled = false;
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'victron-gx' });
@@ -1032,6 +1035,8 @@ class VictronGx extends utils.Adapter {
 
     // ── Adapter-Start ────────────────────────────────────────────────────────
     private onReady(): void {
+        this.cleanupEnabled = this.config.cleanupOrphanedOutputs === true;
+
         void this.setState('info.connection', false, true);
 
         void this.setObjectNotExistsAsync('info.modbusConnected', {

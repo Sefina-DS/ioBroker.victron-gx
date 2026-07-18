@@ -10,6 +10,7 @@ declare global {
             pollingInterval: number;
             controlEnabled: boolean;
             modbusPort: number;
+            cleanupOrphanedOutputs: boolean;
         }
     }
 }

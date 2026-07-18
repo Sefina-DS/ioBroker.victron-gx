@@ -1,83 +1,130 @@
 {
-  "i18n": true,
-  "type": "tabs",
-  "items": {
-    "tab_main": {
-      "type": "panel",
-      "label": "tab_main",
-      "items": {
-        "host": {
-          "type": "text",
-          "label": "host_label",
-          "help": "host_help",
-          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
+    "i18n": true,
+    "type": "tabs",
+    "items": {
+        "tab_main": {
+            "type": "panel",
+            "label": "tab_main",
+            "items": {
+                "host": {
+                    "type": "text",
+                    "label": "host_label",
+                    "help": "host_help",
+                    "sm": 12,
+                    "md": 6,
+                    "xs": 12,
+                    "lg": 6,
+                    "xl": 6
+                },
+                "port": {
+                    "type": "number",
+                    "label": "port_label",
+                    "default": 1883,
+                    "sm": 12,
+                    "md": 6,
+                    "xs": 12,
+                    "lg": 6,
+                    "xl": 6
+                },
+                "mqttUsername": {
+                    "type": "text",
+                    "label": "mqttUsername_label",
+                    "help": "mqttUsername_help",
+                    "sm": 12,
+                    "md": 6,
+                    "xs": 12,
+                    "lg": 6,
+                    "xl": 6
+                },
+                "mqttPassword": {
+                    "type": "password",
+                    "label": "mqttPassword_label",
+                    "sm": 12,
+                    "md": 6,
+                    "xs": 12,
+                    "lg": 6,
+                    "xl": 6
+                },
+                "divider": {
+                    "type": "divider"
+                },
+                "controlEnabled": {
+                    "type": "checkbox",
+                    "label": "controlEnabled_label",
+                    "default": false,
+                    "sm": 12,
+                    "md": 6,
+                    "xs": 12,
+                    "lg": 6,
+                    "xl": 6
+                },
+                "modbusPort": {
+                    "type": "number",
+                    "label": "modbusPort_label",
+                    "default": 502,
+                    "sm": 12,
+                    "md": 6,
+                    "xs": 12,
+                    "lg": 4,
+                    "xl": 4
+                },
+                "modbusHint": {
+                    "type": "staticText",
+                    "text": "modbusHint_text",
+                    "style": { "fontSize": "14px", "fontWeight": "bold" },
+                    "sm": 12,
+                    "xs": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12
+                },
+                "divider2": {
+                    "type": "divider"
+                },
+                "cleanupOrphanedOutputs": {
+                    "type": "checkbox",
+                    "label": "cleanupOrphanedOutputs_label",
+                    "help": "cleanupOrphanedOutputs_help",
+                    "default": false,
+                    "sm": 12,
+                    "md": 8,
+                    "xs": 12,
+                    "lg": 8,
+                    "xl": 8
+                }
+            }
         },
-        "port": {
-          "type": "number",
-          "label": "port_label",
-          "default": 1883,
-          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
+        "tab_geraete": {
+            "type": "panel",
+            "label": "tab_devices",
+            "items": {
+                "mapFrame": {
+                    "type": "iframe",
+                    "style": { "height": "calc(100vh - 265px)" },
+                    "url": "/adapter/victron-gx/tab_whitelist.html",
+                    "sm": 12,
+                    "xs": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12
+                }
+            }
         },
-        "mqttUsername": {
-          "type": "text",
-          "label": "mqttUsername_label",
-          "help": "mqttUsername_help",
-          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
-        },
-        "mqttPassword": {
-          "type": "password",
-          "label": "mqttPassword_label",
-          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
-        },
-        "divider": {
-          "type": "divider"
-        },
-        "controlEnabled": {
-          "type": "checkbox",
-          "label": "controlEnabled_label",
-          "default": false,
-          "sm": 12, "md": 6, "xs": 12, "lg": 6, "xl": 6
-        },
-        "modbusPort": {
-          "type": "number",
-          "label": "modbusPort_label",
-          "default": 502,
-          "sm": 12, "md": 6, "xs": 12, "lg": 4, "xl": 4
-        },
-        "modbusHint": {
-          "type": "staticText",
-          "text": "modbusHint_text",
-          "style": { "fontSize": "14px", "fontWeight": "bold" },
-          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
-        },
-        "divider2": {
-          "type": "divider"
+        "tab_catalog": {
+            "type": "panel",
+            "label": "tab_catalog",
+            "items": {
+                "mapFrame": {
+                    "type": "iframe",
+                    "style": { "height": "calc(100vh - 265px)" },
+                    "url": "/adapter/victron-gx/tab_catalog.html",
+                    "sm": 12,
+                    "xs": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12
+                }
+            }
         }
-      }
-    },
-    "tab_geraete": {
-      "type": "panel",
-      "label": "tab_devices",
-      "items": {
-        "mapFrame": {
-          "type": "iframe",
-          "style": { "height": "calc(100vh - 265px)" },
-          "url": "/adapter/victron-gx/tab_whitelist.html",
-          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
-        }
-      }
-    },
-    "tab_catalog": {
-      "type": "panel",
-      "label": "tab_catalog",
-      "items": {
-        "mapFrame": {
-          "type": "iframe",
-          "style": { "height": "calc(100vh - 265px)" },
-          "url": "/adapter/victron-gx/tab_catalog.html",
-          "sm": 12, "xs": 12, "md": 12, "lg": 12, "xl": 12
-        }
-      }
     }
-  }
 }

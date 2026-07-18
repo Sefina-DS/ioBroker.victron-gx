@@ -1,14 +1,16 @@
 {
-  "tab_main": "Paramètres principaux",
-  "tab_devices": "Appareils",
-  "tab_catalog": "Tous les sujets",
-  "host_label": "Adresse IP de l'appareil GX",
-  "host_help": "ex. 192.168.6.200",
-  "port_label": "Port MQTT",
-  "mqttUsername_label": "Nom d'utilisateur MQTT",
-  "mqttUsername_help": "Laisser vide si aucune auth n'est configurée",
-  "mqttPassword_label": "Mot de passe MQTT",
-  "controlEnabled_label": "Activer le contrôle (Modbus TCP)",
-  "modbusPort_label": "Port Modbus",
-  "modbusHint_text": "⚠️ Prérequis sur l'appareil GX: Paramètres → Intégrations → Serveur Modbus TCP → Activé & Niveau d'accès → Écriture autorisée"
+    "tab_main": "Paramètres principaux",
+    "tab_devices": "Appareils",
+    "tab_catalog": "Tous les sujets",
+    "host_label": "Adresse IP de l'appareil GX",
+    "host_help": "ex. 192.168.6.200",
+    "port_label": "Port MQTT",
+    "mqttUsername_label": "Nom d'utilisateur MQTT",
+    "mqttUsername_help": "Laisser vide si aucune auth n'est configurée",
+    "mqttPassword_label": "Mot de passe MQTT",
+    "controlEnabled_label": "Activer le contrôle (Modbus TCP)",
+    "modbusPort_label": "Port Modbus",
+    "modbusHint_text": "⚠️ Prérequis sur l'appareil GX: Paramètres → Intégrations → Serveur Modbus TCP → Activé & Niveau d'accès → Écriture autorisée",
+    "cleanupOrphanedOutputs_label": "Supprimer les canaux orphelins au démarrage",
+    "cleanupOrphanedOutputs_help": "Au démarrage de l'adaptateur, les objets des canaux qui ne sont plus signalés par le GX sont automatiquement supprimés. Recommandé après reconfiguration (groupe modifié, canal désactivé). Ne pas activer si les appareils sont souvent hors ligne."
 }

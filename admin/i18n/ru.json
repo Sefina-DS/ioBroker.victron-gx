@@ -1,14 +1,16 @@
 {
-  "tab_main": "Основные настройки",
-  "tab_devices": "Устройства",
-  "tab_catalog": "Все топики",
-  "host_label": "IP-адрес устройства GX",
-  "host_help": "например 192.168.6.200",
-  "port_label": "MQTT порт",
-  "mqttUsername_label": "Имя пользователя MQTT",
-  "mqttUsername_help": "Оставьте пустым если аутентификация не настроена",
-  "mqttPassword_label": "Пароль MQTT",
-  "controlEnabled_label": "Включить управление (Modbus TCP)",
-  "modbusPort_label": "Порт Modbus",
-  "modbusHint_text": "⚠️ Требование на устройстве GX: Настройки → Интеграции → Modbus TCP сервер → Включён & Уровень доступа → Запись разрешена"
+    "tab_main": "Основные настройки",
+    "tab_devices": "Устройства",
+    "tab_catalog": "Все топики",
+    "host_label": "IP-адрес устройства GX",
+    "host_help": "например 192.168.6.200",
+    "port_label": "MQTT порт",
+    "mqttUsername_label": "Имя пользователя MQTT",
+    "mqttUsername_help": "Оставьте пустым если аутентификация не настроена",
+    "mqttPassword_label": "Пароль MQTT",
+    "controlEnabled_label": "Включить управление (Modbus TCP)",
+    "modbusPort_label": "Порт Modbus",
+    "modbusHint_text": "⚠️ Требование на устройстве GX: Настройки → Интеграции → Modbus TCP сервер → Включён & Уровень доступа → Запись разрешена",
+    "cleanupOrphanedOutputs_label": "Удалять устаревшие каналы при запуске",
+    "cleanupOrphanedOutputs_help": "При запуске адаптера объекты каналов, которые больше не сообщаются GX, автоматически удаляются. Рекомендуется после изменений конфигурации (изменение группы, отключение канала). Не включайте, если устройства часто офлайн."
 }
