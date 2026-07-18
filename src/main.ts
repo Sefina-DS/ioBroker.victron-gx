@@ -1085,7 +1085,12 @@ class VictronGx extends utils.Adapter {
         void this.setState('info.modbusConnected', false, true);
         void this.setState('info.modbusWritable', false, true);
 
+        // acload (Shelly 1PM) und system (GX-internes Relais) können ebenfalls schreibbare
+        // outputs.<key>.State-Kanäle tragen (siehe SUPPORTS_OUTPUTS/WRITABLE_TYPES) - onStateChange
+        // filtert selbst auf ack=false + WRITABLE_TYPES, der breitere Subscribe ist unkritisch (§4.13).
         this.subscribeStates('devices.switch.*');
+        this.subscribeStates('devices.acload.*');
+        this.subscribeStates('devices.system.*');
         if (this.config.controlEnabled) {
             this.subscribeStates('control.*');
         }
