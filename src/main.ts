@@ -1105,6 +1105,10 @@ class VictronGx extends utils.Adapter {
             this.subscribeStates('control.*');
         }
 
+        // Auto-Cleanup initial armen, damit auch bei leerem outputToInstance (Edge-Case: keine
+        // Output-Kanäle empfangen) irgendwann gesweept wird - No-Op wenn cleanupEnabled=false (§10.4).
+        this.armCleanupTimer();
+
         void this.cleanupNumericChannels();
         // Alte ess.* Struktur bereinigen
         void this.cleanupLegacyChannels();
@@ -1856,6 +1860,9 @@ class VictronGx extends utils.Adapter {
                         common: { name: `Output ${out.key}` },
                         native: {},
                     });
+                    // Neuer Output-Kanal erkannt: Auto-Cleanup-Ruhezeit zurücksetzen (§10.4/10.5).
+                    // No-Op, solange cleanupEnabled=false oder der Sweep schon einmal lief.
+                    this.armCleanupTimer();
                 }
                 if (out.sub === 'CustomName' && typeof rawValue === 'string' && rawValue && device) {
                     void this.extendObjectAsync(`${baseId}.outputs.${out.key}`, {
@@ -4445,6 +4452,10 @@ class VictronGx extends utils.Adapter {
             if (this.acPowerSetpointInterval) {
                 this.clearInterval(this.acPowerSetpointInterval);
                 this.acPowerSetpointInterval = null;
+            }
+            if (this.cleanupTimer) {
+                this.clearTimeout(this.cleanupTimer);
+                this.cleanupTimer = null;
             }
             for (const device of this.deviceMap.values()) {
                 if (device.staleTimer) {
