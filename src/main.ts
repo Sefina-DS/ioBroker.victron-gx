@@ -401,13 +401,6 @@ const WRITE_PATH_REMAP: Record<string, Record<string, string>> = {
     switch: { State: 'SwitchableOutput/output_1/State' },
 };
 
-// ── Nur switch ist per MQTT schreibbar; vebus/ess nur per Modbus ─────────────
-const WRITABLE_PATHS: Record<string, string[]> = {
-    switch: ['State'],
-    // vebus: read-only via MQTT; schreibbar nur via Modbus über control.*
-    // ess:   read-only via MQTT; schreibbar nur via Modbus über control.*
-};
-
 // ── Shelly/Output-Multi-Channel-Support ─────────────────────────────────────
 // Additiv angelegt für die Shelly-Integration (SHELLY_INTEGRATION_PLAN.md, Schritt S1),
 // remapOutputPath()/SUPPORTS_OUTPUTS ab S4a im Message-Handler verdrahtet. WRITABLE_TYPES/
@@ -441,10 +434,10 @@ function remapOutputPath(normPath: string): { key: string; mqttKey: string; sub:
 
 // Gerätetypen, die SwitchableOutput-Kanäle tragen dürfen (switch/acload/GX-internes Relais).
 const SUPPORTS_OUTPUTS = new Set(['switch', 'acload', 'system']);
-
-/* eslint-disable @typescript-eslint/no-unused-vars -- Verdrahtung folgt ab S5 (Write-Route) */
 // Gerätetypen, deren outputs.<key>.State per MQTT schreibbar ist.
 const WRITABLE_TYPES = new Set(['switch', 'acload', 'system']);
+
+/* eslint-disable @typescript-eslint/no-unused-vars -- Verdrahtung folgt ab S5 (Write-Route) */
 // Erkennt schreibbare Output-Pfade im ioBroker-Namensraum (nach BaseId, vor dem Segment "State").
 const WRITABLE_OUTPUT_REGEX = /^outputs\.([^.]+)\.State$/;
 
@@ -1843,9 +1836,12 @@ class VictronGx extends utils.Adapter {
             }
 
             // Wert konvertieren
-            const isSwitchBool = deviceType === 'switch' && (remappedPath === 'State' || remappedPath === 'Status');
-            const storeValue = isSwitchBool ? rawValue !== 0 : rawValue;
-            const storeType = isSwitchBool
+            // outputs.<key>.State/Status (switch/acload/system) sind boolean, genau wie das alte
+            // switch-spezifische State/Status - jetzt gerätetyp-übergreifend über SUPPORTS_OUTPUTS.
+            const outputBoolSub = remappedPath.match(/^outputs\.[^.]+\.(State|Status)$/);
+            const isOutputBool = outputBoolSub !== null && SUPPORTS_OUTPUTS.has(deviceType);
+            const storeValue = isOutputBool ? rawValue !== 0 : rawValue;
+            const storeType = isOutputBool
                 ? 'boolean'
                 : typeof rawValue === 'number'
                   ? 'number'
@@ -1853,19 +1849,14 @@ class VictronGx extends utils.Adapter {
                     ? 'boolean'
                     : 'string';
 
-            // Schreibbarkeit: nur switch per MQTT, alles andere read-only
-            const isWritable =
-                deviceType === 'switch' ? (WRITABLE_PATHS[deviceType] || []).some(wp => remappedPath === wp) : false;
+            // Schreibbarkeit: outputs.<key>.State für alle WRITABLE_TYPES per MQTT schreibbar.
+            const isWritable = isOutputBool && outputBoolSub[1] === 'State' && WRITABLE_TYPES.has(deviceType);
 
             const stateId = `${baseId}.${remappedPath}`;
-            // Rolle: switch.Status ist boolean → indicator; switch.State ist boolean+write → switch
+            // Rolle: outputs.*.State → switch (schreibbar), outputs.*.Status → indicator
             let stateRole = this.getRole(remappedPath);
-            if (deviceType === 'switch') {
-                if (remappedPath === 'State') {
-                    stateRole = 'switch';
-                } else if (remappedPath === 'Status') {
-                    stateRole = 'indicator';
-                }
+            if (isOutputBool) {
+                stateRole = outputBoolSub[1] === 'State' ? 'switch' : 'indicator';
             }
             const commonBase: ioBroker.StateCommon = {
                 name: this.getFriendlyName(remappedPath),
