@@ -4004,6 +4004,137 @@ class VictronGx extends utils.Adapter {
                 uk: 'Consumed Ah',
                 'zh-cn': 'Consumed Ah',
             },
+            // acload-Ergänzungen (Shelly-Integration, §4.14)
+            'Ac.L1.Energy.Reverse': {
+                en: 'L1 energy feed-in',
+                de: 'L1 Energie Einspeisung',
+                ru: 'L1 energy feed-in',
+                pt: 'L1 energy feed-in',
+                nl: 'L1 energy feed-in',
+                fr: 'L1 energy feed-in',
+                it: 'L1 energy feed-in',
+                es: 'L1 energy feed-in',
+                pl: 'L1 energy feed-in',
+                uk: 'L1 energy feed-in',
+                'zh-cn': 'L1 energy feed-in',
+            },
+            'Ac.L2.Energy.Reverse': {
+                en: 'L2 energy feed-in',
+                de: 'L2 Energie Einspeisung',
+                ru: 'L2 energy feed-in',
+                pt: 'L2 energy feed-in',
+                nl: 'L2 energy feed-in',
+                fr: 'L2 energy feed-in',
+                it: 'L2 energy feed-in',
+                es: 'L2 energy feed-in',
+                pl: 'L2 energy feed-in',
+                uk: 'L2 energy feed-in',
+                'zh-cn': 'L2 energy feed-in',
+            },
+            'Ac.L3.Energy.Reverse': {
+                en: 'L3 energy feed-in',
+                de: 'L3 Energie Einspeisung',
+                ru: 'L3 energy feed-in',
+                pt: 'L3 energy feed-in',
+                nl: 'L3 energy feed-in',
+                fr: 'L3 energy feed-in',
+                it: 'L3 energy feed-in',
+                es: 'L3 energy feed-in',
+                pl: 'L3 energy feed-in',
+                uk: 'L3 energy feed-in',
+                'zh-cn': 'L3 energy feed-in',
+            },
+            'Ac.L1.PowerFactor': {
+                en: 'L1 power factor',
+                de: 'L1 Leistungsfaktor',
+                ru: 'L1 power factor',
+                pt: 'L1 power factor',
+                nl: 'L1 power factor',
+                fr: 'L1 power factor',
+                it: 'L1 power factor',
+                es: 'L1 power factor',
+                pl: 'L1 power factor',
+                uk: 'L1 power factor',
+                'zh-cn': 'L1 power factor',
+            },
+            'Ac.L2.PowerFactor': {
+                en: 'L2 power factor',
+                de: 'L2 Leistungsfaktor',
+                ru: 'L2 power factor',
+                pt: 'L2 power factor',
+                nl: 'L2 power factor',
+                fr: 'L2 power factor',
+                it: 'L2 power factor',
+                es: 'L2 power factor',
+                pl: 'L2 power factor',
+                uk: 'L2 power factor',
+                'zh-cn': 'L2 power factor',
+            },
+            'Ac.L3.PowerFactor': {
+                en: 'L3 power factor',
+                de: 'L3 Leistungsfaktor',
+                ru: 'L3 power factor',
+                pt: 'L3 power factor',
+                nl: 'L3 power factor',
+                fr: 'L3 power factor',
+                it: 'L3 power factor',
+                es: 'L3 power factor',
+                pl: 'L3 power factor',
+                uk: 'L3 power factor',
+                'zh-cn': 'L3 power factor',
+            },
+            Role: {
+                en: 'Role',
+                de: 'Rolle',
+                ru: 'Role',
+                pt: 'Role',
+                nl: 'Role',
+                fr: 'Role',
+                it: 'Role',
+                es: 'Role',
+                pl: 'Role',
+                uk: 'Role',
+                'zh-cn': 'Role',
+            },
+            IsGenericEnergyMeter: {
+                en: 'Generic energy meter',
+                de: 'Generischer Energiezähler',
+                ru: 'Generic energy meter',
+                pt: 'Generic energy meter',
+                nl: 'Generic energy meter',
+                fr: 'Generic energy meter',
+                it: 'Generic energy meter',
+                es: 'Generic energy meter',
+                pl: 'Generic energy meter',
+                uk: 'Generic energy meter',
+                'zh-cn': 'Generic energy meter',
+            },
+            PhaseSetting: {
+                en: 'Phase setting',
+                de: 'Phaseneinstellung',
+                ru: 'Phase setting',
+                pt: 'Phase setting',
+                nl: 'Phase setting',
+                fr: 'Phase setting',
+                it: 'Phase setting',
+                es: 'Phase setting',
+                pl: 'Phase setting',
+                uk: 'Phase setting',
+                'zh-cn': 'Phase setting',
+            },
+            ProductId: {
+                en: 'Product ID',
+                de: 'Produkt-ID',
+                ru: 'Product ID',
+                pt: 'Product ID',
+                nl: 'Product ID',
+                fr: 'Product ID',
+                it: 'Product ID',
+                es: 'Product ID',
+                pl: 'Product ID',
+                uk: 'Product ID',
+                'zh-cn': 'Product ID',
+            },
         };
         if (names[path]) {
             return names[path];
@@ -4029,6 +4160,12 @@ class VictronGx extends utils.Adapter {
 
     private getUnit(path: string): string {
         if (path.startsWith('alarms.')) {
+            return '';
+        }
+        // Vor den generischen Power-/Energy-Substring-Checks: PowerFactor/IsGenericEnergyMeter
+        // enthalten "Power" bzw. "Energy" als Teilstring, sind aber selbst keine Leistungs-/
+        // Energiewerte (dimensionslos bzw. boolean) - §4.14 acload-Ergänzungen.
+        if (path.endsWith('PowerFactor') || path === 'IsGenericEnergyMeter') {
             return '';
         }
         if (
@@ -4109,6 +4246,12 @@ class VictronGx extends utils.Adapter {
             return 'value.warning';
         }
         if (path === 'State') {
+            return 'value';
+        }
+        // Vor den generischen Power-/Energy-Substring-Checks: PowerFactor/IsGenericEnergyMeter
+        // enthalten "Power" bzw. "Energy" als Teilstring, sind aber selbst keine Leistungs-/
+        // Energiewerte (dimensionslos bzw. boolean) - §4.14 acload-Ergänzungen.
+        if (path.endsWith('PowerFactor') || path === 'IsGenericEnergyMeter') {
             return 'value';
         }
         if (
