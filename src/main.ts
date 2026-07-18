@@ -396,17 +396,13 @@ const PATH_REMAP: Record<string, Record<string, string>> = {
     },
 };
 
-// ── ioBroker Write → MQTT Topic Pfad ────────────────────────────────────────
-const WRITE_PATH_REMAP: Record<string, Record<string, string>> = {
-    switch: { State: 'SwitchableOutput/output_1/State' },
-};
-
 // ── Shelly/Output-Multi-Channel-Support ─────────────────────────────────────
 // Additiv angelegt für die Shelly-Integration (SHELLY_INTEGRATION_PLAN.md, Schritt S1),
-// remapOutputPath()/SUPPORTS_OUTPUTS ab S4a im Message-Handler verdrahtet. WRITABLE_TYPES/
-// WRITABLE_OUTPUT_REGEX/OutputRoute folgen ab S5 (Write-Route). Der bestehende switch-
-// Handling-Pfad (RELEVANT_PATHS_SET, PATH_REMAP.switch, WRITE_PATH_REMAP, WRITABLE_PATHS)
-// bleibt bis Schritt S7 parallel aktiv.
+// remapOutputPath()/SUPPORTS_OUTPUTS ab S4a, WRITABLE_TYPES/WRITABLE_OUTPUT_REGEX/OutputRoute
+// ab S5 im Message-Handler bzw. in onStateChange verdrahtet. Der alte switch-spezifische
+// Write-Pfad (WRITE_PATH_REMAP mit hartcodiertem "output_1") ist damit hinfällig und entfernt
+// worden - ersetzt durch die outputToInstance-Map (siehe unten). Verbleibender Alt-Code
+// (RELEVANT_PATHS_SET, PATH_REMAP.switch) bleibt bis Schritt S7 parallel aktiv.
 const OUTPUT_PATH_REGEX = /^SwitchableOutput\.([^.]+)\.(.+)$/;
 const OUTPUT_KEY_NORMALIZE = /^output_(\d+)$/;
 
@@ -437,7 +433,6 @@ const SUPPORTS_OUTPUTS = new Set(['switch', 'acload', 'system']);
 // Gerätetypen, deren outputs.<key>.State per MQTT schreibbar ist.
 const WRITABLE_TYPES = new Set(['switch', 'acload', 'system']);
 
-/* eslint-disable @typescript-eslint/no-unused-vars -- Verdrahtung folgt ab S5 (Write-Route) */
 // Erkennt schreibbare Output-Pfade im ioBroker-Namensraum (nach BaseId, vor dem Segment "State").
 const WRITABLE_OUTPUT_REGEX = /^outputs\.([^.]+)\.State$/;
 
@@ -447,7 +442,6 @@ interface OutputRoute {
     instance: number;
     mqttKey: string;
 }
-/* eslint-enable @typescript-eslint/no-unused-vars */
 
 // ── Modbus Register-Mapping ──────────────────────────────────────────────────
 // vebus: Unit ID 238 (com.victronenergy.vebus)
@@ -2731,49 +2725,41 @@ class VictronGx extends utils.Adapter {
             return;
         }
 
-        if (parts.length < 5) {
+        // Struktur: devices.<type>.[<Group>.]<Serial>.outputs.<key>.State - Group optional.
+        if (parts.length < 5 || parts[2] !== 'devices') {
             return;
         }
         const deviceType = parts[3];
-        let serial: string;
-        let dpPath: string;
-
-        if (deviceType === 'switch') {
-            if (parts.length < 7) {
-                return;
-            }
-            serial = parts[5];
-            const remapped = parts.slice(6).join('.');
-            dpPath = WRITE_PATH_REMAP[deviceType]?.[remapped] ?? remapped.replace(/\./g, '/');
-        } else {
-            serial = parts[4];
-            dpPath = parts.slice(5).join('/');
-        }
-
-        let instance: number | null = null;
-        for (const [key, ser] of this.serialMap.entries()) {
-            if (ser === serial) {
-                instance = parseInt(key.split('/')[1], 10);
-                break;
-            }
-        }
-        if (instance === null) {
-            const num = parseInt(serial, 10);
-            if (!isNaN(num)) {
-                instance = num;
-            }
-        }
-        if (instance === null) {
-            this.log.warn(`Could not determine instance for ${id}`);
+        if (!WRITABLE_TYPES.has(deviceType)) {
             return;
         }
 
-        if (deviceType === 'switch') {
-            const writeVal = state.val ? 1 : 0;
-            const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
-            this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
-            this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
+        // "outputs"-Anker rückwärts suchen statt fester Segment-Indizes, weil der optionale
+        // Group-Zwischenordner die Position von Serial/outputs verschiebt (§4.12).
+        const outputsIdx = parts.indexOf('outputs', 5);
+        if (outputsIdx === -1 || outputsIdx + 2 >= parts.length) {
+            return;
         }
+        const serial = parts[outputsIdx - 1];
+        const outputKey = parts[outputsIdx + 1];
+        const dpTail = parts.slice(outputsIdx + 2).join('/');
+        if (!WRITABLE_OUTPUT_REGEX.test(`outputs.${outputKey}.${dpTail.replace(/\//g, '.')}`)) {
+            return;
+        }
+
+        // Instance + Original-MQTT-Segmentname aus outputToInstance holen (Multi-Instance-Merging:
+        // Shelly Pro3 hat drei DeviceInstances mit identischer Serial, serialMap-Rückwärtssuche
+        // wäre hier mehrdeutig).
+        const route = this.outputToInstance.get(serial)?.get(outputKey);
+        if (!route) {
+            this.log.warn(`Could not determine MQTT instance for ${id} (serial=${serial}, output=${outputKey})`);
+            return;
+        }
+
+        const writeVal = state.val ? 1 : 0;
+        const mqttTopic = `W/${this.vrmId}/${deviceType}/${route.instance}/SwitchableOutput/${route.mqttKey}/${dpTail}`;
+        this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
+        this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
     }
 
     // ── Hilfsfunktionen ──────────────────────────────────────────────────────
