@@ -409,12 +409,11 @@ const WRITABLE_PATHS: Record<string, string[]> = {
 };
 
 // ── Shelly/Output-Multi-Channel-Support ─────────────────────────────────────
-// Additiv angelegt für die Shelly-Integration (SHELLY_INTEGRATION_PLAN.md, Schritt S1).
-// Verdrahtung folgt schrittweise: remapOutputPath()/SUPPORTS_OUTPUTS ab S4a, WRITABLE_TYPES/
-// WRITABLE_OUTPUT_REGEX/OutputRoute ab S5. Der bestehende switch-Handling-Pfad
-// (RELEVANT_PATHS_SET, PATH_REMAP.switch, WRITE_PATH_REMAP, WRITABLE_PATHS) bleibt bis
-// Schritt S7 parallel aktiv. Bis dahin sind die Symbole unten absichtlich ungenutzt.
-/* eslint-disable @typescript-eslint/no-unused-vars */
+// Additiv angelegt für die Shelly-Integration (SHELLY_INTEGRATION_PLAN.md, Schritt S1),
+// remapOutputPath()/SUPPORTS_OUTPUTS ab S4a im Message-Handler verdrahtet. WRITABLE_TYPES/
+// WRITABLE_OUTPUT_REGEX/OutputRoute folgen ab S5 (Write-Route). Der bestehende switch-
+// Handling-Pfad (RELEVANT_PATHS_SET, PATH_REMAP.switch, WRITE_PATH_REMAP, WRITABLE_PATHS)
+// bleibt bis Schritt S7 parallel aktiv.
 const OUTPUT_PATH_REGEX = /^SwitchableOutput\.([^.]+)\.(.+)$/;
 const OUTPUT_KEY_NORMALIZE = /^output_(\d+)$/;
 
@@ -440,6 +439,8 @@ function remapOutputPath(normPath: string): { key: string; sub: string; ioPath: 
 
 // Gerätetypen, die SwitchableOutput-Kanäle tragen dürfen (switch/acload/GX-internes Relais).
 const SUPPORTS_OUTPUTS = new Set(['switch', 'acload', 'system']);
+
+/* eslint-disable @typescript-eslint/no-unused-vars -- Verdrahtung folgt ab S5 (Write-Route) */
 // Gerätetypen, deren outputs.<key>.State per MQTT schreibbar ist.
 const WRITABLE_TYPES = new Set(['switch', 'acload', 'system']);
 // Erkennt schreibbare Output-Pfade im ioBroker-Namensraum (nach BaseId, vor dem Segment "State").
@@ -1723,8 +1724,15 @@ class VictronGx extends utils.Adapter {
                 return;
             }
 
-            const remappedPath = PATH_REMAP[deviceType]?.[normPath] ?? normPath;
-            if (!RELEVANT_PATHS_SET[deviceType]?.has(normPath)) {
+            // Output-Pfad (SwitchableOutput.<key>.*)? Dann dynamisch remappen, sonst statische
+            // RELEVANT_PATHS_SET-Liste + PATH_REMAP wie bisher (S7 räumt PATH_REMAP.switch auf).
+            let remappedPath: string;
+            const out = remapOutputPath(normPath);
+            if (out && SUPPORTS_OUTPUTS.has(deviceType)) {
+                remappedPath = out.ioPath;
+            } else if (RELEVANT_PATHS_SET[deviceType]?.has(normPath)) {
+                remappedPath = PATH_REMAP[deviceType]?.[normPath] ?? normPath;
+            } else {
                 return;
             }
 
