@@ -1373,8 +1373,51 @@ class VictronGx extends utils.Adapter {
             this.log.warn(`Orphan cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
         }
 
+        // Pass 3: devices.<type>.<Group>-Container, die durch Pass 1+2 gerade erst leer geworden
+        // sind ("orphaned group containers" - S10-Fix Teil D). Ein Group-Container entsteht, wenn
+        // Kanäle einmal unter dieser Group liefen; zieht die letzte Serial per Group-Umzug weg
+        // (Pass 2 entfernt dann den <Serial>-Unterordner), bleibt die leere Group-Hülle selbst
+        // stehen, weil weder Pass 1 (matcht nur .outputs.<key>) noch Pass 2 (matcht nur Ordner mit
+        // Serial als letztem Segment) sie je anfassen. Deshalb erst NACH Pass 1+2 lesbar - ein
+        // frischer getObjectListAsync()-Aufruf statt Wiederverwendung von allObjects, weil der
+        // Container erst durch deren (bereits awaitete) Löschungen leer wird.
+        // Ein Group-Container (devices.<type>.<GroupName>) und ein gruppenloser Serial-Ordner
+        // (devices.<type>.<Serial>) sehen syntaktisch identisch aus - beide genau 3 Segmente. Die
+        // beiden werden über denselben BaseId-Vergleich wie in Pass 2 unterschieden: <GroupName>
+        // bzw. <Serial> ist genau dann ein gruppenloser, aktiver Serial-Ordner, wenn die ID selbst
+        // in activeBaseIdBySerial auftaucht - der bleibt unangetastet, unabhängig von seiner
+        // Kinderzahl. Alles andere mit 0 verbleibenden Kindern ist ein Group-Container, der leer
+        // geworden ist.
+        let deletedGroups = 0;
+        try {
+            const activeBaseIds = new Set(activeBaseIdBySerial.values());
+            const remaining = await this.getObjectListAsync({
+                startkey: `${this.namespace}.devices.`,
+                endkey: `${this.namespace}.devices.香`,
+            });
+            const remainingIds = remaining.rows.map(obj => obj.id.replace(`${this.namespace}.`, ''));
+            for (const id of remainingIds) {
+                const parts = id.split('.');
+                if (parts.length !== 3 || parts[0] !== 'devices' || !SUPPORTS_OUTPUTS.has(parts[1])) {
+                    continue;
+                }
+                if (activeBaseIds.has(id)) {
+                    continue;
+                }
+                const prefix = `${id}.`;
+                const hasChildren = remainingIds.some(otherId => otherId.startsWith(prefix));
+                if (hasChildren) {
+                    continue;
+                }
+                await this.delObjectAsync(id, { recursive: true }).catch(() => {});
+                deletedGroups++;
+            }
+        } catch (e) {
+            this.log.warn(`Orphan group container cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
         this.log.info(
-            `Cleanup finished: removed ${deletedOutputs} orphaned output channel(s), ${deletedFolders} orphaned device folder(s).`,
+            `Cleanup finished: removed ${deletedOutputs} orphaned output channel(s), ${deletedFolders} orphaned device folder(s), ${deletedGroups} orphaned group container(s).`,
         );
     }
 
