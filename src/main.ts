@@ -433,6 +433,11 @@ const SUPPORTS_OUTPUTS = new Set(['switch', 'acload', 'system']);
 // Gerätetypen, deren outputs.<key>.State per MQTT schreibbar ist.
 const WRITABLE_TYPES = new Set(['switch', 'acload', 'system']);
 
+// S14: Teilmenge von SUPPORTS_OUTPUTS, deren NICHT-Output-Pfade (z.B. Ac.L1.Voltage) ebenfalls
+// device.group in der BaseId berücksichtigen (siehe getBaseId) - 'system' fällt bei
+// isOutputPath=false immer fest auf 'overview', ist also vom Group-Race nicht betroffen.
+const DEVICE_GROUP_RACE_TYPES = new Set(['switch', 'acload']);
+
 // Erkennt schreibbare Output-Pfade im ioBroker-Namensraum (nach BaseId, vor dem Segment "State").
 const WRITABLE_OUTPUT_REGEX = /^outputs\.([^.]+)\.State$/;
 
@@ -1013,6 +1018,11 @@ interface DeviceInfo {
     isStale?: boolean;
     staleTimer: ioBroker.Timeout | null | undefined;
     ready: boolean;
+    // S14: siehe bufferDeviceMessage()/commitDevice() - schließt die in S13 offen gelassene Lücke
+    // für Nicht-Output-Pfade (device.group-Race), nur für DEVICE_GROUP_RACE_TYPES relevant.
+    baseIdCommitted: boolean;
+    pendingDeviceMessages: { topic: string; payload: Buffer }[];
+    deviceCommitTimer: ioBroker.Timeout | null | undefined;
 }
 
 class VictronGx extends utils.Adapter {
@@ -1051,6 +1061,11 @@ class VictronGx extends utils.Adapter {
     // Group committed wird (Fallback). Kein Sliding-Window - der Timer startet einmalig beim
     // ersten gepufferten Wert und wird durch weitere Werte nicht zurückgesetzt.
     private readonly PENDING_QUIET_MS = 2_000;
+    // S14: Max. Wartezeit auf Settings/Group für Nicht-Output-Pfade (device-weit statt pro Output-
+    // Kanal, siehe bufferDeviceMessage()/commitDevice()). Bewusst deutlich länger als
+    // PENDING_QUIET_MS, weil hier auch Geräte ohne jede SwitchableOutput-Aktivität warten müssen,
+    // bis feststeht, ob überhaupt eine Group-Message kommt (kein Fast-Path über den Output-Key).
+    private readonly DEVICE_QUIET_MS = 30_000;
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'victron-gx' });
@@ -1833,6 +1848,23 @@ class VictronGx extends utils.Adapter {
                 return;
             }
 
+            // S14-Fix: Die Pufferung muss VOR der Registration-Path-Behandlung greifen, nicht erst
+            // danach - updateDeviceMeta() legt bei Serial/ProductName/Connected/Position/NrOfPhases
+            // synchron Objekte an und schreibt Logs, sobald device.ready=true ist. Ohne diese Gate
+            // hier entsteht der gruppenlose Ordner bereits durch die allererste Message-Serie
+            // (Serial → Connected im selben Sync-Block), lange bevor die SwitchableOutput.Group-
+            // Message eintrifft. getOrCreateDeviceEntry() legt nur den In-Memory-Eintrag an (kein
+            // ioBroker-Objekt, kein Log) - für DEVICE_GROUP_RACE_TYPES startet er mit
+            // baseIdCommitted=false und wird erst durch commitDevice() "scharf geschaltet".
+            if (DEVICE_GROUP_RACE_TYPES.has(deviceType)) {
+                const raceDeviceKey = `${deviceType}/${instance}`;
+                const raceDevice = this.getOrCreateDeviceEntry(raceDeviceKey, deviceType, instance);
+                if (!raceDevice.baseIdCommitted) {
+                    this.bufferDeviceMessage(raceDevice, topic, payload, remapOutputPath(normPath), rawValue);
+                    return;
+                }
+            }
+
             if (REGISTRATION_PATHS.has(normPath)) {
                 if (typeof rawValue === 'string' || typeof rawValue === 'number') {
                     this.updateDeviceMeta(deviceType, instance, normPath, String(rawValue));
@@ -1861,6 +1893,10 @@ class VictronGx extends utils.Adapter {
                 return;
             }
 
+            // S14-Fix: Die eigentliche Race-Pufferung sitzt jetzt VOR der Registration-Path-
+            // Behandlung (siehe oben) und deckt damit auch diesen Pfad ab - für
+            // DEVICE_GROUP_RACE_TYPES ist device.baseIdCommitted an dieser Stelle immer true
+            // (sonst wären wir bereits oben zurückgekehrt), ein zweites Gate wäre hier toter Code.
             const isOutputPath = out !== null && SUPPORTS_OUTPUTS.has(deviceType);
             const baseId = this.getBaseId(deviceType, instance, serial, device, isOutputPath);
             if (!baseId) {
@@ -2268,6 +2304,80 @@ class VictronGx extends utils.Adapter {
         this.armCleanupTimer();
     }
 
+    /**
+     * S14: Puffert eine Rohmessage (topic+payload) für ein Gerät, dessen BaseId noch nicht
+     * feststeht (device.group-Race, siehe DEVICE_GROUP_RACE_TYPES). Anders als bufferPendingOutput
+     * (S13, pro Output-Kanal) puffert dies GESAMTE Messages auf Device-Ebene, damit auch
+     * Nicht-Output-Pfade (z.B. Ac.L1.Voltage) nicht mit einer potenziell falschen (gruppenlosen)
+     * BaseId verarbeitet werden. Eine Group-Message löst einen sofortigen Commit aus; alle anderen
+     * Messages starten - falls noch keiner läuft - einen Fallback-Timer (DEVICE_QUIET_MS).
+     *
+     * @param device Geräte-Metadaten (Ziel für baseIdCommitted/group/pendingDeviceMessages)
+     * @param topic Ursprünglicher MQTT-Topic (für den Replay in commitDevice())
+     * @param payload Ursprüngliches MQTT-Payload (für den Replay in commitDevice())
+     * @param out Ergebnis von remapOutputPath() für den aktuellen Wert, null falls kein Output-Pfad
+     * @param rawValue Roh-MQTT-Wert der aktuellen Message (nur zur Group-Erkennung ausgewertet)
+     */
+    private bufferDeviceMessage(
+        device: DeviceInfo,
+        topic: string,
+        payload: Buffer,
+        out: { key: string; mqttKey: string; sub: string } | null,
+        rawValue: unknown,
+    ): void {
+        device.pendingDeviceMessages.push({ topic, payload });
+
+        if (out?.sub === 'Group' && typeof rawValue === 'string' && rawValue && !device.group) {
+            // Erste Group "gewinnt" (siehe getBaseId/§4.11) - sofortiger Commit, sobald die
+            // BaseId feststeht, statt auf die Ruhezeit zu warten.
+            device.group = rawValue;
+            this.commitDevice(device);
+            return;
+        }
+
+        if (!device.deviceCommitTimer) {
+            device.deviceCommitTimer = this.setTimeout(() => {
+                device.deviceCommitTimer = null;
+                this.commitDevice(device);
+            }, this.DEVICE_QUIET_MS);
+        }
+    }
+
+    /**
+     * S14: Committed ein gepuffertes Gerät - device.group ist JETZT entweder gesetzt (Group kam
+     * an) oder bewusst leer (Ruhezeit abgelaufen). Alle gepufferten Rohmessages werden in
+     * ursprünglicher Reihenfolge erneut durch handleMessage() geschickt ("derselbe Handler-Code"),
+     * diesmal mit baseIdCommitted=true, also über den unveränderten S13/Alt-Pfad. Die
+     * Group-Setter-Message selbst ist im Puffer enthalten und wird mitreplayed - das erneute Setzen
+     * von device.group ist dank !device.group-Guard idempotent.
+     *
+     * @param device Der zu committende Geräte-Eintrag
+     */
+    private commitDevice(device: DeviceInfo): void {
+        if (device.deviceCommitTimer) {
+            this.clearTimeout(device.deviceCommitTimer);
+            device.deviceCommitTimer = null;
+        }
+        device.baseIdCommitted = true;
+
+        const messages = device.pendingDeviceMessages;
+        device.pendingDeviceMessages = [];
+        for (const { topic, payload } of messages) {
+            this.handleMessage(topic, payload);
+        }
+
+        // S14-Fix: Erst NACH dem Replay loggen - device.serial wird selbst erst durch die
+        // gepufferte Serial-Message im Replay gesetzt (siehe getOrCreateDeviceEntry()/S14-Fix-Gate
+        // in handleMessage()), ist also vor diesem Zeitpunkt noch leer. Dient als Nachvollzieh-
+        // barkeits-Marker für den Praxistest (§ Testkriterium): erscheint erst, wenn die BaseId
+        // endgültig feststeht und alle zugehörigen Objekte angelegt sind.
+        this.log.info(
+            `Device committed: ${KNOWN_DEVICE_TYPES[device.type] || device.type} → serial: ${
+                device.serial || '?'
+            } group=${device.group || '(none)'}`,
+        );
+    }
+
     // ── Gesamtleistung overview berechnen ───────────────────────────────────
     private updateOverviewTotalPower(triggeredPath: string): void {
         const entry = OVERVIEW_TOTAL_POWER[triggeredPath];
@@ -2346,11 +2456,23 @@ class VictronGx extends utils.Adapter {
         return `devices.${type}.${serial}`;
     }
 
-    // ── Metadaten sammeln ────────────────────────────────────────────────────
-    private updateDeviceMeta(type: string, instance: number, field: string, value: string): void {
-        const deviceKey = `${type}/${instance}`;
-        if (!this.deviceMap.has(deviceKey)) {
-            this.deviceMap.set(deviceKey, {
+    /**
+     * S14-Fix: Legt bei Bedarf den In-Memory-DeviceInfo-Eintrag an - erzeugt bewusst KEIN
+     * ioBroker-Objekt und schreibt KEIN Log, damit dies gefahrlos auch aus dem Race-Gate in
+     * handleMessage() aufgerufen werden kann, bevor überhaupt feststeht, ob die BaseId schon
+     * committed ist. Für DEVICE_GROUP_RACE_TYPES startet der Eintrag mit baseIdCommitted=false
+     * (siehe bufferDeviceMessage()/commitDevice()), alle anderen Typen bleiben unverändert sofort
+     * "committed".
+     *
+     * @param deviceKey Interner Schlüssel "<type>/<instance>"
+     * @param type Victron-Gerätetyp
+     * @param instance Geräte-Instanznummer aus dem MQTT-Topic
+     * @returns Der (neue oder bereits vorhandene) DeviceInfo-Eintrag
+     */
+    private getOrCreateDeviceEntry(deviceKey: string, type: string, instance: number): DeviceInfo {
+        let device = this.deviceMap.get(deviceKey);
+        if (!device) {
+            device = {
                 type,
                 instance,
                 serial: '',
@@ -2363,9 +2485,21 @@ class VictronGx extends utils.Adapter {
                 lastUpdate: Date.now(),
                 staleTimer: null,
                 ready: NO_SERIAL_TYPES_REGISTER.has(type), // system/platform sofort ready
-            });
+                // S14: nur DEVICE_GROUP_RACE_TYPES puffern - alle anderen Typen starten committed,
+                // also 1:1 heutiges Verhalten (kein Puffern, keine Wartezeit).
+                baseIdCommitted: !DEVICE_GROUP_RACE_TYPES.has(type),
+                pendingDeviceMessages: [],
+                deviceCommitTimer: null,
+            };
+            this.deviceMap.set(deviceKey, device);
         }
-        const device = this.deviceMap.get(deviceKey)!;
+        return device;
+    }
+
+    // ── Metadaten sammeln ────────────────────────────────────────────────────
+    private updateDeviceMeta(type: string, instance: number, field: string, value: string): void {
+        const deviceKey = `${type}/${instance}`;
+        const device = this.getOrCreateDeviceEntry(deviceKey, type, instance);
         switch (field) {
             case 'Serial':
             case 'Devices.0.SerialNumber': {
@@ -4635,6 +4769,9 @@ class VictronGx extends utils.Adapter {
             for (const device of this.deviceMap.values()) {
                 if (device.staleTimer) {
                     this.clearTimeout(device.staleTimer);
+                }
+                if (device.deviceCommitTimer) {
+                    this.clearTimeout(device.deviceCommitTimer);
                 }
             }
             if (this.mqttClient) {
