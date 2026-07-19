@@ -240,6 +240,41 @@ If you move a channel to a different group, disable a Shelly channel, or delete 
 
 ## Changelog
 
+
+### 0.9.0 (2026-07-19)
+
+**⚠️ BREAKING CHANGES**
+- Switch and AC-load outputs now live under `outputs.<N>.State/Status` instead of directly at the device folder
+- Node-RED virtual switches: previously `.State`, now `.outputs.1.State`
+- Anyone referencing these paths in Vis or scripts needs to update them
+- Migration guide: see README section "Shelly integration & multi-channel support"
+
+**New: Shelly device integration**
+- Full multi-channel support for Shelly devices connected via Cerbo/Venus/Ekrano GX (via dbus-shelly bridge, Venus OS 3.60+)
+- Tested with Shelly Plus series (Plus 1/1PM/2PM/Plug S), Shelly Plugs, Shelly Pro3 as switch, Shelly 1PM as acload
+- Shelly PM devices: supported from model version 3 onward (in line with Victron's own compatibility list); older models are not supported by Victron's bridge and therefore also not reachable via this adapter
+- Multi-instance merging: channels of one Shelly device are automatically merged into a single object tree via their common serial
+- Shelly devices with measurement (e.g. 1PM as acload): measurement values and switchable output coexist on the same object
+- GX internal relay (system/0) is now switchable as well
+
+**New: Extended AC-load datapoints**
+- `Ac.Power` (total power)
+- `Ac.Energy.Reverse`, `Ac.L*.Energy.Reverse`
+- `Ac.L*.PowerFactor`
+- Metadata: `Role`, `IsGenericEnergyMeter`, `PhaseSetting`, `ProductId`
+
+**New: Cleanup toggle**
+- New option "Remove orphaned channels on startup" (default off)
+- Cleans up leftover objects after group changes or channel deactivation
+- Conservative: only removes objects whose serial is still active under another group (no data loss for offline devices)
+- Available in all 11 UI languages
+
+**Fixes**
+- Object store race during parallel channel/state creation (previously caused occasional invalid-type objects invisible to the sweep)
+- Group migration zombies are now removed (channel moved between groups at the GX)
+- Instance tile IP address and web UI link now show the configured GX IP of the respective instance (previously showed server IP or IP from instance 0)
+- Various smaller log and cosmetic fixes
+
 ### 0.8.10 (2026-07-04)
 - Review fixes for official repository inclusion: English-only log messages, admin tabs and state labels; sanitized serial numbers in object IDs; completed news and localLinks translations; removed unused pollingInterval; docs cleanup; updated @iobroker/types to 7.2.2
 
