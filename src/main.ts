@@ -1275,8 +1275,10 @@ class VictronGx extends utils.Adapter {
      * aktuellen outputToInstance-Zustand \u00fcbereinstimmt (Kanal umgruppiert, Ger\u00e4t entfernt/offline
      * deaktiviert). Betrifft ausschlie\u00dflich outputs.*-Objekte - Device-Level-Metadaten, Ac.*-
      * Messwerte, overview.* und alles au\u00dferhalb devices.<type>.**.outputs.<key> bleiben unber\u00fchrt
-     * (Pass 1). Pass 2 r\u00e4umt zus\u00e4tzlich gruppenlose devices.<type>.<Serial>-Ordner ab, deren Serial
-     * inzwischen unter einer Group-BaseId aktiv ist (siehe unten, S10-Fix "groupless leftovers").
+     * (Pass 1). Pass 2 r\u00e4umt zus\u00e4tzlich alte devices.<type>.<Serial>- UND devices.<type>.<Group>.
+     * <Serial>-Ordner ab, deren Serial inzwischen unter einer ANDEREN BaseId aktiv ist - sowohl
+     * gruppenlos\u2192Group- als auch Group\u2192Group-Umz\u00fcge (z.B. GX-seitiges Umh\u00e4ngen in eine andere
+     * Group), siehe unten S10-Fix "groupless leftovers" + Group-migration-Erweiterung.
      */
     private async runOrphanSweep(): Promise<void> {
         this.cleanupDoneOnce = true;
@@ -1332,21 +1334,28 @@ class VictronGx extends utils.Adapter {
                 deletedOutputs++;
             }
 
-            // Pass 2: gruppenlose devices.<type>.<Serial>-Ordner, deren Serial mittlerweile unter
-            // einer anderen (Group-)BaseId aktiv ist - Karteileichen aus der Zeit vor S14, als ein
-            // Kanal erst gruppenlos committed und nach Eintreffen der Group erneut (diesmal mit
-            // Group) angelegt wurde, ohne den alten Ordner zu entfernen. Bewusst auf SUPPORTS_OUTPUTS
-            // beschr\u00e4nkt (nur diese Typen kennen \u00fcberhaupt Group/BaseId-Migration \u00fcber
-            // outputToInstance) und auf Serials, die outputToInstance kennt - Ger\u00e4te ohne jede
-            // SwitchableOutput-Aktivit\u00e4t (z.B. reine Ac.*-Messger\u00e4te ohne Output) bleiben au\u00dferhalb
-            // dieses Sweeps (bekannte Grenze \u00a710.6, siehe README).
+            // Pass 2: devices.<type>.<Serial>-Ordner (gruppenlos) UND devices.<type>.<Group>.<Serial>-
+            // Ordner (gruppiert), deren Serial mittlerweile unter einer ANDEREN BaseId aktiv ist -
+            // Karteileichen sowohl aus der Zeit vor S14 (gruppenlos \u2192 Group) als auch aus echten
+            // Group-zu-Group-Umz\u00fcgen am GX (z.B. Shelly von "Shelly_Test" nach "Shelly_Test_2"
+            // verschoben). Ein Serial hat laut activeBaseIdBySerial genau eine aktuell aktive BaseId
+            // (getBaseId liefert genau einen Pfad je Serial) - jeder andere gefundene Device-Folder
+            // mit derselben Serial im letzten Pfadsegment ist per Definition ein Umzugs-Rest. Bewusst
+            // auf SUPPORTS_OUTPUTS beschr\u00e4nkt (nur diese Typen kennen \u00fcberhaupt Group/BaseId-
+            // Migration \u00fcber outputToInstance) und auf Serials, die outputToInstance kennt - Ger\u00e4te
+            // ohne jede SwitchableOutput-Aktivit\u00e4t (z.B. reine Ac.*-Messger\u00e4te ohne Output) bleiben
+            // au\u00dferhalb dieses Sweeps (bekannte Grenze \u00a710.6, siehe README).
             for (const obj of allObjects.rows) {
                 const id = obj.id.replace(`${this.namespace}.`, '');
                 const parts = id.split('.');
-                if (parts.length !== 3 || parts[0] !== 'devices' || !SUPPORTS_OUTPUTS.has(parts[1])) {
+                if (
+                    (parts.length !== 3 && parts.length !== 4) ||
+                    parts[0] !== 'devices' ||
+                    !SUPPORTS_OUTPUTS.has(parts[1])
+                ) {
                     continue;
                 }
-                const serial = parts[2];
+                const serial = parts[parts.length - 1];
                 if (!this.outputToInstance.has(serial)) {
                     continue;
                 }
