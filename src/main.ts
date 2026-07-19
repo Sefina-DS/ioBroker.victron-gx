@@ -1274,14 +1274,19 @@ class VictronGx extends utils.Adapter {
      * L\u00f6scht alle outputs.<key>-Kan\u00e4le, deren (BaseId, OutputKey)-Kombination nicht mehr mit dem
      * aktuellen outputToInstance-Zustand \u00fcbereinstimmt (Kanal umgruppiert, Ger\u00e4t entfernt/offline
      * deaktiviert). Betrifft ausschlie\u00dflich outputs.*-Objekte - Device-Level-Metadaten, Ac.*-
-     * Messwerte, overview.* und alles au\u00dferhalb devices.<type>.**.outputs.<key> bleiben unber\u00fchrt.
+     * Messwerte, overview.* und alles au\u00dferhalb devices.<type>.**.outputs.<key> bleiben unber\u00fchrt
+     * (Pass 1). Pass 2 r\u00e4umt zus\u00e4tzlich gruppenlose devices.<type>.<Serial>-Ordner ab, deren Serial
+     * inzwischen unter einer Group-BaseId aktiv ist (siehe unten, S10-Fix "groupless leftovers").
      */
     private async runOrphanSweep(): Promise<void> {
         this.cleanupDoneOnce = true;
         this.log.info('Starting cleanup of orphaned output channels...');
 
-        // Aktive (BaseId, OutputKey)-Kombinationen aus dem laufenden outputToInstance-Zustand.
+        // Aktive (BaseId, OutputKey)-Kombinationen aus dem laufenden outputToInstance-Zustand, plus
+        // (fuer Pass 2) die aktuelle BaseId je Serial - ein Serial hat h\u00f6chstens eine BaseId, alle
+        // seine OutputKeys teilen sich dieselbe Group/kein-Group-Entscheidung.
         const activeKeys = new Set<string>();
+        const activeBaseIdBySerial = new Map<string, string>();
         for (const [serial, keyMap] of this.outputToInstance.entries()) {
             for (const [outputKey, route] of keyMap.entries()) {
                 const device = this.findDeviceForOutput(serial, route.instance);
@@ -1291,21 +1296,30 @@ class VictronGx extends utils.Adapter {
                 const baseId = this.getBaseId(device.type, device.instance, serial, device, true);
                 if (baseId) {
                     activeKeys.add(`${baseId}|${outputKey}`);
+                    activeBaseIdBySerial.set(serial, baseId);
                 }
             }
         }
 
-        let deleted = 0;
+        let deletedOutputs = 0;
+        let deletedFolders = 0;
         try {
             const allObjects = await this.getObjectListAsync({
                 startkey: `${this.namespace}.devices.`,
                 endkey: `${this.namespace}.devices.\u9999`,
             });
+
+            // Pass 1: outputs.<key>-Kan\u00e4le, die nicht mehr in activeKeys stehen.
+            // Kein Type-Filter (mehr) auf 'channel': ein outputs.<key>-Pfad ist in unserem Schema
+            // IMMER ein von uns angelegter Kanal - nie ein State. Vor S10-Fix wurde hier zus\u00e4tzlich
+            // obj.value?.type !== 'channel' gepr\u00fcft; das lie\u00df genau die Kan\u00e4le durchrutschen, die
+            // durch den Race in commitPendingOutput() (siehe dortiger Kommentar) mit type:'folder'
+            // oder ganz ohne type angelegt wurden - der eigentliche Grund, warum "alte" Karteileichen
+            // trotz aktivem Toggle nie verschwanden. Der Race ist jetzt behoben, aber bereits so
+            // besch\u00e4digte Altobjekte aus fr\u00fcheren L\u00e4ufen bleiben ohne diese Lockerung weiterhin
+            // unsichtbar f\u00fcr den Sweep.
             const outputChannelRegex = /^(.+)\.outputs\.([^.]+)$/;
             for (const obj of allObjects.rows) {
-                if (obj.value?.type !== 'channel') {
-                    continue;
-                }
                 const id = obj.id.replace(`${this.namespace}.`, '');
                 const m = outputChannelRegex.exec(id);
                 if (!m) {
@@ -1315,13 +1329,44 @@ class VictronGx extends utils.Adapter {
                     continue;
                 }
                 await this.delObjectAsync(id, { recursive: true }).catch(() => {});
-                deleted++;
+                deletedOutputs++;
+            }
+
+            // Pass 2: gruppenlose devices.<type>.<Serial>-Ordner, deren Serial mittlerweile unter
+            // einer anderen (Group-)BaseId aktiv ist - Karteileichen aus der Zeit vor S14, als ein
+            // Kanal erst gruppenlos committed und nach Eintreffen der Group erneut (diesmal mit
+            // Group) angelegt wurde, ohne den alten Ordner zu entfernen. Bewusst auf SUPPORTS_OUTPUTS
+            // beschr\u00e4nkt (nur diese Typen kennen \u00fcberhaupt Group/BaseId-Migration \u00fcber
+            // outputToInstance) und auf Serials, die outputToInstance kennt - Ger\u00e4te ohne jede
+            // SwitchableOutput-Aktivit\u00e4t (z.B. reine Ac.*-Messger\u00e4te ohne Output) bleiben au\u00dferhalb
+            // dieses Sweeps (bekannte Grenze \u00a710.6, siehe README).
+            for (const obj of allObjects.rows) {
+                const id = obj.id.replace(`${this.namespace}.`, '');
+                const parts = id.split('.');
+                if (parts.length !== 3 || parts[0] !== 'devices' || !SUPPORTS_OUTPUTS.has(parts[1])) {
+                    continue;
+                }
+                const serial = parts[2];
+                if (!this.outputToInstance.has(serial)) {
+                    continue;
+                }
+                const activeBaseId = activeBaseIdBySerial.get(serial);
+                // Ohne aufl\u00f6sbare aktive BaseId (z.B. findDeviceForOutput schl\u00e4gt fehl) lieber nichts
+                // anfassen (konservativ) - und der Sonderfall "Serial hatte nie eine Group" ist \u00fcber
+                // den Gleichheitsvergleich automatisch gesch\u00fctzt (siehe Funktionskommentar oben).
+                if (!activeBaseId || activeBaseId === id) {
+                    continue;
+                }
+                await this.delObjectAsync(id, { recursive: true }).catch(() => {});
+                deletedFolders++;
             }
         } catch (e) {
             this.log.warn(`Orphan cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
         }
 
-        this.log.info(`Cleanup finished: removed ${deleted} orphaned output channel(s).`);
+        this.log.info(
+            `Cleanup finished: removed ${deletedOutputs} orphaned output channel(s), ${deletedFolders} orphaned device folder(s).`,
+        );
     }
 
     // ── MQTT ─────────────────────────────────────────────────────────────────
@@ -2232,14 +2277,14 @@ class VictronGx extends utils.Adapter {
             // Erste Group "gewinnt" (siehe getBaseId/§4.11) - sofortiger Commit, sobald die
             // BaseId feststeht, statt auf die Ruhezeit zu warten.
             device.group = rawValue;
-            this.commitPendingOutput(pending);
+            void this.commitPendingOutput(pending);
             return;
         }
 
         if (!pending.timer) {
             pending.timer = this.setTimeout(() => {
                 pending.timer = null;
-                this.commitPendingOutput(pending);
+                void this.commitPendingOutput(pending);
             }, this.PENDING_QUIET_MS);
         }
     }
@@ -2253,7 +2298,7 @@ class VictronGx extends utils.Adapter {
      *
      * @param pending Der zu committende Eintrag aus pendingOutputs
      */
-    private commitPendingOutput(pending: PendingOutput): void {
+    private async commitPendingOutput(pending: PendingOutput): Promise<void> {
         const pendingKey = `${pending.serial}|${pending.outputKey}`;
         if (pending.timer) {
             this.clearTimeout(pending.timer);
@@ -2274,7 +2319,17 @@ class VictronGx extends utils.Adapter {
         }
         keyMap.set(pending.outputKey, { instance: pending.instance, mqttKey: pending.mqttKey });
 
-        void this.setObjectNotExistsAsync(`${baseId}.outputs.${pending.outputKey}`, {
+        // Muss awaited werden, BEVOR writeStateValue()/ensureIntermediates() für die gepufferten
+        // Werte laufen (siehe unten): ensureIntermediates() legt denselben outputs.<key>-Pfad als
+        // generisches type:'folder'-Zwischensegment an, wenn es noch nicht existiert. Ohne Await
+        // liefen beide setObjectNotExistsAsync-Aufrufe unkoordiniert gegeneinander (type:'channel'
+        // hier vs. type:'folder' dort) - je nach I/O-Timing gewann mal der eine, mal der andere,
+        // und in manchen Fällen blieb das Objekt mit undefined type zurück (js-controller-Warnung
+        // "obj.type has to exist"). Ein type-loses oder falsch typisiertes outputs.<key>-Objekt
+        // fiel dann durch den type==='channel'-Filter von runOrphanSweep() und wurde nie als
+        // verwaist erkannt - das war der eigentliche "Sweep-Bug" (nicht die Pfad-Matching-Logik
+        // selbst, siehe dortiger Kommentar).
+        await this.setObjectNotExistsAsync(`${baseId}.outputs.${pending.outputKey}`, {
             type: 'channel',
             common: { name: `Output ${pending.outputKey}` },
             native: {},
