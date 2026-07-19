@@ -1023,6 +1023,10 @@ interface DeviceInfo {
     baseIdCommitted: boolean;
     pendingDeviceMessages: { topic: string; payload: Buffer }[];
     deviceCommitTimer: ioBroker.Timeout | null | undefined;
+    // S15-Fix: true, wenn commitDevice() geloggt hat, bevor die Serial bekannt war (Group-Message
+    // traf vor der Serial-Message ein, siehe updateDeviceMeta()/commitDevice()). Der nachgeholte
+    // Log-Eintrag wird dann geschrieben, sobald die Serial tatsächlich eintrifft.
+    pendingCommitLog?: boolean;
 }
 
 class VictronGx extends utils.Adapter {
@@ -2478,11 +2482,23 @@ class VictronGx extends utils.Adapter {
         // in handleMessage()), ist also vor diesem Zeitpunkt noch leer. Dient als Nachvollzieh-
         // barkeits-Marker für den Praxistest (§ Testkriterium): erscheint erst, wenn die BaseId
         // endgültig feststeht und alle zugehörigen Objekte angelegt sind.
-        this.log.info(
-            `Device committed: ${KNOWN_DEVICE_TYPES[device.type] || device.type} → serial: ${
-                device.serial || '?'
-            } group=${device.group || '(none)'}`,
-        );
+        //
+        // S15-Fix: Für acload/switch traf in der Praxis die Group-Message manchmal VOR der
+        // Serial-Message ein (GX publiziert nicht in fester Reihenfolge) - dann löste die
+        // Group-Message bereits den sofortigen Commit aus (siehe bufferDeviceMessage()), bevor
+        // die Serial überhaupt im Puffer lag. device.serial war an dieser Stelle dann noch leer,
+        // obwohl der Sweep später über outputToInstance() trotzdem korrekt lief. Statt "serial: ?"
+        // zu loggen, wird der Log-Eintrag zurückgestellt und erst nachgeholt, sobald
+        // updateDeviceMeta() die Serial tatsächlich setzt.
+        if (device.serial) {
+            this.log.info(
+                `Device committed: ${KNOWN_DEVICE_TYPES[device.type] || device.type} → serial: ${
+                    device.serial
+                } group=${device.group || '(none)'}`,
+            );
+        } else {
+            device.pendingCommitLog = true;
+        }
     }
 
     // ── Gesamtleistung overview berechnen ───────────────────────────────────
@@ -2618,6 +2634,16 @@ class VictronGx extends utils.Adapter {
                 if (!this.loggedDevices.has(k)) {
                     this.loggedDevices.add(k);
                     this.log.info(`Device detected: ${KNOWN_DEVICE_TYPES[type] || type} → serial: ${value}`);
+                }
+                // S15-Fix: siehe commitDevice() - Log war beim Commit zurückgestellt, weil die
+                // Serial dort noch unbekannt war. Jetzt nachholen, wo sie feststeht.
+                if (device.pendingCommitLog) {
+                    device.pendingCommitLog = false;
+                    this.log.info(
+                        `Device committed: ${KNOWN_DEVICE_TYPES[type] || type} → serial: ${safeSerial} group=${
+                            device.group || '(none)'
+                        }`,
+                    );
                 }
                 const oldId = `devices.${type}.${instance}`;
                 const newId = `devices.${type}.${safeSerial}`;
