@@ -12,5 +12,5 @@
     "modbusPort_label": "Modbus-poort",
     "modbusHint_text": "⚠️ Vereiste op GX-apparaat: Instellingen → Integraties → Modbus TCP-server → Ingeschakeld & Toegangsniveau → Schrijven toegestaan",
     "cleanupOrphanedOutputs_label": "Verweesde kanalen verwijderen bij opstart",
-    "cleanupOrphanedOutputs_help": "Bij het starten van de adapter worden objecten van kanalen die niet meer door de GX worden gemeld automatisch verwijderd. Aanbevolen na wijzigingen (groep gewijzigd, kanaal uitgeschakeld). Niet inschakelen als apparaten vaak offline zijn."
+    "cleanupOrphanedOutputs_help": "Bij het opstarten van de adapter worden verweesde kanalen, apparaatmappen en lege groepscontainers automatisch verwijderd (bijv. na het verplaatsen van kanalen tussen groepen of het uitschakelen van kanalen op de GX). Conservatief: apparaten die momenteel niets verzenden, maar waarvan het serienummer nog bekend is, blijven ongemoeid – geen dataverlies bij offline apparaten. Niet inschakelen als apparaten regelmatig offline gaan."
 }

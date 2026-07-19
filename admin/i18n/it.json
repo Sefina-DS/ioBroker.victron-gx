@@ -12,5 +12,5 @@
     "modbusPort_label": "Porta Modbus",
     "modbusHint_text": "⚠️ Prerequisito sul dispositivo GX: Impostazioni → Integrazioni → Server Modbus TCP → Abilitato & Livello di accesso → Scrittura consentita",
     "cleanupOrphanedOutputs_label": "Rimuovi canali orfani all'avvio",
-    "cleanupOrphanedOutputs_help": "All'avvio dell'adattatore, gli oggetti dei canali non più segnalati dal GX vengono eliminati automaticamente. Consigliato dopo la riconfigurazione (gruppo modificato, canale disattivato). Non attivare se i dispositivi sono spesso offline."
+    "cleanupOrphanedOutputs_help": "All'avvio dell'adattatore, i canali orfani, le cartelle dei dispositivi e i contenitori di gruppo vuoti vengono rimossi automaticamente (ad es. dopo lo spostamento di canali tra gruppi o la disattivazione di canali sul GX). Conservativo: i dispositivi che al momento non inviano dati, ma il cui numero di serie è ancora noto, rimangono intatti – nessuna perdita di dati per i dispositivi offline. Non attivare se i dispositivi vanno spesso offline."
 }

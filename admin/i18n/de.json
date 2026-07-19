@@ -12,5 +12,5 @@
     "modbusPort_label": "Modbus Port",
     "modbusHint_text": "⚠️ Voraussetzung am GX-Gerät: Einstellungen → Integrationen → Modbus TCP-Server → Aktiviert & Zugriffsberechtigungen → Schreiben erlaubt",
     "cleanupOrphanedOutputs_label": "Verwaiste Kanäle beim Start entfernen",
-    "cleanupOrphanedOutputs_help": "Beim Adapter-Start werden Objekte von Kanälen, die vom GX nicht mehr gemeldet werden, automatisch gelöscht. Empfohlen nach Umbauten (Gruppe geändert, Kanal deaktiviert). Nicht aktivieren, wenn Geräte häufig offline sind."
+    "cleanupOrphanedOutputs_help": "Beim Adapter-Start werden verwaiste Kanäle, Geräte-Ordner und leere Gruppen-Container automatisch entfernt (z.B. nach Gruppen-Umzug oder Kanal-Deaktivierung am GX). Konservativ: Geräte, die aktuell nicht senden, aber deren Serial noch bekannt ist, bleiben unberührt – kein Datenverlust bei offline stehenden Geräten. Nicht aktivieren, wenn Geräte häufig offline gehen."
 }

@@ -12,5 +12,5 @@
     "modbusPort_label": "Modbus端口",
     "modbusHint_text": "⚠️ GX设备前提条件：设置 → 集成 → Modbus TCP服务器 → 已启用 & 访问级别 → 允许写入",
     "cleanupOrphanedOutputs_label": "启动时删除孤立通道",
-    "cleanupOrphanedOutputs_help": "适配器启动时，GX 不再报告的通道对象会被自动删除。建议在重新配置后启用（组已更改、通道已禁用）。如果设备经常离线，请勿启用。"
+    "cleanupOrphanedOutputs_help": "适配器启动时，会自动清除孤立的通道、设备文件夹和空的分组容器（例如在组间移动通道或在 GX 上禁用通道之后）。保守策略：当前未发送数据但序列号仍然已知的设备不受影响——离线设备不会丢失数据。如果设备经常离线，请勿启用此选项。"
 }

@@ -12,5 +12,5 @@
     "modbusPort_label": "Port Modbus",
     "modbusHint_text": "⚠️ Wymaganie na urządzeniu GX: Ustawienia → Integracje → Serwer Modbus TCP → Włączony & Poziom dostępu → Zapis dozwolony",
     "cleanupOrphanedOutputs_label": "Usuwaj osierocone kanały przy starcie",
-    "cleanupOrphanedOutputs_help": "Podczas uruchamiania adaptera obiekty kanałów, które nie są już zgłaszane przez GX, są automatycznie usuwane. Zalecane po zmianach konfiguracji (zmiana grupy, wyłączenie kanału). Nie włączać, jeśli urządzenia są często offline."
+    "cleanupOrphanedOutputs_help": "Podczas uruchamiania adaptera osierocone kanały, foldery urządzeń i puste kontenery grup są automatycznie usuwane (np. po przeniesieniu kanałów między grupami lub wyłączeniu kanałów na GX). Zachowawczo: urządzenia, które aktualnie nie wysyłają danych, ale których numer seryjny jest nadal znany, pozostają nienaruszone – brak utraty danych dla urządzeń offline. Nie włączać, jeśli urządzenia często przechodzą w tryb offline."
 }

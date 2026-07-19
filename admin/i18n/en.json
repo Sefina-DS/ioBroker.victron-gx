@@ -12,5 +12,5 @@
     "modbusPort_label": "Modbus port",
     "modbusHint_text": "⚠️ Prerequisite on GX device: Settings → Integrations → Modbus TCP Server → Enabled & Access level → Write access allowed",
     "cleanupOrphanedOutputs_label": "Remove orphaned channels on startup",
-    "cleanupOrphanedOutputs_help": "On adapter startup, objects for channels no longer reported by the GX are deleted automatically. Recommended after reconfiguration (group changed, channel disabled). Do not enable if devices are frequently offline."
+    "cleanupOrphanedOutputs_help": "On adapter startup, orphaned channels, device folders and empty group containers are removed automatically (e.g. after moving channels between groups or disabling channels at the GX). Conservative: devices that are currently not sending but whose serial is still known remain untouched – no data loss for offline devices. Do not enable if devices frequently go offline."
 }
