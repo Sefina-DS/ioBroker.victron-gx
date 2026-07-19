@@ -189,7 +189,7 @@
         "messagebox": true,
         "localLinks": {
             "_default": {
-                "link": "http://%ip%",
+                "link": "http://%native_host%",
                 "name": {
                     "en": "GX Web Interface",
                     "de": "GX Weboberfläche",

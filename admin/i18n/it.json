@@ -1,14 +1,16 @@
 {
-  "tab_main": "Impostazioni principali",
-  "tab_devices": "Dispositivi",
-  "tab_catalog": "Tutti i topic",
-  "host_label": "Indirizzo IP del dispositivo GX",
-  "host_help": "es. 192.168.6.200",
-  "port_label": "Porta MQTT",
-  "mqttUsername_label": "Nome utente MQTT",
-  "mqttUsername_help": "Lasciare vuoto se non è configurata l'autenticazione",
-  "mqttPassword_label": "Password MQTT",
-  "controlEnabled_label": "Abilita controllo (Modbus TCP)",
-  "modbusPort_label": "Porta Modbus",
-  "modbusHint_text": "⚠️ Prerequisito sul dispositivo GX: Impostazioni → Integrazioni → Server Modbus TCP → Abilitato & Livello di accesso → Scrittura consentita"
+    "tab_main": "Impostazioni principali",
+    "tab_devices": "Dispositivi",
+    "tab_catalog": "Tutti i topic",
+    "host_label": "Indirizzo IP del dispositivo GX",
+    "host_help": "es. 192.168.6.200",
+    "port_label": "Porta MQTT",
+    "mqttUsername_label": "Nome utente MQTT",
+    "mqttUsername_help": "Lasciare vuoto se non è configurata l'autenticazione",
+    "mqttPassword_label": "Password MQTT",
+    "controlEnabled_label": "Abilita controllo (Modbus TCP)",
+    "modbusPort_label": "Porta Modbus",
+    "modbusHint_text": "⚠️ Prerequisito sul dispositivo GX: Impostazioni → Integrazioni → Server Modbus TCP → Abilitato & Livello di accesso → Scrittura consentita",
+    "cleanupOrphanedOutputs_label": "Rimuovi canali orfani all'avvio",
+    "cleanupOrphanedOutputs_help": "All'avvio dell'adattatore, i canali orfani, le cartelle dei dispositivi e i contenitori di gruppo vuoti vengono rimossi automaticamente (ad es. dopo lo spostamento di canali tra gruppi o la disattivazione di canali sul GX). Conservativo: i dispositivi che al momento non inviano dati, ma il cui numero di serie è ancora noto, rimangono intatti – nessuna perdita di dati per i dispositivi offline. Non attivare se i dispositivi vanno spesso offline."
 }

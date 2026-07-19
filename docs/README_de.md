@@ -84,8 +84,8 @@ Der Adapter erkennt automatisch alle am GX-Gerät angeschlossenen Geräte:
 | `vebus` | MultiPlus/Quattro Wechselrichter |
 | `grid` | Netzanschluss-Zähler (z.B. Shelly 3EM, Carlo Gavazzi) |
 | `pvinverter` | PV-Wechselrichter |
-| `acload` | AC-Verbraucher |
-| `switch` | Virtuelle Schalter (Node-RED) |
+| `acload` | AC-Verbraucher (inkl. Shelly 1PM, mit Schaltausgang) |
+| `switch` | Schaltausgänge (Node-RED Virtual Switches, Shelly Pro3/Pro4/1PM, GX-internes Relais) |
 | `temperature` | Temperatursensoren |
 | `meteo` | Wetterstationen |
 | `tank` | Tankfüllstandssensoren |
@@ -103,15 +103,25 @@ victron-gx.0
 │   ├── vebus.*
 │   ├── grid.*
 │   ├── pvinverter.*
-│   ├── acload.*
-│   ├── switch.*
+│   ├── acload.<Group>.<Serial>.
+│   │   ├── Ac.*                     → Messwerte (unverändert)
+│   │   └── outputs.<N>.             → Schaltausgang, falls vorhanden (z.B. Shelly 1PM)
+│   │       ├── State                    bool, schreibbar
+│   │       ├── Status                   bool, nur lesend
+│   │       ├── Name / CustomName        string
+│   │       └── Group                    string
+│   ├── switch.<Group>.<Serial>.
+│   │   └── outputs.<N>.             → ein Sub-Kanal pro Ausgang (Node-RED: einer, Shelly Pro3/4: bis zu vier)
+│   │       ├── State / Status / Name / CustomName / Group   (wie oben)
 │   ├── temperature.*
 │   ├── meteo.*
 │   ├── tank.*
-│   └── system.*
-├── overview.*         → Systemübersicht (aus system/0)
+│   └── system.*                     → trägt auch outputs.0.* für das GX-interne Relais
+├── overview.*         → Systemübersicht (aus system/0), nur lesend
 └── info.*             → Verbindungsstatus
 ```
+
+`<Group>` ist ein optionaler Zwischenordner – nur vorhanden, wenn für den jeweiligen Kanal/das Gerät ein Gruppenname konfiguriert ist. Details siehe [Shelly-Integration & Multi-Kanal-Unterstützung](#shelly-integration--multi-kanal-unterstützung) weiter unten.
 
 ---
 
@@ -154,6 +164,52 @@ Der Adapter unterstützt vollständig virtuelle Geräte die via Node-RED mit dem
 - Virtuelle Temperatursensoren
 - Virtuelle Wetterstationen
 - Virtuelle Tankfüllstandssensoren
+
+---
+
+## Shelly-Integration & Multi-Kanal-Unterstützung
+
+Shelly-Geräte, die am GX (Cerbo/Venus/Ekrano) integriert sind, werden jetzt vollständig unterstützt, zusätzlich zu Node-RED Virtual Switches:
+
+- **Shelly Pro3 / Pro4**: jedes physische Gerät meldet seine Kanäle als separate MQTT-DeviceInstances mit identischer Seriennummer. Der Adapter führt sie automatisch in einem einzigen Objektbaum zusammen (`devices.switch.<Group>.<Serial>.outputs.<0..3>.*`).
+- **Shelly 1PM**: Messwerte (`Ac.*`) und der Schaltausgang (`outputs.0.*`) liegen am selben Geräte-Baum unter `devices.acload.<Group>.<Serial>`.
+- **GX-internes Relais**: das im GX-Gerät eingebaute Relais (`system/0`) ist jetzt schaltbar unter `devices.system.<Serial>.outputs.0.State`, ohne zusätzliche Konfiguration.
+
+Alle Schaltausgänge – unabhängig vom Gerätetyp – teilen sich dieselbe Unterstruktur, wodurch Wildcard-Selektoren über die gesamte Installation hinweg funktionieren:
+
+```javascript
+// Alle Schaltausgänge, egal welcher Gerätetyp, egal welche Gruppe
+'victron-gx.0.devices.*.*.*.outputs.*.State'
+
+// Nur die Custom-Namen, für eine Geräteübersicht
+'victron-gx.0.devices.*.*.*.outputs.*.CustomName'
+```
+
+### ⚠️ Breaking Change (v0.9.x)
+
+Schaltausgänge lagen bisher direkt unter dem Geräte-Kanal; sie liegen jetzt unter einem `outputs.<N>`-Sub-Kanal. Node-REDs `output_1` wird auf `outputs.1` normiert:
+
+| Alt (v0.8.x) | Neu (v0.9.x) |
+|---|---|
+| `devices.switch.<Group>.<Serial>.State` | `devices.switch.<Group>.<Serial>.outputs.1.State` |
+| `devices.switch.<Group>.<Serial>.Status` | `devices.switch.<Group>.<Serial>.outputs.1.Status` |
+
+Skripte, Vis-Widgets oder Blockly-Regeln, die die alten Pfade direkt referenzieren, müssen angepasst werden.
+
+Wer die übrig gebliebenen alten Objekte loswerden will, führt Folgendes in der ioBroker-CLI aus (die Schleife umgeht den bekannten "Invalid ID: undefined"-Fehler beim Löschen über die Admin-UI):
+
+```bash
+iobroker object list | grep -oP 'victron-gx\.0\.devices\.switch\.[^.]+\.[^.]+\.(State|Status)$' \
+  | while read id; do iobroker object del "$id"; done
+```
+
+### Automatisches Aufräumen verwaister Kanäle (optional)
+
+Wenn ein Kanal in eine andere Gruppe verschoben, ein Shelly-Kanal deaktiviert oder ein Node-RED-Switch gelöscht wird, verschwindet zwar dessen MQTT-Topic – die ioBroker-Objekte bleiben aber bestehen. Mit **Verwaiste Kanäle beim Start entfernen** (Tab „Haupteinstellungen", standardmäßig aus) räumt der Adapter diese automatisch auf:
+
+- Läuft einmal pro Adapter-Start, erst nachdem ca. 30 Sekunden lang kein neu erkannter Kanal mehr dazukam (damit Multi-Kanal-Geräte wie der Shelly Pro3, dessen Instances zeitlich leicht versetzt reinkommen, beim Start nicht betroffen sind).
+- Betrifft ausschließlich `outputs.<N>`-Kanäle. Geräte-Metadaten, `Ac.*`-Messwerte und `overview.*` werden davon nie entfernt.
+- Bei häufig offline befindlichen Geräten sollte die Option deaktiviert bleiben – ein Kanal, der sich bis zum Sweep-Zeitpunkt noch nicht zurückgemeldet hat, sieht verwaist aus und würde gelöscht.
 
 ---
 

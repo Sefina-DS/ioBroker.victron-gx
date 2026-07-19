@@ -1,14 +1,16 @@
 {
-  "tab_main": "Main Settings",
-  "tab_devices": "Devices",
-  "tab_catalog": "All Topics",
-  "host_label": "IP address of GX device",
-  "host_help": "e.g. 192.168.6.200",
-  "port_label": "MQTT port",
-  "mqttUsername_label": "MQTT username",
-  "mqttUsername_help": "Leave empty if no auth configured",
-  "mqttPassword_label": "MQTT password",
-  "controlEnabled_label": "Enable control (Modbus TCP)",
-  "modbusPort_label": "Modbus port",
-  "modbusHint_text": "⚠️ Prerequisite on GX device: Settings → Integrations → Modbus TCP Server → Enabled & Access level → Write access allowed"
+    "tab_main": "Main Settings",
+    "tab_devices": "Devices",
+    "tab_catalog": "All Topics",
+    "host_label": "IP address of GX device",
+    "host_help": "e.g. 192.168.6.200",
+    "port_label": "MQTT port",
+    "mqttUsername_label": "MQTT username",
+    "mqttUsername_help": "Leave empty if no auth configured",
+    "mqttPassword_label": "MQTT password",
+    "controlEnabled_label": "Enable control (Modbus TCP)",
+    "modbusPort_label": "Modbus port",
+    "modbusHint_text": "⚠️ Prerequisite on GX device: Settings → Integrations → Modbus TCP Server → Enabled & Access level → Write access allowed",
+    "cleanupOrphanedOutputs_label": "Remove orphaned channels on startup",
+    "cleanupOrphanedOutputs_help": "On adapter startup, orphaned channels, device folders and empty group containers are removed automatically (e.g. after moving channels between groups or disabling channels at the GX). Conservative: devices that are currently not sending but whose serial is still known remain untouched – no data loss for offline devices. Do not enable if devices frequently go offline."
 }

@@ -1,14 +1,16 @@
 {
-  "tab_main": "Hoofdinstellingen",
-  "tab_devices": "Apparaten",
-  "tab_catalog": "Alle onderwerpen",
-  "host_label": "IP-adres van GX-apparaat",
-  "host_help": "bijv. 192.168.6.200",
-  "port_label": "MQTT-poort",
-  "mqttUsername_label": "MQTT-gebruikersnaam",
-  "mqttUsername_help": "Leeg laten als er geen auth is geconfigureerd",
-  "mqttPassword_label": "MQTT-wachtwoord",
-  "controlEnabled_label": "Bediening inschakelen (Modbus TCP)",
-  "modbusPort_label": "Modbus-poort",
-  "modbusHint_text": "⚠️ Vereiste op GX-apparaat: Instellingen → Integraties → Modbus TCP-server → Ingeschakeld & Toegangsniveau → Schrijven toegestaan"
+    "tab_main": "Hoofdinstellingen",
+    "tab_devices": "Apparaten",
+    "tab_catalog": "Alle onderwerpen",
+    "host_label": "IP-adres van GX-apparaat",
+    "host_help": "bijv. 192.168.6.200",
+    "port_label": "MQTT-poort",
+    "mqttUsername_label": "MQTT-gebruikersnaam",
+    "mqttUsername_help": "Leeg laten als er geen auth is geconfigureerd",
+    "mqttPassword_label": "MQTT-wachtwoord",
+    "controlEnabled_label": "Bediening inschakelen (Modbus TCP)",
+    "modbusPort_label": "Modbus-poort",
+    "modbusHint_text": "⚠️ Vereiste op GX-apparaat: Instellingen → Integraties → Modbus TCP-server → Ingeschakeld & Toegangsniveau → Schrijven toegestaan",
+    "cleanupOrphanedOutputs_label": "Verweesde kanalen verwijderen bij opstart",
+    "cleanupOrphanedOutputs_help": "Bij het opstarten van de adapter worden verweesde kanalen, apparaatmappen en lege groepscontainers automatisch verwijderd (bijv. na het verplaatsen van kanalen tussen groepen of het uitschakelen van kanalen op de GX). Conservatief: apparaten die momenteel niets verzenden, maar waarvan het serienummer nog bekend is, blijven ongemoeid – geen dataverlies bij offline apparaten. Niet inschakelen als apparaten regelmatig offline gaan."
 }

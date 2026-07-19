@@ -181,15 +181,27 @@ const RELEVANT_PATHS = {
     "Ac.L1.Energy.Forward",
     "Ac.L2.Energy.Forward",
     "Ac.L3.Energy.Forward",
+    "Ac.L1.Energy.Reverse",
+    "Ac.L2.Energy.Reverse",
+    "Ac.L3.Energy.Reverse",
+    "Ac.L1.PowerFactor",
+    "Ac.L2.PowerFactor",
+    "Ac.L3.PowerFactor",
     "Ac.Energy.Forward",
+    "Ac.Energy.Reverse",
     "Serial",
     "ProductName",
+    "ProductId",
     "CustomName",
     "Mgmt.Connection",
     "Mgmt.ProcessName",
     "Connected",
     "Position",
-    "NrOfPhases"
+    "NrOfPhases",
+    "Role",
+    "IsGenericEnergyMeter",
+    "PhaseSetting"
+    // SwitchableOutput.*.* wird dynamisch akzeptiert (siehe SUPPORTS_OUTPUTS / isRelevantPath, Schritt S4a)
   ],
   pvinverter: [
     "Ac.Power",
@@ -222,16 +234,15 @@ const RELEVANT_PATHS = {
     "NrOfPhases"
   ],
   switch: [
-    "SwitchableOutput.output_1.State",
-    "SwitchableOutput.output_1.Status",
+    // Statische Metadaten (Device-Level). SwitchableOutput.*.* wird dynamisch akzeptiert
+    // (siehe SUPPORTS_OUTPUTS / isRelevantPath, Schritt S4a).
     "Connected",
     "Serial",
     "ProductName",
+    "ProductId",
     "CustomName",
     "Mgmt.Connection",
-    "Mgmt.ProcessName",
-    "SwitchableOutput.output_1.Settings.CustomName",
-    "SwitchableOutput.output_1.Settings.Group"
+    "Mgmt.ProcessName"
   ],
   system: [
     "Dc.Battery.Soc",
@@ -302,18 +313,14 @@ const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
   "Position",
   "NrOfPhases",
   "Mgmt.Connection",
-  "Mgmt.ProcessName",
-  "SwitchableOutput.output_1.Settings.CustomName",
-  "SwitchableOutput.output_1.Settings.Group"
+  "Mgmt.ProcessName"
+  // Output-Metadaten (CustomName/Group) laufen seit S4b/S4c dynamisch über remapOutputPath()
+  // im Message-Handler, nicht mehr über hartcodierte output_1-Einträge hier (S7-Cleanup).
 ]);
 const NO_SERIAL_TYPES_HANDLE = /* @__PURE__ */ new Set(["system", "platform"]);
-const NO_SERIAL_TYPES_REGISTER = /* @__PURE__ */ new Set(["system", "platform", "switch"]);
+const NO_SERIAL_TYPES_REGISTER = /* @__PURE__ */ new Set(["system", "platform"]);
 const MODBUS_NEEDED_TYPES = /* @__PURE__ */ new Set(["vebus", "battery", "grid", "pvinverter", "solarcharger"]);
 const PATH_REMAP = {
-  switch: {
-    "SwitchableOutput.output_1.State": "State",
-    "SwitchableOutput.output_1.Status": "Status"
-  },
   battery: {
     "Dc.0.Temperature": "temperatures.main",
     "System.Temperature1": "temperatures.temp1",
@@ -368,14 +375,23 @@ const PATH_REMAP = {
     "Alarms.LowSoc": "alarms.lowSoc"
   }
 };
-const WRITE_PATH_REMAP = {
-  switch: { State: "SwitchableOutput/output_1/State" }
-};
-const WRITABLE_PATHS = {
-  switch: ["State"]
-  // vebus: read-only via MQTT; schreibbar nur via Modbus über control.*
-  // ess:   read-only via MQTT; schreibbar nur via Modbus über control.*
-};
+const OUTPUT_PATH_REGEX = /^SwitchableOutput\.([^.]+)\.(.+)$/;
+const OUTPUT_KEY_NORMALIZE = /^output_(\d+)$/;
+function remapOutputPath(normPath) {
+  const m = OUTPUT_PATH_REGEX.exec(normPath);
+  if (!m) {
+    return null;
+  }
+  const rawKey = m[1];
+  const norm = OUTPUT_KEY_NORMALIZE.exec(rawKey);
+  const key = norm ? norm[1] : rawKey;
+  const sub = m[2].replace(/^Settings\./, "");
+  return { key, mqttKey: rawKey, sub, ioPath: `outputs.${key}.${sub}` };
+}
+const SUPPORTS_OUTPUTS = /* @__PURE__ */ new Set(["switch", "acload", "system"]);
+const WRITABLE_TYPES = /* @__PURE__ */ new Set(["switch", "acload", "system"]);
+const DEVICE_GROUP_RACE_TYPES = /* @__PURE__ */ new Set(["switch", "acload"]);
+const WRITABLE_OUTPUT_REGEX = /^outputs\.([^.]+)\.State$/;
 const CONTROL_REGISTERS = {
   // ── Inverter (vebus, Unit 238) ───────────────────────────────────────────
   "inverter.Mode": {
@@ -896,6 +912,28 @@ class VictronGx extends utils.Adapter {
   mqttMsgCount = 0;
   topicMap = {};
   topicCatalog = {};
+  // Serial → OutputKey → { instance, mqttKey } - additiv für Shelly-Multi-Channel (Schritt S1),
+  // wird erst ab Schritt S4b befüllt und ab S5 für die Write-Route gelesen.
+  outputToInstance = /* @__PURE__ */ new Map();
+  // Auto-Cleanup verwaister outputs.*-Kanäle beim Start, Config-Toggle (Default aus, §10.1/10.2).
+  cleanupEnabled = false;
+  cleanupTimer = null;
+  cleanupDoneOnce = false;
+  // Ruhezeit: Sweep läuft erst, wenn seit dem letzten neu erkannten Kanal in outputToInstance
+  // mindestens so lange nichts mehr reinkam - schützt Multi-Instance-Devices (Shelly Pro3),
+  // deren Instances zeitlich gestaffelt reinkommen (§10.1).
+  CLEANUP_QUIET_MS = 3e4;
+  // S13: Key "<serial>|<outputKey>" -> noch nicht committeter Kanal (siehe PendingOutput).
+  pendingOutputs = /* @__PURE__ */ new Map();
+  // Max. Wartezeit auf Settings/Group nach dem ersten Wert eines neuen Kanals, bevor ohne
+  // Group committed wird (Fallback). Kein Sliding-Window - der Timer startet einmalig beim
+  // ersten gepufferten Wert und wird durch weitere Werte nicht zurückgesetzt.
+  PENDING_QUIET_MS = 2e3;
+  // S14: Max. Wartezeit auf Settings/Group für Nicht-Output-Pfade (device-weit statt pro Output-
+  // Kanal, siehe bufferDeviceMessage()/commitDevice()). Bewusst deutlich länger als
+  // PENDING_QUIET_MS, weil hier auch Geräte ohne jede SwitchableOutput-Aktivität warten müssen,
+  // bis feststeht, ob überhaupt eine Group-Message kommt (kein Fast-Path über den Output-Key).
+  DEVICE_QUIET_MS = 3e4;
   constructor(options = {}) {
     super({ ...options, name: "victron-gx" });
     this.on("ready", this.onReady.bind(this));
@@ -905,6 +943,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── Adapter-Start ────────────────────────────────────────────────────────
   onReady() {
+    this.cleanupEnabled = this.config.cleanupOrphanedOutputs === true;
     void this.setState("info.connection", false, true);
     void this.setObjectNotExistsAsync("info.modbusConnected", {
       type: "state",
@@ -957,9 +996,12 @@ class VictronGx extends utils.Adapter {
     void this.setState("info.modbusConnected", false, true);
     void this.setState("info.modbusWritable", false, true);
     this.subscribeStates("devices.switch.*");
+    this.subscribeStates("devices.acload.*");
+    this.subscribeStates("devices.system.*");
     if (this.config.controlEnabled) {
       this.subscribeStates("control.*");
     }
+    this.armCleanupTimer();
     void this.cleanupNumericChannels();
     void this.cleanupLegacyChannels();
     void this.setObjectNotExistsAsync("devices", {
@@ -1042,6 +1084,138 @@ class VictronGx extends utils.Adapter {
       }
     } catch {
     }
+  }
+  // \u2500\u2500 Auto-Cleanup verwaister Output-Kan\u00e4le (\u00a710.4) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // Sucht das DeviceInfo, das f\u00fcr eine gegebene (Serial, MQTT-Instance)-Kombination die
+  // Output-Metadaten (Type, Group) tr\u00e4gt. Genauer als eine reine Serial-Suche: bei
+  // Multi-Instance-Merging (Shelly Pro3) teilen sich mehrere DeviceInfos dieselbe Serial,
+  // aber nur eine davon passt zur konkreten Instance des gesuchten Outputs.
+  findDeviceForOutput(serial, instance) {
+    for (const device of this.deviceMap.values()) {
+      if (device.serial === serial && device.instance === instance) {
+        return device;
+      }
+    }
+    return void 0;
+  }
+  /**
+   * Wird bei jedem neu erkannten Output-Kanal aufgerufen (Message-Handler) sowie initial nach
+   * dem Subscribe. Setzt den Ruhezeit-Timer zur\u00fcck; erst wenn CLEANUP_QUIET_MS ohne neuen Kanal
+   * verstrichen sind, l\u00e4uft der Sweep - aber nur einmal pro Adapter-Start.
+   */
+  armCleanupTimer() {
+    if (!this.cleanupEnabled || this.cleanupDoneOnce) {
+      return;
+    }
+    if (this.cleanupTimer) {
+      this.clearTimeout(this.cleanupTimer);
+    }
+    this.cleanupTimer = this.setTimeout(() => {
+      this.cleanupTimer = null;
+      void this.runOrphanSweep();
+    }, this.CLEANUP_QUIET_MS);
+  }
+  /**
+   * L\u00f6scht alle outputs.<key>-Kan\u00e4le, deren (BaseId, OutputKey)-Kombination nicht mehr mit dem
+   * aktuellen outputToInstance-Zustand \u00fcbereinstimmt (Kanal umgruppiert, Ger\u00e4t entfernt/offline
+   * deaktiviert). Betrifft ausschlie\u00dflich outputs.*-Objekte - Device-Level-Metadaten, Ac.*-
+   * Messwerte, overview.* und alles au\u00dferhalb devices.<type>.**.outputs.<key> bleiben unber\u00fchrt
+   * (Pass 1). Pass 2 r\u00e4umt zus\u00e4tzlich alte devices.<type>.<Serial>- UND devices.<type>.<Group>.
+   * <Serial>-Ordner ab, deren Serial inzwischen unter einer ANDEREN BaseId aktiv ist - sowohl
+   * gruppenlos\u2192Group- als auch Group\u2192Group-Umz\u00fcge (z.B. GX-seitiges Umh\u00e4ngen in eine andere
+   * Group), siehe unten S10-Fix "groupless leftovers" + Group-migration-Erweiterung.
+   */
+  async runOrphanSweep() {
+    this.cleanupDoneOnce = true;
+    this.log.info("Starting cleanup of orphaned output channels...");
+    const activeKeys = /* @__PURE__ */ new Set();
+    const activeBaseIdBySerial = /* @__PURE__ */ new Map();
+    for (const [serial, keyMap] of this.outputToInstance.entries()) {
+      for (const [outputKey, route] of keyMap.entries()) {
+        const device = this.findDeviceForOutput(serial, route.instance);
+        if (!device) {
+          continue;
+        }
+        const baseId = this.getBaseId(device.type, device.instance, serial, device, true);
+        if (baseId) {
+          activeKeys.add(`${baseId}|${outputKey}`);
+          activeBaseIdBySerial.set(serial, baseId);
+        }
+      }
+    }
+    let deletedOutputs = 0;
+    let deletedFolders = 0;
+    try {
+      const allObjects = await this.getObjectListAsync({
+        startkey: `${this.namespace}.devices.`,
+        endkey: `${this.namespace}.devices.\u9999`
+      });
+      const outputChannelRegex = /^(.+)\.outputs\.([^.]+)$/;
+      for (const obj of allObjects.rows) {
+        const id = obj.id.replace(`${this.namespace}.`, "");
+        const m = outputChannelRegex.exec(id);
+        if (!m) {
+          continue;
+        }
+        if (activeKeys.has(`${m[1]}|${m[2]}`)) {
+          continue;
+        }
+        await this.delObjectAsync(id, { recursive: true }).catch(() => {
+        });
+        deletedOutputs++;
+      }
+      for (const obj of allObjects.rows) {
+        const id = obj.id.replace(`${this.namespace}.`, "");
+        const parts = id.split(".");
+        if (parts.length !== 3 && parts.length !== 4 || parts[0] !== "devices" || !SUPPORTS_OUTPUTS.has(parts[1])) {
+          continue;
+        }
+        const serial = parts[parts.length - 1];
+        if (!this.outputToInstance.has(serial)) {
+          continue;
+        }
+        const activeBaseId = activeBaseIdBySerial.get(serial);
+        if (!activeBaseId || activeBaseId === id) {
+          continue;
+        }
+        await this.delObjectAsync(id, { recursive: true }).catch(() => {
+        });
+        deletedFolders++;
+      }
+    } catch (e) {
+      this.log.warn(`Orphan cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    let deletedGroups = 0;
+    try {
+      const activeBaseIds = new Set(activeBaseIdBySerial.values());
+      const remaining = await this.getObjectListAsync({
+        startkey: `${this.namespace}.devices.`,
+        endkey: `${this.namespace}.devices.\u9999`
+      });
+      const remainingIds = remaining.rows.map((obj) => obj.id.replace(`${this.namespace}.`, ""));
+      for (const id of remainingIds) {
+        const parts = id.split(".");
+        if (parts.length !== 3 || parts[0] !== "devices" || !SUPPORTS_OUTPUTS.has(parts[1])) {
+          continue;
+        }
+        if (activeBaseIds.has(id)) {
+          continue;
+        }
+        const prefix = `${id}.`;
+        const hasChildren = remainingIds.some((otherId) => otherId.startsWith(prefix));
+        if (hasChildren) {
+          continue;
+        }
+        await this.delObjectAsync(id, { recursive: true }).catch(() => {
+        });
+        deletedGroups++;
+      }
+    } catch (e) {
+      this.log.warn(`Orphan group container cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    this.log.info(
+      `Cleanup finished: removed ${deletedOutputs} orphaned output channel(s), ${deletedFolders} orphaned device folder(s), ${deletedGroups} orphaned group container(s).`
+    );
   }
   // ── MQTT ─────────────────────────────────────────────────────────────────
   connectMqtt(host, port, username, password) {
@@ -1465,7 +1639,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── Haupt-Message-Handler ────────────────────────────────────────────────
   handleMessage(topic, payload) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e;
     try {
       const raw = payload.toString();
       if (!raw) {
@@ -1516,14 +1690,27 @@ class VictronGx extends utils.Adapter {
       if (rawValue === null || rawValue === void 0) {
         return;
       }
+      if (DEVICE_GROUP_RACE_TYPES.has(deviceType)) {
+        const raceDeviceKey = `${deviceType}/${instance}`;
+        const raceDevice = this.getOrCreateDeviceEntry(raceDeviceKey, deviceType, instance);
+        if (!raceDevice.baseIdCommitted) {
+          this.bufferDeviceMessage(raceDevice, topic, payload, remapOutputPath(normPath), rawValue);
+          return;
+        }
+      }
       if (REGISTRATION_PATHS.has(normPath)) {
         if (typeof rawValue === "string" || typeof rawValue === "number") {
           this.updateDeviceMeta(deviceType, instance, normPath, String(rawValue));
         }
         return;
       }
-      const remappedPath = (_b = (_a = PATH_REMAP[deviceType]) == null ? void 0 : _a[normPath]) != null ? _b : normPath;
-      if (!((_c = RELEVANT_PATHS_SET[deviceType]) == null ? void 0 : _c.has(normPath))) {
+      let remappedPath;
+      const out = remapOutputPath(normPath);
+      if (out && SUPPORTS_OUTPUTS.has(deviceType)) {
+        remappedPath = out.ioPath;
+      } else if ((_a = RELEVANT_PATHS_SET[deviceType]) == null ? void 0 : _a.has(normPath)) {
+        remappedPath = (_c = (_b = PATH_REMAP[deviceType]) == null ? void 0 : _b[normPath]) != null ? _c : normPath;
+      } else {
         return;
       }
       const deviceKey = `${deviceType}/${instance}`;
@@ -1532,9 +1719,25 @@ class VictronGx extends utils.Adapter {
       if (!serial && !NO_SERIAL_TYPES_HANDLE.has(deviceType)) {
         return;
       }
-      const baseId = this.getBaseId(deviceType, instance, serial, device);
+      const isOutputPath = out !== null && SUPPORTS_OUTPUTS.has(deviceType);
+      const baseId = this.getBaseId(deviceType, instance, serial, device, isOutputPath);
       if (!baseId) {
         return;
+      }
+      if (isOutputPath && out && serial) {
+        const keyMap = this.outputToInstance.get(serial);
+        if (!(keyMap == null ? void 0 : keyMap.has(out.key))) {
+          this.bufferPendingOutput(serial, out, deviceType, instance, device, rawValue);
+          return;
+        }
+        if (out.sub === "CustomName" && typeof rawValue === "string" && rawValue && device) {
+          void this.extendObjectAsync(`${baseId}.outputs.${out.key}`, {
+            common: { name: `${device.productName} \u2014 ${rawValue}` }
+          });
+        }
+        if (out.sub === "Group" && typeof rawValue === "string" && rawValue && device && !device.group) {
+          device.group = rawValue;
+        }
       }
       if ((device == null ? void 0 : device.virtual) && PHASE_VOLTAGE_PATHS[deviceType]) {
         const vMatch = normPath.match(/^Ac\.(L[123])\.Voltage$/);
@@ -1594,61 +1797,15 @@ class VictronGx extends utils.Adapter {
       if (device) {
         this.touchDevice(device, baseId);
       }
-      const isSwitchBool = deviceType === "switch" && (remappedPath === "State" || remappedPath === "Status");
-      const storeValue = isSwitchBool ? rawValue !== 0 : rawValue;
-      const storeType = isSwitchBool ? "boolean" : typeof rawValue === "number" ? "number" : typeof rawValue === "boolean" ? "boolean" : "string";
-      const isWritable = deviceType === "switch" ? (WRITABLE_PATHS[deviceType] || []).some((wp) => remappedPath === wp) : false;
-      const stateId = `${baseId}.${remappedPath}`;
-      let stateRole = this.getRole(remappedPath);
-      if (deviceType === "switch") {
-        if (remappedPath === "State") {
-          stateRole = "switch";
-        } else if (remappedPath === "Status") {
-          stateRole = "indicator";
-        }
-      }
-      const commonBase = {
-        name: this.getFriendlyName(remappedPath),
-        type: storeType,
-        role: stateRole,
-        unit: this.getUnit(remappedPath),
-        read: true,
-        write: isWritable
-      };
-      if (deviceType === "pvinverter" && remappedPath === "StatusCode") {
-        commonBase.states = PVINVERTER_STATUS;
-      }
-      const statesForPath = (_e = STATES_MAP[deviceType]) == null ? void 0 : _e[remappedPath];
-      if (statesForPath) {
-        commonBase.states = statesForPath;
-      }
-      if (deviceType === "tank" && (remappedPath === "Capacity" || remappedPath === "Remaining")) {
-        commonBase.unit = "m\xB3";
-      }
-      if (!this.createdStates.has(stateId)) {
-        this.createdStates.add(stateId);
-        if (device && deviceKey) {
-          this.updateTopicMap(deviceKey, normPath, stateId, device);
-        }
-        void this.ensureIntermediates(stateId);
-        void this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
-        void this.setState(stateId, { val: storeValue, ack: true });
-      } else {
-        const lastVal = this.lastValueCache.get(stateId);
-        if (lastVal !== storeValue) {
-          this.lastValueCache.set(stateId, storeValue);
-          void this.setState(stateId, { val: storeValue, ack: true });
-        }
-      }
-      if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath) && typeof storeValue === "number") {
-        this.cellValueCache.set(stateId, storeValue);
-      }
-      if (typeof storeValue === "number" && stateId.endsWith(".Power")) {
-        this.powerValueCache.set(stateId, storeValue);
-      }
-      if (typeof storeValue === "number" && stateId.startsWith("overview.")) {
-        this.powerValueCache.set(stateId, storeValue);
-      }
+      const storeValue = this.writeStateValue(
+        baseId,
+        device,
+        deviceKey,
+        deviceType,
+        normPath,
+        remappedPath,
+        rawValue
+      );
       if (deviceType === "tank" && typeof storeValue === "number") {
         if (remappedPath === "Capacity") {
           const literId = `${baseId}.CapacityLiter`;
@@ -1719,11 +1876,234 @@ class VictronGx extends utils.Adapter {
       if (deviceType === "system" && OVERVIEW_TOTAL_POWER[normPath]) {
         void this.updateOverviewTotalPower(normPath);
       }
-      if (((_f = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _f.includes(normPath)) && this.channelReady.has(baseId)) {
+      if (((_e = PHASE_POWER_PATHS[deviceType]) == null ? void 0 : _e.includes(normPath)) && this.channelReady.has(baseId)) {
         void this.updateActivePhase(deviceType, baseId);
       }
     } catch (err) {
       this.log.debug(`Error processing topic ${topic}: ${err.message}`);
+    }
+  }
+  /**
+   * Konvertiert einen Rohwert und legt/aktualisiert den zugehörigen State an. Ausgelagert aus
+   * handleMessage() (S13), damit commitPendingOutput() denselben Anlage-/Schreibcode für
+   * gepufferte Output-Werte wiederverwenden kann, ohne ihn zu duplizieren.
+   *
+   * @param baseId Objektbasis (z.B. devices.switch.<serial> oder .../<group>/<serial>)
+   * @param device Geräte-Metadaten (für updateTopicMap, undefined nicht erwartet im Regelfall)
+   * @param deviceKey Interner Schlüssel "<type>/<instance>" für topicMap
+   * @param deviceType Victron-Gerätetyp (z.B. "switch", "acload", "system")
+   * @param normPath Normierter MQTT-Pfad (für topicMap)
+   * @param remappedPath ioBroker-Sub-Pfad relativ zu baseId (z.B. "outputs.1.State")
+   * @param rawValue Roh-MQTT-Wert vor der Typkonvertierung
+   * @returns Der konvertierte storeValue (wird von handleMessage() für die Tank-Liter-Berechnung weiterverwendet)
+   */
+  writeStateValue(baseId, device, deviceKey, deviceType, normPath, remappedPath, rawValue) {
+    var _a;
+    const outputBoolSub = remappedPath.match(/^outputs\.[^.]+\.(State|Status)$/);
+    const isOutputBool = outputBoolSub !== null && SUPPORTS_OUTPUTS.has(deviceType);
+    const storeValue = isOutputBool ? rawValue !== 0 : rawValue;
+    const storeType = isOutputBool ? "boolean" : typeof rawValue === "number" ? "number" : typeof rawValue === "boolean" ? "boolean" : "string";
+    const isWritable = isOutputBool && outputBoolSub[1] === "State" && WRITABLE_TYPES.has(deviceType);
+    const stateId = `${baseId}.${remappedPath}`;
+    let stateRole = this.getRole(remappedPath);
+    if (isOutputBool) {
+      stateRole = outputBoolSub[1] === "State" ? "switch" : "indicator";
+    }
+    const commonBase = {
+      name: this.getFriendlyName(remappedPath),
+      type: storeType,
+      role: stateRole,
+      unit: this.getUnit(remappedPath),
+      read: true,
+      write: isWritable
+    };
+    if (deviceType === "pvinverter" && remappedPath === "StatusCode") {
+      commonBase.states = PVINVERTER_STATUS;
+    }
+    const statesForPath = (_a = STATES_MAP[deviceType]) == null ? void 0 : _a[remappedPath];
+    if (statesForPath) {
+      commonBase.states = statesForPath;
+    }
+    if (deviceType === "tank" && (remappedPath === "Capacity" || remappedPath === "Remaining")) {
+      commonBase.unit = "m\xB3";
+    }
+    if (!this.createdStates.has(stateId)) {
+      this.createdStates.add(stateId);
+      if (device && deviceKey) {
+        this.updateTopicMap(deviceKey, normPath, stateId, device);
+      }
+      void this.ensureIntermediates(stateId);
+      void this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
+      void this.setState(stateId, { val: storeValue, ack: true });
+    } else {
+      const lastVal = this.lastValueCache.get(stateId);
+      if (lastVal !== storeValue) {
+        this.lastValueCache.set(stateId, storeValue);
+        void this.setState(stateId, { val: storeValue, ack: true });
+      }
+    }
+    if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath) && typeof storeValue === "number") {
+      this.cellValueCache.set(stateId, storeValue);
+    }
+    if (typeof storeValue === "number" && stateId.endsWith(".Power")) {
+      this.powerValueCache.set(stateId, storeValue);
+    }
+    if (typeof storeValue === "number" && stateId.startsWith("overview.")) {
+      this.powerValueCache.set(stateId, storeValue);
+    }
+    return storeValue;
+  }
+  /**
+   * S13: Puffert den Rohwert eines noch nicht committeten Output-Kanals (Key "serial|outputKey").
+   * Wird aufgerufen, solange der Kanal noch nicht in outputToInstance registriert ist - siehe
+   * handleMessage(). Group-Werte lösen einen sofortigen Commit aus (früher Ausstieg aus der
+   * Ruhezeit, sobald device.group bekannt ist); alle anderen Subs starten - falls noch keiner
+   * läuft - einen Fallback-Timer, der nach PENDING_QUIET_MS ohne Group committed.
+   *
+   * @param serial Geräte-Serial (Map-Key-Präfix)
+   * @param out Ergebnis von remapOutputPath() für den aktuellen Wert
+   * @param out.key Normierter Output-Key (z.B. "1")
+   * @param out.mqttKey Original-MQTT-Segmentname (z.B. "output_1")
+   * @param out.sub Sub-Pfad-Segment (z.B. "State", "CustomName", "Group")
+   * @param deviceType Victron-Gerätetyp (z.B. "switch", "acload", "system")
+   * @param instance MQTT-Device-Instance
+   * @param device Geräte-Metadaten (für Group-/CustomName-Handling)
+   * @param rawValue Roh-MQTT-Wert, wird unverändert gepuffert
+   */
+  bufferPendingOutput(serial, out, deviceType, instance, device, rawValue) {
+    const pendingKey = `${serial}|${out.key}`;
+    let pending = this.pendingOutputs.get(pendingKey);
+    if (!pending) {
+      pending = {
+        serial,
+        outputKey: out.key,
+        mqttKey: out.mqttKey,
+        deviceType,
+        instance,
+        device,
+        values: /* @__PURE__ */ new Map(),
+        timer: null
+      };
+      this.pendingOutputs.set(pendingKey, pending);
+    }
+    pending.values.set(out.sub, rawValue);
+    if (out.sub === "Group" && typeof rawValue === "string" && rawValue && device && !device.group) {
+      device.group = rawValue;
+      void this.commitPendingOutput(pending);
+      return;
+    }
+    if (!pending.timer) {
+      pending.timer = this.setTimeout(() => {
+        pending.timer = null;
+        void this.commitPendingOutput(pending);
+      }, this.PENDING_QUIET_MS);
+    }
+  }
+  /**
+   * S13: Committed einen gepufferten Output-Kanal - BaseId wird JETZT berechnet, wenn
+   * device.group entweder gesetzt (Group kam an) oder bewusst leer ist (Ruhezeit abgelaufen).
+   * Registriert outputToInstance, legt den outputs.<key>-Kanal an und schreibt alle gepufferten
+   * Werte über writeStateValue(). armCleanupTimer() läuft erst danach, sonst würde der Sweep
+   * diesen gerade committeten Kanal fälschlich als verwaist einstufen.
+   *
+   * @param pending Der zu committende Eintrag aus pendingOutputs
+   */
+  async commitPendingOutput(pending) {
+    const pendingKey = `${pending.serial}|${pending.outputKey}`;
+    if (pending.timer) {
+      this.clearTimeout(pending.timer);
+      pending.timer = null;
+    }
+    this.pendingOutputs.delete(pendingKey);
+    const device = pending.device;
+    const baseId = this.getBaseId(pending.deviceType, pending.instance, pending.serial, device, true);
+    if (!baseId) {
+      return;
+    }
+    let keyMap = this.outputToInstance.get(pending.serial);
+    if (!keyMap) {
+      keyMap = /* @__PURE__ */ new Map();
+      this.outputToInstance.set(pending.serial, keyMap);
+    }
+    keyMap.set(pending.outputKey, { instance: pending.instance, mqttKey: pending.mqttKey });
+    await this.setObjectNotExistsAsync(`${baseId}.outputs.${pending.outputKey}`, {
+      type: "channel",
+      common: { name: `Output ${pending.outputKey}` },
+      native: {}
+    });
+    const customName = pending.values.get("CustomName");
+    if (typeof customName === "string" && customName && device) {
+      void this.extendObjectAsync(`${baseId}.outputs.${pending.outputKey}`, {
+        common: { name: `${device.productName} \u2014 ${customName}` }
+      });
+    }
+    if (device) {
+      void this.ensureChannel(baseId, device);
+      this.touchDevice(device, baseId);
+    }
+    const deviceKey = `${pending.deviceType}/${pending.instance}`;
+    for (const [sub, rawValue] of pending.values.entries()) {
+      const remappedPath = `outputs.${pending.outputKey}.${sub}`;
+      const normPath = `SwitchableOutput.${pending.mqttKey}.${sub}`;
+      this.writeStateValue(baseId, device, deviceKey, pending.deviceType, normPath, remappedPath, rawValue);
+    }
+    this.armCleanupTimer();
+  }
+  /**
+   * S14: Puffert eine Rohmessage (topic+payload) für ein Gerät, dessen BaseId noch nicht
+   * feststeht (device.group-Race, siehe DEVICE_GROUP_RACE_TYPES). Anders als bufferPendingOutput
+   * (S13, pro Output-Kanal) puffert dies GESAMTE Messages auf Device-Ebene, damit auch
+   * Nicht-Output-Pfade (z.B. Ac.L1.Voltage) nicht mit einer potenziell falschen (gruppenlosen)
+   * BaseId verarbeitet werden. Eine Group-Message löst einen sofortigen Commit aus; alle anderen
+   * Messages starten - falls noch keiner läuft - einen Fallback-Timer (DEVICE_QUIET_MS).
+   *
+   * @param device Geräte-Metadaten (Ziel für baseIdCommitted/group/pendingDeviceMessages)
+   * @param topic Ursprünglicher MQTT-Topic (für den Replay in commitDevice())
+   * @param payload Ursprüngliches MQTT-Payload (für den Replay in commitDevice())
+   * @param out Ergebnis von remapOutputPath() für den aktuellen Wert, null falls kein Output-Pfad
+   * @param rawValue Roh-MQTT-Wert der aktuellen Message (nur zur Group-Erkennung ausgewertet)
+   */
+  bufferDeviceMessage(device, topic, payload, out, rawValue) {
+    device.pendingDeviceMessages.push({ topic, payload });
+    if ((out == null ? void 0 : out.sub) === "Group" && typeof rawValue === "string" && rawValue && !device.group) {
+      device.group = rawValue;
+      this.commitDevice(device);
+      return;
+    }
+    if (!device.deviceCommitTimer) {
+      device.deviceCommitTimer = this.setTimeout(() => {
+        device.deviceCommitTimer = null;
+        this.commitDevice(device);
+      }, this.DEVICE_QUIET_MS);
+    }
+  }
+  /**
+   * S14: Committed ein gepuffertes Gerät - device.group ist JETZT entweder gesetzt (Group kam
+   * an) oder bewusst leer (Ruhezeit abgelaufen). Alle gepufferten Rohmessages werden in
+   * ursprünglicher Reihenfolge erneut durch handleMessage() geschickt ("derselbe Handler-Code"),
+   * diesmal mit baseIdCommitted=true, also über den unveränderten S13/Alt-Pfad. Die
+   * Group-Setter-Message selbst ist im Puffer enthalten und wird mitreplayed - das erneute Setzen
+   * von device.group ist dank !device.group-Guard idempotent.
+   *
+   * @param device Der zu committende Geräte-Eintrag
+   */
+  commitDevice(device) {
+    if (device.deviceCommitTimer) {
+      this.clearTimeout(device.deviceCommitTimer);
+      device.deviceCommitTimer = null;
+    }
+    device.baseIdCommitted = true;
+    const messages = device.pendingDeviceMessages;
+    device.pendingDeviceMessages = [];
+    for (const { topic, payload } of messages) {
+      this.handleMessage(topic, payload);
+    }
+    if (device.serial) {
+      this.log.info(
+        `Device committed: ${KNOWN_DEVICE_TYPES[device.type] || device.type} \u2192 serial: ${device.serial} group=${device.group || "(none)"}`
+      );
+    } else {
+      device.pendingCommitLog = true;
     }
   }
   // ── Gesamtleistung overview berechnen ───────────────────────────────────
@@ -1775,26 +2155,42 @@ class VictronGx extends utils.Adapter {
     }
   }
   // ── baseId berechnen ─────────────────────────────────────────────────────
-  getBaseId(type, instance, serial, device) {
-    if (type === "system") {
+  // isOutputPath: true, wenn der Aufrufer einen SwitchableOutput-Pfad auflöst. Steuert das
+  // Routing für type==='system': Messwerte/Systemübersicht bleiben unter 'overview' (read-only),
+  // Schaltausgänge (z.B. GX internal relay) landen unter devices.system.<Serial> (schreibbar).
+  // Group ist ab hier ein optionaler Zwischenordner, einheitlich für alle Typen; Serial ist
+  // Pflicht (außer für system ohne Output-Pfad, das weiterhin nach 'overview' mappt). Aufrufer
+  // ohne isOutputPath-Argument (Default false) verhalten sich unverändert zum Vorzustand.
+  getBaseId(type, instance, serial, device, isOutputPath = false) {
+    if (type === "system" && !isOutputPath) {
       return "overview";
     }
-    if (type === "switch") {
-      if (!serial || !(device == null ? void 0 : device.group)) {
-        return null;
-      }
-      return `devices.switch.${device.group.replace(/[^a-zA-Z0-9_]/g, "_")}.${serial}`;
+    if (!serial) {
+      return null;
     }
-    if (serial) {
-      return `devices.${type}.${serial}`;
+    if (device == null ? void 0 : device.group) {
+      const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, "_");
+      return `devices.${type}.${groupKey}.${serial}`;
     }
-    return `devices.${type}.${instance}`;
+    return `devices.${type}.${serial}`;
   }
-  // ── Metadaten sammeln ────────────────────────────────────────────────────
-  updateDeviceMeta(type, instance, field, value) {
-    const deviceKey = `${type}/${instance}`;
-    if (!this.deviceMap.has(deviceKey)) {
-      this.deviceMap.set(deviceKey, {
+  /**
+   * S14-Fix: Legt bei Bedarf den In-Memory-DeviceInfo-Eintrag an - erzeugt bewusst KEIN
+   * ioBroker-Objekt und schreibt KEIN Log, damit dies gefahrlos auch aus dem Race-Gate in
+   * handleMessage() aufgerufen werden kann, bevor überhaupt feststeht, ob die BaseId schon
+   * committed ist. Für DEVICE_GROUP_RACE_TYPES startet der Eintrag mit baseIdCommitted=false
+   * (siehe bufferDeviceMessage()/commitDevice()), alle anderen Typen bleiben unverändert sofort
+   * "committed".
+   *
+   * @param deviceKey Interner Schlüssel "<type>/<instance>"
+   * @param type Victron-Gerätetyp
+   * @param instance Geräte-Instanznummer aus dem MQTT-Topic
+   * @returns Der (neue oder bereits vorhandene) DeviceInfo-Eintrag
+   */
+  getOrCreateDeviceEntry(deviceKey, type, instance) {
+    let device = this.deviceMap.get(deviceKey);
+    if (!device) {
+      device = {
         type,
         instance,
         serial: "",
@@ -1806,11 +2202,22 @@ class VictronGx extends utils.Adapter {
         phaseVoltage: { L1: 0, L2: 0, L3: 0 },
         lastUpdate: Date.now(),
         staleTimer: null,
-        ready: NO_SERIAL_TYPES_REGISTER.has(type)
-        // system/platform/switch sofort ready
-      });
+        ready: NO_SERIAL_TYPES_REGISTER.has(type),
+        // system/platform sofort ready
+        // S14: nur DEVICE_GROUP_RACE_TYPES puffern - alle anderen Typen starten committed,
+        // also 1:1 heutiges Verhalten (kein Puffern, keine Wartezeit).
+        baseIdCommitted: !DEVICE_GROUP_RACE_TYPES.has(type),
+        pendingDeviceMessages: [],
+        deviceCommitTimer: null
+      };
+      this.deviceMap.set(deviceKey, device);
     }
-    const device = this.deviceMap.get(deviceKey);
+    return device;
+  }
+  // ── Metadaten sammeln ────────────────────────────────────────────────────
+  updateDeviceMeta(type, instance, field, value) {
+    const deviceKey = `${type}/${instance}`;
+    const device = this.getOrCreateDeviceEntry(deviceKey, type, instance);
     switch (field) {
       case "Serial":
       case "Devices.0.SerialNumber": {
@@ -1822,6 +2229,12 @@ class VictronGx extends utils.Adapter {
         if (!this.loggedDevices.has(k)) {
           this.loggedDevices.add(k);
           this.log.info(`Device detected: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 serial: ${value}`);
+        }
+        if (device.pendingCommitLog) {
+          device.pendingCommitLog = false;
+          this.log.info(
+            `Device committed: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 serial: ${safeSerial} group=${device.group || "(none)"}`
+          );
         }
         const oldId = `devices.${type}.${instance}`;
         const newId = `devices.${type}.${safeSerial}`;
@@ -2003,57 +2416,6 @@ class VictronGx extends utils.Adapter {
             void this.setState(phasesStateId, { val: parseInt(value, 10), ack: true });
           }
         }
-        break;
-      }
-      case "SwitchableOutput.output_1.Settings.Group": {
-        if (!device.group) {
-          device.group = value;
-        }
-        const groupKey = value.replace(/[^a-zA-Z0-9_]/g, "_");
-        void this.setObjectNotExistsAsync(`devices.switch.${groupKey}`, {
-          type: "channel",
-          common: { name: value },
-          native: {}
-        });
-        break;
-      }
-      case "SwitchableOutput.output_1.Settings.CustomName": {
-        if (!device.serial) {
-          break;
-        }
-        const deviceKeyC = `${type}/${instance}`;
-        if (this.topicMap[deviceKeyC] && value) {
-          this.topicMap[deviceKeyC].customName = value;
-        }
-        const groupKey = device.group.replace(/[^a-zA-Z0-9_]/g, "_");
-        const channelId = `devices.switch.${groupKey}.${device.serial}`;
-        const suffix = value ? ` (${value})` : "";
-        void this.setObjectNotExistsAsync(channelId, {
-          type: "channel",
-          common: { name: `${device.productName}${suffix}` },
-          native: {}
-        }).then(() => {
-          void this.extendObjectAsync(channelId, { common: { name: `${device.productName}${suffix}` } });
-        });
-        void this.setObjectNotExistsAsync(`${channelId}.info`, {
-          type: "channel",
-          common: {
-            name: {
-              en: "Info",
-              de: "Info",
-              ru: "Info",
-              pt: "Info",
-              nl: "Info",
-              fr: "Info",
-              it: "Info",
-              es: "Info",
-              pl: "Info",
-              uk: "Info",
-              "zh-cn": "Info"
-            }
-          },
-          native: {}
-        });
         break;
       }
     }
@@ -2394,7 +2756,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── onStateChange: Schreibzugriffe ───────────────────────────────────────
   onStateChange(id, state) {
-    var _a, _b;
+    var _a;
     if (!state || state.ack) {
       return;
     }
@@ -2416,46 +2778,32 @@ class VictronGx extends utils.Adapter {
       })();
       return;
     }
-    if (parts.length < 5) {
+    if (parts.length < 5 || parts[2] !== "devices") {
       return;
     }
     const deviceType = parts[3];
-    let serial;
-    let dpPath;
-    if (deviceType === "switch") {
-      if (parts.length < 7) {
-        return;
-      }
-      serial = parts[5];
-      const remapped = parts.slice(6).join(".");
-      dpPath = (_b = (_a = WRITE_PATH_REMAP[deviceType]) == null ? void 0 : _a[remapped]) != null ? _b : remapped.replace(/\./g, "/");
-    } else {
-      serial = parts[4];
-      dpPath = parts.slice(5).join("/");
-    }
-    let instance = null;
-    for (const [key, ser] of this.serialMap.entries()) {
-      if (ser === serial) {
-        instance = parseInt(key.split("/")[1], 10);
-        break;
-      }
-    }
-    if (instance === null) {
-      const num = parseInt(serial, 10);
-      if (!isNaN(num)) {
-        instance = num;
-      }
-    }
-    if (instance === null) {
-      this.log.warn(`Could not determine instance for ${id}`);
+    if (!WRITABLE_TYPES.has(deviceType)) {
       return;
     }
-    if (deviceType === "switch") {
-      const writeVal = state.val ? 1 : 0;
-      const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${dpPath}`;
-      this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
-      this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
+    const outputsIdx = parts.indexOf("outputs", 5);
+    if (outputsIdx === -1 || outputsIdx + 2 >= parts.length) {
+      return;
     }
+    const serial = parts[outputsIdx - 1];
+    const outputKey = parts[outputsIdx + 1];
+    const dpTail = parts.slice(outputsIdx + 2).join("/");
+    if (!WRITABLE_OUTPUT_REGEX.test(`outputs.${outputKey}.${dpTail.replace(/\//g, ".")}`)) {
+      return;
+    }
+    const route = (_a = this.outputToInstance.get(serial)) == null ? void 0 : _a.get(outputKey);
+    if (!route) {
+      this.log.warn(`Could not determine MQTT instance for ${id} (serial=${serial}, output=${outputKey})`);
+      return;
+    }
+    const writeVal = state.val ? 1 : 0;
+    const mqttTopic = `W/${this.vrmId}/${deviceType}/${route.instance}/SwitchableOutput/${route.mqttKey}/${dpTail}`;
+    this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
+    this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
   }
   // ── Hilfsfunktionen ──────────────────────────────────────────────────────
   getFriendlyName(path) {
@@ -3746,6 +4094,137 @@ class VictronGx extends utils.Adapter {
         pl: "Consumed Ah",
         uk: "Consumed Ah",
         "zh-cn": "Consumed Ah"
+      },
+      // acload-Ergänzungen (Shelly-Integration, §4.14)
+      "Ac.L1.Energy.Reverse": {
+        en: "L1 energy feed-in",
+        de: "L1 Energie Einspeisung",
+        ru: "L1 energy feed-in",
+        pt: "L1 energy feed-in",
+        nl: "L1 energy feed-in",
+        fr: "L1 energy feed-in",
+        it: "L1 energy feed-in",
+        es: "L1 energy feed-in",
+        pl: "L1 energy feed-in",
+        uk: "L1 energy feed-in",
+        "zh-cn": "L1 energy feed-in"
+      },
+      "Ac.L2.Energy.Reverse": {
+        en: "L2 energy feed-in",
+        de: "L2 Energie Einspeisung",
+        ru: "L2 energy feed-in",
+        pt: "L2 energy feed-in",
+        nl: "L2 energy feed-in",
+        fr: "L2 energy feed-in",
+        it: "L2 energy feed-in",
+        es: "L2 energy feed-in",
+        pl: "L2 energy feed-in",
+        uk: "L2 energy feed-in",
+        "zh-cn": "L2 energy feed-in"
+      },
+      "Ac.L3.Energy.Reverse": {
+        en: "L3 energy feed-in",
+        de: "L3 Energie Einspeisung",
+        ru: "L3 energy feed-in",
+        pt: "L3 energy feed-in",
+        nl: "L3 energy feed-in",
+        fr: "L3 energy feed-in",
+        it: "L3 energy feed-in",
+        es: "L3 energy feed-in",
+        pl: "L3 energy feed-in",
+        uk: "L3 energy feed-in",
+        "zh-cn": "L3 energy feed-in"
+      },
+      "Ac.L1.PowerFactor": {
+        en: "L1 power factor",
+        de: "L1 Leistungsfaktor",
+        ru: "L1 power factor",
+        pt: "L1 power factor",
+        nl: "L1 power factor",
+        fr: "L1 power factor",
+        it: "L1 power factor",
+        es: "L1 power factor",
+        pl: "L1 power factor",
+        uk: "L1 power factor",
+        "zh-cn": "L1 power factor"
+      },
+      "Ac.L2.PowerFactor": {
+        en: "L2 power factor",
+        de: "L2 Leistungsfaktor",
+        ru: "L2 power factor",
+        pt: "L2 power factor",
+        nl: "L2 power factor",
+        fr: "L2 power factor",
+        it: "L2 power factor",
+        es: "L2 power factor",
+        pl: "L2 power factor",
+        uk: "L2 power factor",
+        "zh-cn": "L2 power factor"
+      },
+      "Ac.L3.PowerFactor": {
+        en: "L3 power factor",
+        de: "L3 Leistungsfaktor",
+        ru: "L3 power factor",
+        pt: "L3 power factor",
+        nl: "L3 power factor",
+        fr: "L3 power factor",
+        it: "L3 power factor",
+        es: "L3 power factor",
+        pl: "L3 power factor",
+        uk: "L3 power factor",
+        "zh-cn": "L3 power factor"
+      },
+      Role: {
+        en: "Role",
+        de: "Rolle",
+        ru: "Role",
+        pt: "Role",
+        nl: "Role",
+        fr: "Role",
+        it: "Role",
+        es: "Role",
+        pl: "Role",
+        uk: "Role",
+        "zh-cn": "Role"
+      },
+      IsGenericEnergyMeter: {
+        en: "Generic energy meter",
+        de: "Generischer Energiez\xE4hler",
+        ru: "Generic energy meter",
+        pt: "Generic energy meter",
+        nl: "Generic energy meter",
+        fr: "Generic energy meter",
+        it: "Generic energy meter",
+        es: "Generic energy meter",
+        pl: "Generic energy meter",
+        uk: "Generic energy meter",
+        "zh-cn": "Generic energy meter"
+      },
+      PhaseSetting: {
+        en: "Phase setting",
+        de: "Phaseneinstellung",
+        ru: "Phase setting",
+        pt: "Phase setting",
+        nl: "Phase setting",
+        fr: "Phase setting",
+        it: "Phase setting",
+        es: "Phase setting",
+        pl: "Phase setting",
+        uk: "Phase setting",
+        "zh-cn": "Phase setting"
+      },
+      ProductId: {
+        en: "Product ID",
+        de: "Produkt-ID",
+        ru: "Product ID",
+        pt: "Product ID",
+        nl: "Product ID",
+        fr: "Product ID",
+        it: "Product ID",
+        es: "Product ID",
+        pl: "Product ID",
+        uk: "Product ID",
+        "zh-cn": "Product ID"
       }
     };
     if (names[path]) {
@@ -3771,6 +4250,9 @@ class VictronGx extends utils.Adapter {
   }
   getUnit(path) {
     if (path.startsWith("alarms.")) {
+      return "";
+    }
+    if (path.endsWith("PowerFactor") || path === "IsGenericEnergyMeter") {
       return "";
     }
     if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) {
@@ -3837,6 +4319,9 @@ class VictronGx extends utils.Adapter {
       return "value.warning";
     }
     if (path === "State") {
+      return "value";
+    }
+    if (path.endsWith("PowerFactor") || path === "IsGenericEnergyMeter") {
       return "value";
     }
     if (path.startsWith("cells.cell") || path === "cells.min" || path === "cells.max" || path === "cells.diff" || path.includes("Voltage") || path.endsWith(".V")) {
@@ -3920,9 +4405,22 @@ class VictronGx extends utils.Adapter {
         this.clearInterval(this.acPowerSetpointInterval);
         this.acPowerSetpointInterval = null;
       }
+      if (this.cleanupTimer) {
+        this.clearTimeout(this.cleanupTimer);
+        this.cleanupTimer = null;
+      }
+      for (const pending of this.pendingOutputs.values()) {
+        if (pending.timer) {
+          this.clearTimeout(pending.timer);
+        }
+      }
+      this.pendingOutputs.clear();
       for (const device of this.deviceMap.values()) {
         if (device.staleTimer) {
           this.clearTimeout(device.staleTimer);
+        }
+        if (device.deviceCommitTimer) {
+          this.clearTimeout(device.deviceCommitTimer);
         }
       }
       if (this.mqttClient) {

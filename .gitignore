@@ -12,5 +12,11 @@ Thumbs.db
 # i18n intermediate files
 admin/i18n/flat.txt
 admin/i18n/*/flat.txt
-# Internal development notes
+
+# Lokale Arbeits- und Planungsdateien (nicht für das Repository)
+*_PLAN.md
+*_AUFTRAG.md
+*_INVENTAR.md
+*_Optimierung.md
+*_STATUS.md
 PROJEKTSTAND.md
