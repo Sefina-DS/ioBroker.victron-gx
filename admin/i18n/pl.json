@@ -9,6 +9,8 @@
     "mqttUsername_help": "Pozostaw puste jeśli nie skonfigurowano uwierzytelniania",
     "mqttPassword_label": "Hasło MQTT",
     "controlEnabled_label": "Włącz sterowanie (Modbus TCP)",
+    "mqttControlEnabled_label": "Włącz sterowanie urządzeniami przez MQTT (ładowarka EV, ...)",
+    "mqttControlEnabled_help": "Umożliwia adapterowi zapisywanie wartości sterujących przez MQTT (np. prąd ładowania, start/stop, tryb ładowarki EV). Niezależne od sterowania Modbus powyżej.",
     "modbusPort_label": "Port Modbus",
     "modbusHint_text": "⚠️ Wymaganie na urządzeniu GX: Ustawienia → Integracje → Serwer Modbus TCP → Włączony & Poziom dostępu → Zapis dozwolony",
     "cleanupOrphanedOutputs_label": "Usuwaj osierocone kanały przy starcie",

@@ -58,6 +58,17 @@
                     "lg": 6,
                     "xl": 6
                 },
+                "mqttControlEnabled": {
+                    "type": "checkbox",
+                    "label": "mqttControlEnabled_label",
+                    "help": "mqttControlEnabled_help",
+                    "default": false,
+                    "sm": 12,
+                    "md": 6,
+                    "xs": 12,
+                    "lg": 6,
+                    "xl": 6
+                },
                 "modbusPort": {
                     "type": "number",
                     "label": "modbusPort_label",

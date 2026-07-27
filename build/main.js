@@ -66,18 +66,26 @@ const MGMT_PROCESSNAME_NAME = {
   "zh-cn": "Driver process"
 };
 const MGMT_STATE_TYPES = /* @__PURE__ */ new Set(["temperature", "evcharger"]);
-const DEVICE_INSTANCE_NAME = {
-  en: "Device instance",
-  de: "Ger\xE4teinstanz",
-  ru: "Device instance",
-  pt: "Device instance",
-  nl: "Device instance",
-  fr: "Device instance",
-  it: "Device instance",
-  es: "Device instance",
-  pl: "Device instance",
-  uk: "Device instance",
-  "zh-cn": "Device instance"
+const MQTT_CONTROL_FIELDS = {
+  evcharger: {
+    SetCurrent: {
+      mqttPath: "SetCurrent",
+      unit: "A",
+      role: "level.current",
+      valueType: "number",
+      min: 6,
+      step: 1
+      // max wird dynamisch aus dem MaxCurrent-Datenpunkt nachgezogen (siehe writeStateValue()).
+    },
+    StartStop: { mqttPath: "StartStop", unit: "", role: "switch", valueType: "boolean" },
+    Mode: {
+      mqttPath: "Mode",
+      unit: "",
+      role: "level",
+      valueType: "number",
+      states: { 0: "Manual", 1: "Auto", 2: "Scheduled" }
+    }
+  }
 };
 const RELEVANT_PATHS = {
   battery: [
@@ -400,10 +408,7 @@ const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
   "Position",
   "NrOfPhases",
   "Mgmt.Connection",
-  "Mgmt.ProcessName",
-  // DeviceInstance: bislang von keinem Typ genutzt, jetzt Pflicht für temperature/dbus-adc
-  // (siehe derivePseudoSerial()) und nebenbei als sichtbarer info.deviceInstance-State.
-  "DeviceInstance"
+  "Mgmt.ProcessName"
   // Output-Metadaten (CustomName/Group) laufen seit S4b/S4c dynamisch über remapOutputPath()
   // im Message-Handler, nicht mehr über hartcodierte output_1-Einträge hier (S7-Cleanup).
 ]);
@@ -1899,6 +1904,9 @@ class VictronGx extends utils.Adapter {
       if (!this.channelReady.has(baseId)) {
         if (device) {
           void this.ensureChannel(baseId, device);
+          if (MQTT_CONTROL_FIELDS[deviceType]) {
+            void this.ensureMqttControlChannel(deviceType, instance, device);
+          }
         } else if (baseId === "overview") {
           this.channelReady.add("overview");
           void this.setObjectNotExistsAsync("overview", {
@@ -2045,7 +2053,7 @@ class VictronGx extends utils.Adapter {
    * @returns Der konvertierte storeValue (wird von handleMessage() für die Tank-Liter-Berechnung weiterverwendet)
    */
   writeStateValue(baseId, device, deviceKey, deviceType, normPath, remappedPath, rawValue) {
-    var _a;
+    var _a, _b;
     const outputBoolSub = remappedPath.match(/^outputs\.[^.]+\.(State|Status)$/);
     const isOutputBool = outputBoolSub !== null && SUPPORTS_OUTPUTS.has(deviceType);
     const storeValue = isOutputBool ? rawValue !== 0 : rawValue;
@@ -2125,6 +2133,27 @@ class VictronGx extends utils.Adapter {
     }
     if (typeof storeValue === "number" && stateId.startsWith("overview.")) {
       this.powerValueCache.set(stateId, storeValue);
+    }
+    if (device) {
+      const controlField = (_b = MQTT_CONTROL_FIELDS[deviceType]) == null ? void 0 : _b[remappedPath];
+      if (controlField) {
+        const controlChannelKey = `control.${deviceType}.${device.instance}`;
+        if (this.channelReady.has(controlChannelKey)) {
+          const controlVal = controlField.valueType === "boolean" ? storeValue !== 0 : storeValue;
+          void this.setState(`${controlChannelKey}.${remappedPath}`, {
+            val: controlVal,
+            ack: true
+          });
+        }
+      }
+      if (deviceType === "evcharger" && remappedPath === "MaxCurrent" && typeof storeValue === "number") {
+        const controlChannelKey = `control.evcharger.${device.instance}`;
+        if (this.channelReady.has(controlChannelKey)) {
+          void this.extendObjectAsync(`${controlChannelKey}.SetCurrent`, {
+            common: { max: storeValue }
+          });
+        }
+      }
     }
     return storeValue;
   }
@@ -2429,9 +2458,8 @@ class VictronGx extends utils.Adapter {
   }
   /**
    * Legt bei Bedarf einen einfachen, nicht-schreibbaren Info-State an (Muster wie die
-   * bestehenden Position/NrOfPhases-Handler in updateDeviceMeta()) - additiv für DeviceInstance/
-   * Mgmt.Connection/Mgmt.ProcessName bei temperature (S2), gedacht zur Wiederverwendung durch
-   * weitere Typen (evcharger, S3).
+   * bestehenden Position/NrOfPhases-Handler in updateDeviceMeta()) - genutzt von
+   * Mgmt.Connection/Mgmt.ProcessName (siehe MGMT_STATE_TYPES).
    *
    * @param baseId Basis-Objekt-ID des Geräts (z.B. "devices.temperature.adc-20")
    * @param subPath State-Unterpfad relativ zu baseId (z.B. "mgmt.connection")
@@ -2578,26 +2606,6 @@ class VictronGx extends utils.Adapter {
               "string",
               "text",
               value
-            );
-          }
-        }
-        break;
-      }
-      case "DeviceInstance": {
-        if (!device.ready) {
-          break;
-        }
-        const diBaseId = this.getBaseId(type, instance, device.serial || void 0, device);
-        if (diBaseId) {
-          const diValue = parseInt(value, 10);
-          if (!Number.isNaN(diValue)) {
-            this.ensureRegistrationState(
-              diBaseId,
-              "info.deviceInstance",
-              DEVICE_INSTANCE_NAME,
-              "number",
-              "value",
-              diValue
             );
           }
         }
@@ -2969,6 +2977,98 @@ class VictronGx extends utils.Adapter {
     this.channelReady.add(baseId);
     this.log.debug(`Channel created: ${baseId}`);
   }
+  /**
+   * Legt control.<type>.<instance>.* für Typen aus MQTT_CONTROL_FIELDS an (S4) - eigener Kanal,
+   * eigenes Ready-Tracking ("control.<type>.<instance>" statt der Serial-basierten baseId), weil
+   * die Schreib-Topics MQTT-instanzbasiert adressiert werden (W/<vrmId>/<type>/<instance>/...),
+   * nicht serialbasiert wie devices.*. write=false, wenn mqttControlEnabled deaktiviert ist -
+   * States bleiben dann sichtbar, aber read-only (analog zu CONTROL_REGISTERS/controlEnabled).
+   *
+   * @param type Victron-Gerätetyp (Schlüssel in MQTT_CONTROL_FIELDS)
+   * @param instance MQTT-Device-Instance aus dem Topic
+   * @param device Geräte-Metadaten (für den Kanal-Anzeigenamen)
+   */
+  async ensureMqttControlChannel(type, instance, device) {
+    const fields = MQTT_CONTROL_FIELDS[type];
+    if (!fields) {
+      return;
+    }
+    const channelKey = `control.${type}.${instance}`;
+    if (this.channelReady.has(channelKey)) {
+      return;
+    }
+    this.channelReady.add(channelKey);
+    await this.setObjectNotExistsAsync("control", {
+      type: "channel",
+      common: {
+        name: {
+          en: "Control",
+          de: "Steuerung",
+          ru: "Control",
+          pt: "Control",
+          nl: "Control",
+          fr: "Control",
+          it: "Control",
+          es: "Control",
+          pl: "Control",
+          uk: "Control",
+          "zh-cn": "Control"
+        }
+      },
+      native: {}
+    });
+    await this.setObjectNotExistsAsync(`control.${type}`, {
+      type: "channel",
+      common: {
+        name: {
+          en: KNOWN_DEVICE_TYPES[type] || type,
+          de: KNOWN_DEVICE_TYPES[type] || type,
+          ru: KNOWN_DEVICE_TYPES[type] || type,
+          pt: KNOWN_DEVICE_TYPES[type] || type,
+          nl: KNOWN_DEVICE_TYPES[type] || type,
+          fr: KNOWN_DEVICE_TYPES[type] || type,
+          it: KNOWN_DEVICE_TYPES[type] || type,
+          es: KNOWN_DEVICE_TYPES[type] || type,
+          pl: KNOWN_DEVICE_TYPES[type] || type,
+          uk: KNOWN_DEVICE_TYPES[type] || type,
+          "zh-cn": KNOWN_DEVICE_TYPES[type] || type
+        }
+      },
+      native: {}
+    });
+    await this.setObjectNotExistsAsync(channelKey, {
+      type: "channel",
+      common: { name: device.customName || device.productName || `${type} ${instance}` },
+      native: {}
+    });
+    for (const [field, def] of Object.entries(fields)) {
+      const commonDef = {
+        name: this.getFriendlyName(def.mqttPath),
+        type: def.valueType,
+        role: def.role,
+        unit: def.unit,
+        read: true,
+        write: this.config.mqttControlEnabled === true
+      };
+      if (def.min !== void 0) {
+        commonDef.min = def.min;
+      }
+      if (def.max !== void 0) {
+        commonDef.max = def.max;
+      }
+      if (def.step !== void 0) {
+        commonDef.step = def.step;
+      }
+      if (def.states) {
+        commonDef.states = def.states;
+      }
+      await this.extendObjectAsync(`${channelKey}.${field}`, {
+        type: "state",
+        common: commonDef,
+        native: {}
+      });
+    }
+  }
   // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────
   async updateBatteryCellMinMax(baseId) {
     const vals = [];
@@ -3023,7 +3123,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── onStateChange: Schreibzugriffe ───────────────────────────────────────
   onStateChange(id, state) {
-    var _a;
+    var _a, _b;
     if (!state || state.ack) {
       return;
     }
@@ -3031,6 +3131,24 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const parts = id.split(".");
+    if (parts[2] === "control" && MQTT_CONTROL_FIELDS[parts[3]]) {
+      const type = parts[3];
+      const instance = parseInt(parts[4], 10);
+      const field = parts[5];
+      const def = (_a = MQTT_CONTROL_FIELDS[type]) == null ? void 0 : _a[field];
+      if (!def || Number.isNaN(instance)) {
+        return;
+      }
+      if (!this.config.mqttControlEnabled) {
+        this.log.warn("MQTT device control not enabled (mqttControlEnabled)");
+        return;
+      }
+      const writeVal2 = def.valueType === "boolean" ? state.val ? 1 : 0 : state.val;
+      const mqttTopic2 = `W/${this.vrmId}/${type}/${instance}/${def.mqttPath}`;
+      this.log.info(`MQTT write: ${mqttTopic2} = ${writeVal2}`);
+      this.mqttClient.publish(mqttTopic2, JSON.stringify({ value: writeVal2 }));
+      return;
+    }
     if (parts[2] === "control") {
       const dpId = parts.slice(3).join(".");
       if (!this.config.controlEnabled || !this.modbusClient) {
@@ -3062,7 +3180,7 @@ class VictronGx extends utils.Adapter {
     if (!WRITABLE_OUTPUT_REGEX.test(`outputs.${outputKey}.${dpTail.replace(/\//g, ".")}`)) {
       return;
     }
-    const route = (_a = this.outputToInstance.get(serial)) == null ? void 0 : _a.get(outputKey);
+    const route = (_b = this.outputToInstance.get(serial)) == null ? void 0 : _b.get(outputKey);
     if (!route) {
       this.log.warn(`Could not determine MQTT instance for ${id} (serial=${serial}, output=${outputKey})`);
       return;

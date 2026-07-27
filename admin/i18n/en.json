@@ -9,6 +9,8 @@
     "mqttUsername_help": "Leave empty if no auth configured",
     "mqttPassword_label": "MQTT password",
     "controlEnabled_label": "Enable control (Modbus TCP)",
+    "mqttControlEnabled_label": "Enable MQTT device control (EV charger, ...)",
+    "mqttControlEnabled_help": "Allows the adapter to write control values via MQTT (e.g. EV charger charging current, start/stop, mode). Independent of the Modbus control above.",
     "modbusPort_label": "Modbus port",
     "modbusHint_text": "⚠️ Prerequisite on GX device: Settings → Integrations → Modbus TCP Server → Enabled & Access level → Write access allowed",
     "cleanupOrphanedOutputs_label": "Remove orphaned channels on startup",
