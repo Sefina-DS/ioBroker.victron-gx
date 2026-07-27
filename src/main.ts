@@ -42,6 +42,7 @@ const KNOWN_DEVICE_TYPES: Record<string, string> = {
     temperature: 'Temperature Sensor',
     tank: 'Tank Sensor',
     meteo: 'Weather Station',
+    evcharger: 'EV Charger',
 };
 
 // ── Namen für dynamisch erzeugte Registration-States (ensureRegistrationState) ──────────────
@@ -72,6 +73,10 @@ const MGMT_PROCESSNAME_NAME: ioBroker.StringOrTranslated = {
     uk: 'Driver process',
     'zh-cn': 'Driver process',
 };
+// Typen, für die Mgmt.Connection/Mgmt.ProcessName zusätzlich sichtbare mgmt.*-States erzeugen
+// (siehe updateDeviceMeta()). Bewusst als Allowlist statt global, um bestehende Typen
+// (battery/vebus/...) nicht mit neuen, nie angefragten Objekten zu erweitern.
+const MGMT_STATE_TYPES = new Set(['temperature', 'evcharger']);
 const DEVICE_INSTANCE_NAME: ioBroker.StringOrTranslated = {
     en: 'Device instance',
     de: 'Geräteinstanz',
@@ -367,6 +372,34 @@ const RELEVANT_PATHS: Record<string, string[]> = {
     ],
     tank: ['Level', 'Remaining', 'Capacity', 'FluidType', 'Status', 'ProductName', 'CustomName'],
     meteo: ['Irradiance', 'WindSpeed', 'WindDirection', 'ExternalTemperature', 'ProductName', 'CustomName'],
+    // EV Charger (com.victronenergy.evcharger) - deckt alle 27 im Catalog beobachteten Topics ab
+    // (Anhang EVCHARGER_AND_TEMP_PLAN.md). Serial/Connected/DeviceInstance/Mgmt.Connection/
+    // Mgmt.ProcessName laufen wie bei allen anderen Typen über REGISTRATION_PATHS, nicht über
+    // diese Liste. SetCurrent/StartStop bleiben hier als reine read-only Datentopic-Spiegel -
+    // die schreibbaren control.evcharger.*-Aliase kommen in S4.
+    evcharger: [
+        'Ac/Energy/Forward',
+        'Ac/L1/Power',
+        'Ac/L2/Power',
+        'Ac/L3/Power',
+        'Ac/Power',
+        'Ac/Voltage',
+        'ChargingTime',
+        'Current',
+        'FirmwareVersion',
+        'HardwareVersion',
+        'MCU/Temperature',
+        'MaxCurrent',
+        'Mode',
+        'ProductId',
+        'SetCurrent',
+        'StartStop',
+        'Status',
+        'UpdateIndex',
+        'Mgmt/ProcessVersion',
+        'ProductName',
+        'CustomName',
+    ],
 };
 
 // ── Pfade die nur Metadaten liefern ─────────────────────────────────────────
@@ -979,6 +1012,36 @@ const STATES_MAP: Record<string, Record<string, Record<number, string>>> = {
         'alarms.lowVoltage': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
         'alarms.highVoltage': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
         'alarms.lowSoc': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
+    },
+    evcharger: {
+        // Verifiziert gegen github.com/victronenergy/dbus-modbus-client/blob/master/ev_charger.py
+        // (EVC_MODE/EVC_STATUS) - der Plan-Anhang hatte 12-15 falsch zugeordnet (Overvoltage/
+        // Overtemperature vertauscht, "15=Error" nicht belegt). 21-24 sind Übergangszustände beim
+        // Phasenumschalten, die go-eCharger laut dbus-goecharger.py nicht sendet (nur 0/2/3/6),
+        // aber andere Victron-kompatible EVSE-Hardware kann sie liefern.
+        Mode: { 0: 'Manual', 1: 'Auto', 2: 'Scheduled' },
+        Status: {
+            0: 'Disconnected',
+            1: 'Connected',
+            2: 'Charging',
+            3: 'Charged',
+            4: 'Waiting for sun',
+            5: 'Waiting for RFID',
+            6: 'Waiting for start',
+            7: 'Low SoC',
+            8: 'Ground error',
+            9: 'Welded contactor',
+            10: 'CP shorted',
+            11: 'Earth leakage',
+            12: 'Undervoltage',
+            13: 'Overvoltage',
+            14: 'Overtemperature',
+            21: 'Start charging',
+            22: 'Switch to 3-phase',
+            23: 'Switch to 1-phase',
+            24: 'Stop charging',
+        },
+        StartStop: { 0: 'Stop', 1: 'Start' },
     },
     temperature: {
         // Verifiziert gegen github.com/victronenergy/dbus-adc (README) - TemperatureType 3-6
@@ -2380,7 +2443,21 @@ class VictronGx extends utils.Adapter {
         if (deviceType === 'temperature' && remappedPath === 'RawUnit') {
             commonBase.role = 'text';
         }
-        if (deviceType === 'temperature' && remappedPath === 'Mgmt.ProcessVersion') {
+        if (remappedPath === 'Mgmt.ProcessVersion') {
+            // Nur ein reiner String-State - Pfad ist projektweit einmalig (kein Kollisionsrisiko
+            // mit anderen Typen), daher nicht type-gegated.
+            commonBase.role = 'text';
+        }
+
+        // EV Charger (S3): Status als indicator.status, MaxCurrent als Grenzwert statt simpler
+        // Momentanwert, FirmwareVersion als Text (String-Wert, kein "value").
+        if (deviceType === 'evcharger' && remappedPath === 'Status') {
+            commonBase.role = 'indicator.status';
+        }
+        if (deviceType === 'evcharger' && remappedPath === 'MaxCurrent') {
+            commonBase.role = 'level.current';
+        }
+        if (deviceType === 'evcharger' && remappedPath === 'FirmwareVersion') {
             commonBase.role = 'text';
         }
 
@@ -2925,10 +3002,8 @@ class VictronGx extends utils.Adapter {
                         this.log.info(`Node-RED device: ${type}/${instance}`);
                     }
                 }
-                // Sichtbarer mgmt.connection-State - bislang nur für temperature (S2) benötigt;
-                // bewusst type-gegated statt global, um bestehende Typen (battery/vebus/...) nicht
-                // um neue Objekte zu erweitern, die dort nie angefragt wurden.
-                if (type === 'temperature' && device.ready) {
+                // Sichtbarer mgmt.connection-State - siehe MGMT_STATE_TYPES.
+                if (MGMT_STATE_TYPES.has(type) && device.ready) {
                     const mgmtBaseId = this.getBaseId(type, instance, device.serial || undefined, device);
                     if (mgmtBaseId) {
                         this.ensureRegistrationState(
@@ -2954,7 +3029,7 @@ class VictronGx extends utils.Adapter {
                 if (pseudoSerial && !device.serial) {
                     this.commitSerial(device, deviceKey, type, instance, pseudoSerial);
                 }
-                if (type === 'temperature' && device.ready) {
+                if (MGMT_STATE_TYPES.has(type) && device.ready) {
                     const mgmtBaseId = this.getBaseId(type, instance, device.serial || undefined, device);
                     if (mgmtBaseId) {
                         this.ensureRegistrationState(
@@ -2996,6 +3071,14 @@ class VictronGx extends utils.Adapter {
                 const baseId = this.getBaseId(type, instance, device.serial || undefined, device);
                 if (baseId) {
                     const posStateId = `${baseId}.info.position`;
+                    // evcharger.Position hat eine andere Bedeutung als das generische AC-Position-
+                    // Enum unten (grid/pvinverter/acload: Lage relativ zum MultiPlus) - Victron
+                    // dokumentiert für com.victronenergy.evcharger nur 0=AC output/1=AC input,
+                    // ohne "(behind MultiPlus)"/"(Grid)"-Zusatz.
+                    const positionStates: Record<number, string> =
+                        type === 'evcharger'
+                            ? { 0: 'AC Output', 1: 'AC Input' }
+                            : { 0: 'AC Output (behind MultiPlus)', 1: 'AC Input (Grid)', 2: 'AC Input 2' };
                     if (!this.createdStates.has(posStateId)) {
                         void this.setObjectNotExistsAsync(posStateId, {
                             type: 'state',
@@ -3015,11 +3098,7 @@ class VictronGx extends utils.Adapter {
                                 },
                                 type: 'number',
                                 role: 'value',
-                                states: {
-                                    0: 'AC Output (behind MultiPlus)',
-                                    1: 'AC Input (Grid)',
-                                    2: 'AC Input 2',
-                                },
+                                states: positionStates,
                                 read: true,
                                 write: false,
                             },
@@ -5026,6 +5105,137 @@ class VictronGx extends utils.Adapter {
                 uk: 'Driver version',
                 'zh-cn': 'Driver version',
             },
+            // evcharger (S3)
+            'Ac.Voltage': {
+                en: 'AC voltage',
+                de: 'AC Spannung',
+                ru: 'AC voltage',
+                pt: 'AC voltage',
+                nl: 'AC voltage',
+                fr: 'AC voltage',
+                it: 'AC voltage',
+                es: 'AC voltage',
+                pl: 'AC voltage',
+                uk: 'AC voltage',
+                'zh-cn': 'AC voltage',
+            },
+            ChargingTime: {
+                en: 'Charging time',
+                de: 'Ladezeit',
+                ru: 'Charging time',
+                pt: 'Charging time',
+                nl: 'Charging time',
+                fr: 'Charging time',
+                it: 'Charging time',
+                es: 'Charging time',
+                pl: 'Charging time',
+                uk: 'Charging time',
+                'zh-cn': 'Charging time',
+            },
+            Current: {
+                en: 'Current',
+                de: 'Strom',
+                ru: 'Current',
+                pt: 'Current',
+                nl: 'Current',
+                fr: 'Current',
+                it: 'Current',
+                es: 'Current',
+                pl: 'Current',
+                uk: 'Current',
+                'zh-cn': 'Current',
+            },
+            FirmwareVersion: {
+                en: 'Firmware version',
+                de: 'Firmware-Version',
+                ru: 'Firmware version',
+                pt: 'Firmware version',
+                nl: 'Firmware version',
+                fr: 'Firmware version',
+                it: 'Firmware version',
+                es: 'Firmware version',
+                pl: 'Firmware version',
+                uk: 'Firmware version',
+                'zh-cn': 'Firmware version',
+            },
+            HardwareVersion: {
+                en: 'Hardware version',
+                de: 'Hardware-Version',
+                ru: 'Hardware version',
+                pt: 'Hardware version',
+                nl: 'Hardware version',
+                fr: 'Hardware version',
+                it: 'Hardware version',
+                es: 'Hardware version',
+                pl: 'Hardware version',
+                uk: 'Hardware version',
+                'zh-cn': 'Hardware version',
+            },
+            'MCU.Temperature': {
+                en: 'MCU temperature',
+                de: 'MCU-Temperatur',
+                ru: 'MCU temperature',
+                pt: 'MCU temperature',
+                nl: 'MCU temperature',
+                fr: 'MCU temperature',
+                it: 'MCU temperature',
+                es: 'MCU temperature',
+                pl: 'MCU temperature',
+                uk: 'MCU temperature',
+                'zh-cn': 'MCU temperature',
+            },
+            MaxCurrent: {
+                en: 'Maximum current',
+                de: 'Maximaler Strom',
+                ru: 'Maximum current',
+                pt: 'Maximum current',
+                nl: 'Maximum current',
+                fr: 'Maximum current',
+                it: 'Maximum current',
+                es: 'Maximum current',
+                pl: 'Maximum current',
+                uk: 'Maximum current',
+                'zh-cn': 'Maximum current',
+            },
+            SetCurrent: {
+                en: 'Charging current setpoint',
+                de: 'Ladestrom-Sollwert',
+                ru: 'Charging current setpoint',
+                pt: 'Charging current setpoint',
+                nl: 'Charging current setpoint',
+                fr: 'Charging current setpoint',
+                it: 'Charging current setpoint',
+                es: 'Charging current setpoint',
+                pl: 'Charging current setpoint',
+                uk: 'Charging current setpoint',
+                'zh-cn': 'Charging current setpoint',
+            },
+            StartStop: {
+                en: 'Charging enabled',
+                de: 'Laden freigegeben',
+                ru: 'Charging enabled',
+                pt: 'Charging enabled',
+                nl: 'Charging enabled',
+                fr: 'Charging enabled',
+                it: 'Charging enabled',
+                es: 'Charging enabled',
+                pl: 'Charging enabled',
+                uk: 'Charging enabled',
+                'zh-cn': 'Charging enabled',
+            },
+            UpdateIndex: {
+                en: 'Update index',
+                de: 'Update-Index',
+                ru: 'Update index',
+                pt: 'Update index',
+                nl: 'Update index',
+                fr: 'Update index',
+                it: 'Update index',
+                es: 'Update index',
+                pl: 'Update index',
+                uk: 'Update index',
+                'zh-cn': 'Update index',
+            },
         };
         if (names[path]) {
             return names[path];
@@ -5126,8 +5336,11 @@ class VictronGx extends utils.Adapter {
         if (path === 'WindDirection') {
             return '°';
         }
-        if (path === 'ExternalTemperature') {
+        if (path === 'ExternalTemperature' || path === 'MCU.Temperature') {
             return '°C';
+        }
+        if (path === 'ChargingTime') {
+            return 's';
         }
         return '';
     }
@@ -5199,6 +5412,12 @@ class VictronGx extends utils.Adapter {
         }
         if (path === 'cells.minId' || path === 'cells.maxId') {
             return 'text';
+        }
+        if (path === 'MCU.Temperature') {
+            return 'value.temperature';
+        }
+        if (path === 'ChargingTime') {
+            return 'value.interval';
         }
         return 'value';
     }
