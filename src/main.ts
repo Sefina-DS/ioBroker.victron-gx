@@ -44,6 +44,48 @@ const KNOWN_DEVICE_TYPES: Record<string, string> = {
     meteo: 'Weather Station',
 };
 
+// ── Namen für dynamisch erzeugte Registration-States (ensureRegistrationState) ──────────────
+// S2 (temperature/dbus-adc): mgmt.connection, mgmt.processName, info.deviceInstance.
+const MGMT_CONNECTION_NAME: ioBroker.StringOrTranslated = {
+    en: 'Connection',
+    de: 'Verbindung',
+    ru: 'Connection',
+    pt: 'Connection',
+    nl: 'Connection',
+    fr: 'Connection',
+    it: 'Connection',
+    es: 'Connection',
+    pl: 'Connection',
+    uk: 'Connection',
+    'zh-cn': 'Connection',
+};
+const MGMT_PROCESSNAME_NAME: ioBroker.StringOrTranslated = {
+    en: 'Driver process',
+    de: 'Treiber-Prozess',
+    ru: 'Driver process',
+    pt: 'Driver process',
+    nl: 'Driver process',
+    fr: 'Driver process',
+    it: 'Driver process',
+    es: 'Driver process',
+    pl: 'Driver process',
+    uk: 'Driver process',
+    'zh-cn': 'Driver process',
+};
+const DEVICE_INSTANCE_NAME: ioBroker.StringOrTranslated = {
+    en: 'Device instance',
+    de: 'Geräteinstanz',
+    ru: 'Device instance',
+    pt: 'Device instance',
+    nl: 'Device instance',
+    fr: 'Device instance',
+    it: 'Device instance',
+    es: 'Device instance',
+    pl: 'Device instance',
+    uk: 'Device instance',
+    'zh-cn': 'Device instance',
+};
+
 // ── Relevante MQTT-Pfade pro Gerätetyp ──────────────────────────────────────
 const RELEVANT_PATHS: Record<string, string[]> = {
     battery: [
@@ -304,7 +346,25 @@ const RELEVANT_PATHS: Record<string, string[]> = {
         'SystemState.State',
         'Serial',
     ],
-    temperature: ['Temperature', 'Humidity', 'Pressure', 'ProductName', 'CustomName'],
+    temperature: [
+        'Temperature',
+        // Generic Temperature Input (dbus-adc, GX-ADC-Eingänge) - siehe derivePseudoSerial().
+        // Kein Serial-Topic, daher eigener Satz an Feldern zusätzlich zum BME280/Ruuvi-Pfad
+        // unten (Humidity/Pressure), der weiterhin über eine echte Serial läuft.
+        'TemperatureType',
+        'Status',
+        'Offset',
+        'Scale',
+        'RawValue',
+        'RawUnit',
+        'FilterLength',
+        'Mgmt/ProcessVersion',
+        'ProductId',
+        'Humidity',
+        'Pressure',
+        'ProductName',
+        'CustomName',
+    ],
     tank: ['Level', 'Remaining', 'Capacity', 'FluidType', 'Status', 'ProductName', 'CustomName'],
     meteo: ['Irradiance', 'WindSpeed', 'WindDirection', 'ExternalTemperature', 'ProductName', 'CustomName'],
 };
@@ -325,6 +385,9 @@ const REGISTRATION_PATHS = new Set([
     'NrOfPhases',
     'Mgmt.Connection',
     'Mgmt.ProcessName',
+    // DeviceInstance: bislang von keinem Typ genutzt, jetzt Pflicht für temperature/dbus-adc
+    // (siehe derivePseudoSerial()) und nebenbei als sichtbarer info.deviceInstance-State.
+    'DeviceInstance',
     // Output-Metadaten (CustomName/Group) laufen seit S4b/S4c dynamisch über remapOutputPath()
     // im Message-Handler, nicht mehr über hartcodierte output_1-Einträge hier (S7-Cleanup).
 ]);
@@ -336,6 +399,21 @@ const NO_SERIAL_TYPES_HANDLE = new Set(['system', 'platform']);
 // echte Serial für die BaseId - kein Sonderfall mehr nötig.
 const NO_SERIAL_TYPES_REGISTER = new Set(['system', 'platform']);
 const MODBUS_NEEDED_TYPES = new Set(['vebus', 'battery', 'grid', 'pvinverter', 'solarcharger']);
+
+// ── Pseudo-Serial für Geräte ohne echte Victron-Serial ──────────────────────
+// dbus-adc (Generic Temperature Input an den GX-ADC-Eingängen) sendet nie ein Serial-Topic -
+// anders als externe Temperatursensoren (BME280/Ruuvi über dbus-victron-virtual o.ä.), die eine
+// echte Serial liefern und unverändert über den Standard-Serial-Pfad (case 'Serial' in
+// updateDeviceMeta()) laufen. Ohne Ersatz-ID bliebe device.ready für dbus-adc-Instanzen für immer
+// false (siehe getOrCreateDeviceEntry()/NO_SERIAL_TYPES_REGISTER) und die Kanäle unsichtbar.
+// Format "adc-<DeviceInstance>": erkennbar synthetisch, kollidiert nicht mit echten Victron-
+// Serials, ioBroker-Objekt-ID-sicher (nur [a-zA-Z0-9_-]).
+function derivePseudoSerial(type: string, mgmtProcessName: string, instance: number): string | null {
+    if (type === 'temperature' && mgmtProcessName === 'dbus-adc') {
+        return `adc-${instance}`;
+    }
+    return null;
+}
 
 // ── Victron-Pfade → ioBroker-Pfade ──────────────────────────────────────────
 // switch/acload.SwitchableOutput.* laufen seit S4a/S4c über remapOutputPath() (dynamisch),
@@ -901,6 +979,27 @@ const STATES_MAP: Record<string, Record<string, Record<number, string>>> = {
         'alarms.lowVoltage': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
         'alarms.highVoltage': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
         'alarms.lowSoc': { 0: 'OK', 1: 'Warning', 2: 'Alarm' },
+    },
+    temperature: {
+        // Verifiziert gegen github.com/victronenergy/dbus-adc (README) - TemperatureType 3-6
+        // sind dort nicht explizit dokumentiert, aber durchgängig in Victron-GUI-Quellen belegt.
+        TemperatureType: {
+            0: 'Battery',
+            1: 'Fridge',
+            2: 'Generic',
+            3: 'Room',
+            4: 'Outdoor',
+            5: 'Water Heater',
+            6: 'Freezer',
+        },
+        // Identisch zum tank.Status-Enum unten - beide laufen über denselben Analog-Input-Treiber.
+        Status: {
+            0: 'OK',
+            1: 'Disconnected',
+            2: 'Short circuit',
+            3: 'Reverse polarity',
+            4: 'Unknown',
+        },
     },
     tank: {
         FluidType: {
@@ -2254,6 +2353,37 @@ class VictronGx extends utils.Adapter {
             commonBase.unit = 'm³';
         }
 
+        // Temperature (dbus-adc): Status als indicator.status statt generischem "value" - lokal
+        // auf 'temperature' begrenzt, damit tank.Status (nutzt denselben Pfadnamen) unverändert
+        // bleibt.
+        if (deviceType === 'temperature' && remappedPath === 'Status') {
+            commonBase.role = 'indicator.status';
+        }
+        // Offset/Scale/FilterLength sind laut dbus-adc Kalibrierungsparameter (siehe
+        // github.com/victronenergy/dbus-adc) - Rolle "level" statt "value", aktuell aber
+        // read-only: ein MQTT-Schreibpfad für Nicht-Output-Datenpunkte existiert im Adapter noch
+        // nicht (nur SwitchableOutput.* ist heute schreibbar, siehe WRITABLE_OUTPUT_REGEX). Wird
+        // zusammen mit dem evcharger-Control-Pfad (S4) als generischer Mechanismus nachgezogen.
+        if (
+            deviceType === 'temperature' &&
+            (remappedPath === 'Offset' || remappedPath === 'Scale' || remappedPath === 'FilterLength')
+        ) {
+            commonBase.role = 'level';
+        }
+        if (deviceType === 'temperature' && remappedPath === 'Offset') {
+            commonBase.unit = '°C';
+        }
+        if (deviceType === 'temperature' && remappedPath === 'RawValue') {
+            commonBase.role = 'value.voltage';
+            commonBase.unit = 'V';
+        }
+        if (deviceType === 'temperature' && remappedPath === 'RawUnit') {
+            commonBase.role = 'text';
+        }
+        if (deviceType === 'temperature' && remappedPath === 'Mgmt.ProcessVersion') {
+            commonBase.role = 'text';
+        }
+
         if (!this.createdStates.has(stateId)) {
             // Async Setup-Pfad: nur beim ersten Mal
             this.createdStates.add(stateId);
@@ -2619,6 +2749,92 @@ class VictronGx extends utils.Adapter {
         return device;
     }
 
+    /**
+     * Setzt Serial + ready=true auf dem Gerät und stößt die üblichen Begleiteffekte an (Logging,
+     * S15-pendingCommitLog-Nachholung, Löschen des alten instance-basierten Kanals). Gemeinsam
+     * genutzt vom regulären case 'Serial' (echte Victron-Serial) und von derivePseudoSerial()
+     * (synthetische Serial für dbus-adc, siehe dort) - beide Wege müssen device.ready identisch
+     * scharfschalten, sonst entstehen zwei unterschiedlich robuste Ready-Pfade.
+     *
+     * @param device Geräte-Metadaten
+     * @param deviceKey Interner Schlüssel "<type>/<instance>"
+     * @param type Victron-Gerätetyp
+     * @param instance Geräte-Instanznummer aus dem MQTT-Topic
+     * @param rawSerial Serial (echt oder synthetisch), wird ioBroker-Objekt-ID-safe bereinigt
+     */
+    private commitSerial(
+        device: DeviceInfo,
+        deviceKey: string,
+        type: string,
+        instance: number,
+        rawSerial: string,
+    ): void {
+        const safeSerial = rawSerial.replace(/[^a-zA-Z0-9_-]/g, '_');
+        device.serial = safeSerial;
+        device.ready = true;
+        this.serialMap.set(deviceKey, safeSerial);
+        const k = `serial:${deviceKey}`;
+        if (!this.loggedDevices.has(k)) {
+            this.loggedDevices.add(k);
+            this.log.info(`Device detected: ${KNOWN_DEVICE_TYPES[type] || type} → serial: ${safeSerial}`);
+        }
+        // S15-Fix: siehe commitDevice() - Log war beim Commit zurückgestellt, weil die
+        // Serial dort noch unbekannt war. Jetzt nachholen, wo sie feststeht.
+        if (device.pendingCommitLog) {
+            device.pendingCommitLog = false;
+            this.log.info(
+                `Device committed: ${KNOWN_DEVICE_TYPES[type] || type} → serial: ${safeSerial} group=${
+                    device.group || '(none)'
+                }`,
+            );
+        }
+        const oldId = `devices.${type}.${instance}`;
+        const newId = `devices.${type}.${safeSerial}`;
+        const deleteKey = `deleted:${oldId}`;
+        if (type !== 'system' && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
+            this.loggedDevices.add(deleteKey);
+            void this.delObjectAsync(oldId, { recursive: true })
+                .then(() => this.log.debug(`Old channel deleted: ${oldId}`))
+                .catch(() => {});
+        }
+    }
+
+    /**
+     * Legt bei Bedarf einen einfachen, nicht-schreibbaren Info-State an (Muster wie die
+     * bestehenden Position/NrOfPhases-Handler in updateDeviceMeta()) - additiv für DeviceInstance/
+     * Mgmt.Connection/Mgmt.ProcessName bei temperature (S2), gedacht zur Wiederverwendung durch
+     * weitere Typen (evcharger, S3).
+     *
+     * @param baseId Basis-Objekt-ID des Geräts (z.B. "devices.temperature.adc-20")
+     * @param subPath State-Unterpfad relativ zu baseId (z.B. "mgmt.connection")
+     * @param name Übersetzter State-Name (alle 11 Sprachen)
+     * @param type ioBroker common.type des States
+     * @param role ioBroker common.role des States
+     * @param value Zu schreibender Wert
+     */
+    private ensureRegistrationState(
+        baseId: string,
+        subPath: string,
+        name: ioBroker.StringOrTranslated,
+        type: 'string' | 'number',
+        role: string,
+        value: string | number,
+    ): void {
+        const stateId = `${baseId}.${subPath}`;
+        if (!this.createdStates.has(stateId)) {
+            void this.setObjectNotExistsAsync(stateId, {
+                type: 'state',
+                common: { name, type, role, read: true, write: false },
+                native: {},
+            }).then(() => {
+                this.createdStates.add(stateId);
+                void this.setState(stateId, { val: value, ack: true });
+            });
+        } else {
+            void this.setState(stateId, { val: value, ack: true });
+        }
+    }
+
     // ── Metadaten sammeln ────────────────────────────────────────────────────
     private updateDeviceMeta(type: string, instance: number, field: string, value: string): void {
         const deviceKey = `${type}/${instance}`;
@@ -2626,34 +2842,7 @@ class VictronGx extends utils.Adapter {
         switch (field) {
             case 'Serial':
             case 'Devices.0.SerialNumber': {
-                const safeSerial = String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
-                device.serial = safeSerial;
-                device.ready = true;
-                this.serialMap.set(deviceKey, safeSerial);
-                const k = `serial:${deviceKey}`;
-                if (!this.loggedDevices.has(k)) {
-                    this.loggedDevices.add(k);
-                    this.log.info(`Device detected: ${KNOWN_DEVICE_TYPES[type] || type} → serial: ${value}`);
-                }
-                // S15-Fix: siehe commitDevice() - Log war beim Commit zurückgestellt, weil die
-                // Serial dort noch unbekannt war. Jetzt nachholen, wo sie feststeht.
-                if (device.pendingCommitLog) {
-                    device.pendingCommitLog = false;
-                    this.log.info(
-                        `Device committed: ${KNOWN_DEVICE_TYPES[type] || type} → serial: ${safeSerial} group=${
-                            device.group || '(none)'
-                        }`,
-                    );
-                }
-                const oldId = `devices.${type}.${instance}`;
-                const newId = `devices.${type}.${safeSerial}`;
-                const deleteKey = `deleted:${oldId}`;
-                if (type !== 'system' && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
-                    this.loggedDevices.add(deleteKey);
-                    void this.delObjectAsync(oldId, { recursive: true })
-                        .then(() => this.log.debug(`Old channel deleted: ${oldId}`))
-                        .catch(() => {});
-                }
+                this.commitSerial(device, deviceKey, type, instance, String(value));
                 break;
             }
             case 'ProductName': {
@@ -2736,12 +2925,70 @@ class VictronGx extends utils.Adapter {
                         this.log.info(`Node-RED device: ${type}/${instance}`);
                     }
                 }
+                // Sichtbarer mgmt.connection-State - bislang nur für temperature (S2) benötigt;
+                // bewusst type-gegated statt global, um bestehende Typen (battery/vebus/...) nicht
+                // um neue Objekte zu erweitern, die dort nie angefragt wurden.
+                if (type === 'temperature' && device.ready) {
+                    const mgmtBaseId = this.getBaseId(type, instance, device.serial || undefined, device);
+                    if (mgmtBaseId) {
+                        this.ensureRegistrationState(
+                            mgmtBaseId,
+                            'mgmt.connection',
+                            MGMT_CONNECTION_NAME,
+                            'string',
+                            'text',
+                            value,
+                        );
+                    }
+                }
                 break;
-            case 'Mgmt.ProcessName':
+            case 'Mgmt.ProcessName': {
                 if (value === 'dbus-victron-virtual') {
                     device.virtual = true;
                 }
+                // dbus-adc (Generic Temperature Input) liefert nie eine Serial - siehe
+                // derivePseudoSerial(). Nur einmal committen (!device.serial), damit wiederholte
+                // Mgmt.ProcessName-Messages (Keepalive-Replay alle 50s) nicht erneut ins Log/den
+                // Objekt-Lösch-Pfad von commitSerial() laufen.
+                const pseudoSerial = derivePseudoSerial(type, value, instance);
+                if (pseudoSerial && !device.serial) {
+                    this.commitSerial(device, deviceKey, type, instance, pseudoSerial);
+                }
+                if (type === 'temperature' && device.ready) {
+                    const mgmtBaseId = this.getBaseId(type, instance, device.serial || undefined, device);
+                    if (mgmtBaseId) {
+                        this.ensureRegistrationState(
+                            mgmtBaseId,
+                            'mgmt.processName',
+                            MGMT_PROCESSNAME_NAME,
+                            'string',
+                            'text',
+                            value,
+                        );
+                    }
+                }
                 break;
+            }
+            case 'DeviceInstance': {
+                if (!device.ready) {
+                    break;
+                }
+                const diBaseId = this.getBaseId(type, instance, device.serial || undefined, device);
+                if (diBaseId) {
+                    const diValue = parseInt(value, 10);
+                    if (!Number.isNaN(diValue)) {
+                        this.ensureRegistrationState(
+                            diBaseId,
+                            'info.deviceInstance',
+                            DEVICE_INSTANCE_NAME,
+                            'number',
+                            'value',
+                            diValue,
+                        );
+                    }
+                }
+                break;
+            }
             case 'Position': {
                 if (!device.ready) {
                     break;
@@ -4674,6 +4921,111 @@ class VictronGx extends utils.Adapter {
                 uk: 'Product ID',
                 'zh-cn': 'Product ID',
             },
+            // temperature (dbus-adc, S2)
+            Status: {
+                en: 'Status',
+                de: 'Status',
+                ru: 'Status',
+                pt: 'Status',
+                nl: 'Status',
+                fr: 'Status',
+                it: 'Status',
+                es: 'Status',
+                pl: 'Status',
+                uk: 'Status',
+                'zh-cn': 'Status',
+            },
+            TemperatureType: {
+                en: 'Sensor type',
+                de: 'Sensortyp',
+                ru: 'Sensor type',
+                pt: 'Sensor type',
+                nl: 'Sensor type',
+                fr: 'Sensor type',
+                it: 'Sensor type',
+                es: 'Sensor type',
+                pl: 'Sensor type',
+                uk: 'Sensor type',
+                'zh-cn': 'Sensor type',
+            },
+            Offset: {
+                en: 'Calibration offset',
+                de: 'Kalibrierungs-Offset',
+                ru: 'Calibration offset',
+                pt: 'Calibration offset',
+                nl: 'Calibration offset',
+                fr: 'Calibration offset',
+                it: 'Calibration offset',
+                es: 'Calibration offset',
+                pl: 'Calibration offset',
+                uk: 'Calibration offset',
+                'zh-cn': 'Calibration offset',
+            },
+            Scale: {
+                en: 'Calibration scale',
+                de: 'Kalibrierungs-Skalierung',
+                ru: 'Calibration scale',
+                pt: 'Calibration scale',
+                nl: 'Calibration scale',
+                fr: 'Calibration scale',
+                it: 'Calibration scale',
+                es: 'Calibration scale',
+                pl: 'Calibration scale',
+                uk: 'Calibration scale',
+                'zh-cn': 'Calibration scale',
+            },
+            RawValue: {
+                en: 'Raw sensor value',
+                de: 'Roher Sensorwert',
+                ru: 'Raw sensor value',
+                pt: 'Raw sensor value',
+                nl: 'Raw sensor value',
+                fr: 'Raw sensor value',
+                it: 'Raw sensor value',
+                es: 'Raw sensor value',
+                pl: 'Raw sensor value',
+                uk: 'Raw sensor value',
+                'zh-cn': 'Raw sensor value',
+            },
+            RawUnit: {
+                en: 'Raw value unit',
+                de: 'Einheit des Rohwerts',
+                ru: 'Raw value unit',
+                pt: 'Raw value unit',
+                nl: 'Raw value unit',
+                fr: 'Raw value unit',
+                it: 'Raw value unit',
+                es: 'Raw value unit',
+                pl: 'Raw value unit',
+                uk: 'Raw value unit',
+                'zh-cn': 'Raw value unit',
+            },
+            FilterLength: {
+                en: 'Filter length',
+                de: 'Filterlänge',
+                ru: 'Filter length',
+                pt: 'Filter length',
+                nl: 'Filter length',
+                fr: 'Filter length',
+                it: 'Filter length',
+                es: 'Filter length',
+                pl: 'Filter length',
+                uk: 'Filter length',
+                'zh-cn': 'Filter length',
+            },
+            'Mgmt.ProcessVersion': {
+                en: 'Driver version',
+                de: 'Treiberversion',
+                ru: 'Driver version',
+                pt: 'Driver version',
+                nl: 'Driver version',
+                fr: 'Driver version',
+                it: 'Driver version',
+                es: 'Driver version',
+                pl: 'Driver version',
+                uk: 'Driver version',
+                'zh-cn': 'Driver version',
+            },
         };
         if (names[path]) {
             return names[path];
@@ -4734,7 +5086,7 @@ class VictronGx extends utils.Adapter {
         if (path.includes('Soc')) {
             return '%';
         }
-        if (path.startsWith('temperatures.')) {
+        if (path.startsWith('temperatures.') || path === 'Temperature') {
             return '°C';
         }
         if (path.endsWith('.S')) {
