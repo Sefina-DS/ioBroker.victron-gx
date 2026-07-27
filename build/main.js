@@ -36,7 +36,71 @@ const KNOWN_DEVICE_TYPES = {
   platform: "GX Device",
   temperature: "Temperature Sensor",
   tank: "Tank Sensor",
-  meteo: "Weather Station"
+  meteo: "Weather Station",
+  evcharger: "EV Charger"
+};
+const MGMT_CONNECTION_NAME = {
+  en: "Connection",
+  de: "Verbindung",
+  ru: "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435",
+  pt: "Conex\xE3o",
+  nl: "Verbinding",
+  fr: "Connexion",
+  it: "Connessione",
+  es: "Conexi\xF3n",
+  pl: "Po\u0142\u0105czenie",
+  uk: "\u0417'\u0454\u0434\u043D\u0430\u043D\u043D\u044F",
+  "zh-cn": "\u8FDE\u63A5"
+};
+const MGMT_PROCESSNAME_NAME = {
+  en: "Driver process",
+  de: "Treiber-Prozess",
+  ru: "\u041F\u0440\u043E\u0446\u0435\u0441\u0441 \u0434\u0440\u0430\u0439\u0432\u0435\u0440\u0430",
+  pt: "Processo do driver",
+  nl: "Driverproces",
+  fr: "Processus du pilote",
+  it: "Processo del driver",
+  es: "Proceso del controlador",
+  pl: "Proces sterownika",
+  uk: "\u041F\u0440\u043E\u0446\u0435\u0441 \u0434\u0440\u0430\u0439\u0432\u0435\u0440\u0430",
+  "zh-cn": "\u9A71\u52A8\u8FDB\u7A0B"
+};
+const MGMT_STATE_TYPES = /* @__PURE__ */ new Set(["temperature", "evcharger"]);
+const MQTT_CONTROL_FIELDS = {
+  evcharger: {
+    SetCurrent: {
+      mqttPath: "SetCurrent",
+      unit: "A",
+      role: "level.current",
+      valueType: "number",
+      min: 6,
+      step: 1
+      // max wird dynamisch aus dem MaxCurrent-Datenpunkt nachgezogen (siehe writeStateValue()).
+    },
+    StartStop: { mqttPath: "StartStop", unit: "", role: "switch", valueType: "boolean" },
+    Mode: {
+      mqttPath: "Mode",
+      unit: "",
+      role: "level",
+      valueType: "number",
+      states: { 0: "Manual", 1: "Auto", 2: "Scheduled" }
+    }
+  }
+};
+const CONTROL_TYPE_CHANNEL_NAMES = {
+  evcharger: {
+    en: "EV Charger",
+    de: "Ladestation",
+    ru: "EV Charger",
+    pt: "Carregador EV",
+    nl: "EV-lader",
+    fr: "Chargeur EV",
+    it: "Caricatore EV",
+    es: "Cargador EV",
+    pl: "\u0141adowarka EV",
+    uk: "\u0417\u0430\u0440\u044F\u0434\u043D\u0430 \u0441\u0442\u0430\u043D\u0446\u0456\u044F",
+    "zh-cn": "\u7535\u52A8\u6C7D\u8F66\u5145\u7535\u5668"
+  }
 };
 const RELEVANT_PATHS = {
   battery: [
@@ -297,9 +361,55 @@ const RELEVANT_PATHS = {
     "SystemState.State",
     "Serial"
   ],
-  temperature: ["Temperature", "Humidity", "Pressure", "ProductName", "CustomName"],
+  temperature: [
+    "Temperature",
+    // Generic Temperature Input (dbus-adc, GX-ADC-Eingänge) - siehe derivePseudoSerial().
+    // Kein Serial-Topic, daher eigener Satz an Feldern zusätzlich zum BME280/Ruuvi-Pfad
+    // unten (Humidity/Pressure), der weiterhin über eine echte Serial läuft.
+    "TemperatureType",
+    "Status",
+    "Offset",
+    "Scale",
+    "RawValue",
+    "RawUnit",
+    "FilterLength",
+    "Mgmt/ProcessVersion",
+    "ProductId",
+    "Humidity",
+    "Pressure",
+    "ProductName",
+    "CustomName"
+  ],
   tank: ["Level", "Remaining", "Capacity", "FluidType", "Status", "ProductName", "CustomName"],
-  meteo: ["Irradiance", "WindSpeed", "WindDirection", "ExternalTemperature", "ProductName", "CustomName"]
+  meteo: ["Irradiance", "WindSpeed", "WindDirection", "ExternalTemperature", "ProductName", "CustomName"],
+  // EV Charger (com.victronenergy.evcharger) - deckt alle 27 im Catalog beobachteten Topics ab
+  // (Anhang EVCHARGER_AND_TEMP_PLAN.md). Serial/Connected/DeviceInstance/Mgmt.Connection/
+  // Mgmt.ProcessName laufen wie bei allen anderen Typen über REGISTRATION_PATHS, nicht über
+  // diese Liste. SetCurrent/StartStop bleiben hier als reine read-only Datentopic-Spiegel -
+  // die schreibbaren control.evcharger.*-Aliase kommen in S4.
+  evcharger: [
+    "Ac/Energy/Forward",
+    "Ac/L1/Power",
+    "Ac/L2/Power",
+    "Ac/L3/Power",
+    "Ac/Power",
+    "Ac/Voltage",
+    "ChargingTime",
+    "Current",
+    "FirmwareVersion",
+    "HardwareVersion",
+    "MCU/Temperature",
+    "MaxCurrent",
+    "Mode",
+    "ProductId",
+    "SetCurrent",
+    "StartStop",
+    "Status",
+    "UpdateIndex",
+    "Mgmt/ProcessVersion",
+    "ProductName",
+    "CustomName"
+  ]
 };
 const RELEVANT_PATHS_SET = Object.fromEntries(
   Object.entries(RELEVANT_PATHS).map(([k, v]) => [k, new Set(v.map((p) => p.replace(/\//g, ".")))])
@@ -320,6 +430,12 @@ const REGISTRATION_PATHS = /* @__PURE__ */ new Set([
 const NO_SERIAL_TYPES_HANDLE = /* @__PURE__ */ new Set(["system", "platform"]);
 const NO_SERIAL_TYPES_REGISTER = /* @__PURE__ */ new Set(["system", "platform"]);
 const MODBUS_NEEDED_TYPES = /* @__PURE__ */ new Set(["vebus", "battery", "grid", "pvinverter", "solarcharger"]);
+function derivePseudoSerial(type, mgmtProcessName, instance) {
+  if (type === "temperature" && mgmtProcessName === "dbus-adc") {
+    return `adc-${instance}`;
+  }
+  return null;
+}
 const PATH_REMAP = {
   battery: {
     "Dc.0.Temperature": "temperatures.main",
@@ -806,6 +922,57 @@ const STATES_MAP = {
     "alarms.lowVoltage": { 0: "OK", 1: "Warning", 2: "Alarm" },
     "alarms.highVoltage": { 0: "OK", 1: "Warning", 2: "Alarm" },
     "alarms.lowSoc": { 0: "OK", 1: "Warning", 2: "Alarm" }
+  },
+  evcharger: {
+    // Verifiziert gegen github.com/victronenergy/dbus-modbus-client/blob/master/ev_charger.py
+    // (EVC_MODE/EVC_STATUS) - der Plan-Anhang hatte 12-15 falsch zugeordnet (Overvoltage/
+    // Overtemperature vertauscht, "15=Error" nicht belegt). 21-24 sind Übergangszustände beim
+    // Phasenumschalten, die go-eCharger laut dbus-goecharger.py nicht sendet (nur 0/2/3/6),
+    // aber andere Victron-kompatible EVSE-Hardware kann sie liefern.
+    Mode: { 0: "Manual", 1: "Auto", 2: "Scheduled" },
+    Status: {
+      0: "Disconnected",
+      1: "Connected",
+      2: "Charging",
+      3: "Charged",
+      4: "Waiting for sun",
+      5: "Waiting for RFID",
+      6: "Waiting for start",
+      7: "Low SoC",
+      8: "Ground error",
+      9: "Welded contactor",
+      10: "CP shorted",
+      11: "Earth leakage",
+      12: "Undervoltage",
+      13: "Overvoltage",
+      14: "Overtemperature",
+      21: "Start charging",
+      22: "Switch to 3-phase",
+      23: "Switch to 1-phase",
+      24: "Stop charging"
+    },
+    StartStop: { 0: "Stop", 1: "Start" }
+  },
+  temperature: {
+    // Verifiziert gegen github.com/victronenergy/dbus-adc (README) - TemperatureType 3-6
+    // sind dort nicht explizit dokumentiert, aber durchgängig in Victron-GUI-Quellen belegt.
+    TemperatureType: {
+      0: "Battery",
+      1: "Fridge",
+      2: "Generic",
+      3: "Room",
+      4: "Outdoor",
+      5: "Water Heater",
+      6: "Freezer"
+    },
+    // Identisch zum tank.Status-Enum unten - beide laufen über denselben Analog-Input-Treiber.
+    Status: {
+      0: "OK",
+      1: "Disconnected",
+      2: "Short circuit",
+      3: "Reverse polarity",
+      4: "Unknown"
+    }
   },
   tank: {
     FluidType: {
@@ -1752,6 +1919,9 @@ class VictronGx extends utils.Adapter {
       if (!this.channelReady.has(baseId)) {
         if (device) {
           void this.ensureChannel(baseId, device);
+          if (MQTT_CONTROL_FIELDS[deviceType]) {
+            void this.ensureMqttControlChannel(deviceType, instance, device);
+          }
         } else if (baseId === "overview") {
           this.channelReady.add("overview");
           void this.setObjectNotExistsAsync("overview", {
@@ -1898,7 +2068,7 @@ class VictronGx extends utils.Adapter {
    * @returns Der konvertierte storeValue (wird von handleMessage() für die Tank-Liter-Berechnung weiterverwendet)
    */
   writeStateValue(baseId, device, deviceKey, deviceType, normPath, remappedPath, rawValue) {
-    var _a;
+    var _a, _b;
     const outputBoolSub = remappedPath.match(/^outputs\.[^.]+\.(State|Status)$/);
     const isOutputBool = outputBoolSub !== null && SUPPORTS_OUTPUTS.has(deviceType);
     const storeValue = isOutputBool ? rawValue !== 0 : rawValue;
@@ -1927,6 +2097,34 @@ class VictronGx extends utils.Adapter {
     if (deviceType === "tank" && (remappedPath === "Capacity" || remappedPath === "Remaining")) {
       commonBase.unit = "m\xB3";
     }
+    if (deviceType === "temperature" && remappedPath === "Status") {
+      commonBase.role = "indicator.status";
+    }
+    if (deviceType === "temperature" && (remappedPath === "Offset" || remappedPath === "Scale" || remappedPath === "FilterLength")) {
+      commonBase.role = "level";
+    }
+    if (deviceType === "temperature" && remappedPath === "Offset") {
+      commonBase.unit = "\xB0C";
+    }
+    if (deviceType === "temperature" && remappedPath === "RawValue") {
+      commonBase.role = "value.voltage";
+      commonBase.unit = "V";
+    }
+    if (deviceType === "temperature" && remappedPath === "RawUnit") {
+      commonBase.role = "text";
+    }
+    if (remappedPath === "Mgmt.ProcessVersion") {
+      commonBase.role = "text";
+    }
+    if (deviceType === "evcharger" && remappedPath === "Status") {
+      commonBase.role = "indicator.status";
+    }
+    if (deviceType === "evcharger" && remappedPath === "MaxCurrent") {
+      commonBase.role = "level.current";
+    }
+    if (deviceType === "evcharger" && remappedPath === "FirmwareVersion") {
+      commonBase.role = "text";
+    }
     if (!this.createdStates.has(stateId)) {
       this.createdStates.add(stateId);
       if (device && deviceKey) {
@@ -1950,6 +2148,27 @@ class VictronGx extends utils.Adapter {
     }
     if (typeof storeValue === "number" && stateId.startsWith("overview.")) {
       this.powerValueCache.set(stateId, storeValue);
+    }
+    if (device) {
+      const controlField = (_b = MQTT_CONTROL_FIELDS[deviceType]) == null ? void 0 : _b[remappedPath];
+      if (controlField) {
+        const controlChannelKey = `control.${deviceType}.${device.instance}`;
+        if (this.channelReady.has(controlChannelKey)) {
+          const controlVal = controlField.valueType === "boolean" ? storeValue !== 0 : storeValue;
+          void this.setState(`${controlChannelKey}.${remappedPath}`, {
+            val: controlVal,
+            ack: true
+          });
+        }
+      }
+      if (deviceType === "evcharger" && remappedPath === "MaxCurrent" && typeof storeValue === "number") {
+        const controlChannelKey = `control.evcharger.${device.instance}`;
+        if (this.channelReady.has(controlChannelKey)) {
+          void this.extendObjectAsync(`${controlChannelKey}.SetCurrent`, {
+            common: { max: storeValue }
+          });
+        }
+      }
     }
     return storeValue;
   }
@@ -2214,6 +2433,71 @@ class VictronGx extends utils.Adapter {
     }
     return device;
   }
+  /**
+   * Setzt Serial + ready=true auf dem Gerät und stößt die üblichen Begleiteffekte an (Logging,
+   * S15-pendingCommitLog-Nachholung, Löschen des alten instance-basierten Kanals). Gemeinsam
+   * genutzt vom regulären case 'Serial' (echte Victron-Serial) und von derivePseudoSerial()
+   * (synthetische Serial für dbus-adc, siehe dort) - beide Wege müssen device.ready identisch
+   * scharfschalten, sonst entstehen zwei unterschiedlich robuste Ready-Pfade.
+   *
+   * @param device Geräte-Metadaten
+   * @param deviceKey Interner Schlüssel "<type>/<instance>"
+   * @param type Victron-Gerätetyp
+   * @param instance Geräte-Instanznummer aus dem MQTT-Topic
+   * @param rawSerial Serial (echt oder synthetisch), wird ioBroker-Objekt-ID-safe bereinigt
+   */
+  commitSerial(device, deviceKey, type, instance, rawSerial) {
+    const safeSerial = rawSerial.replace(/[^a-zA-Z0-9_-]/g, "_");
+    device.serial = safeSerial;
+    device.ready = true;
+    this.serialMap.set(deviceKey, safeSerial);
+    const k = `serial:${deviceKey}`;
+    if (!this.loggedDevices.has(k)) {
+      this.loggedDevices.add(k);
+      this.log.info(`Device detected: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 serial: ${safeSerial}`);
+    }
+    if (device.pendingCommitLog) {
+      device.pendingCommitLog = false;
+      this.log.info(
+        `Device committed: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 serial: ${safeSerial} group=${device.group || "(none)"}`
+      );
+    }
+    const oldId = `devices.${type}.${instance}`;
+    const newId = `devices.${type}.${safeSerial}`;
+    const deleteKey = `deleted:${oldId}`;
+    if (type !== "system" && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
+      this.loggedDevices.add(deleteKey);
+      void this.delObjectAsync(oldId, { recursive: true }).then(() => this.log.debug(`Old channel deleted: ${oldId}`)).catch(() => {
+      });
+    }
+  }
+  /**
+   * Legt bei Bedarf einen einfachen, nicht-schreibbaren Info-State an (Muster wie die
+   * bestehenden Position/NrOfPhases-Handler in updateDeviceMeta()) - genutzt von
+   * Mgmt.Connection/Mgmt.ProcessName (siehe MGMT_STATE_TYPES).
+   *
+   * @param baseId Basis-Objekt-ID des Geräts (z.B. "devices.temperature.adc-20")
+   * @param subPath State-Unterpfad relativ zu baseId (z.B. "mgmt.connection")
+   * @param name Übersetzter State-Name (alle 11 Sprachen)
+   * @param type ioBroker common.type des States
+   * @param role ioBroker common.role des States
+   * @param value Zu schreibender Wert
+   */
+  ensureRegistrationState(baseId, subPath, name, type, role, value) {
+    const stateId = `${baseId}.${subPath}`;
+    if (!this.createdStates.has(stateId)) {
+      void this.setObjectNotExistsAsync(stateId, {
+        type: "state",
+        common: { name, type, role, read: true, write: false },
+        native: {}
+      }).then(() => {
+        this.createdStates.add(stateId);
+        void this.setState(stateId, { val: value, ack: true });
+      });
+    } else {
+      void this.setState(stateId, { val: value, ack: true });
+    }
+  }
   // ── Metadaten sammeln ────────────────────────────────────────────────────
   updateDeviceMeta(type, instance, field, value) {
     const deviceKey = `${type}/${instance}`;
@@ -2221,29 +2505,7 @@ class VictronGx extends utils.Adapter {
     switch (field) {
       case "Serial":
       case "Devices.0.SerialNumber": {
-        const safeSerial = String(value).replace(/[^a-zA-Z0-9_-]/g, "_");
-        device.serial = safeSerial;
-        device.ready = true;
-        this.serialMap.set(deviceKey, safeSerial);
-        const k = `serial:${deviceKey}`;
-        if (!this.loggedDevices.has(k)) {
-          this.loggedDevices.add(k);
-          this.log.info(`Device detected: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 serial: ${value}`);
-        }
-        if (device.pendingCommitLog) {
-          device.pendingCommitLog = false;
-          this.log.info(
-            `Device committed: ${KNOWN_DEVICE_TYPES[type] || type} \u2192 serial: ${safeSerial} group=${device.group || "(none)"}`
-          );
-        }
-        const oldId = `devices.${type}.${instance}`;
-        const newId = `devices.${type}.${safeSerial}`;
-        const deleteKey = `deleted:${oldId}`;
-        if (type !== "system" && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
-          this.loggedDevices.add(deleteKey);
-          void this.delObjectAsync(oldId, { recursive: true }).then(() => this.log.debug(`Old channel deleted: ${oldId}`)).catch(() => {
-          });
-        }
+        this.commitSerial(device, deviceKey, type, instance, String(value));
         break;
       }
       case "ProductName": {
@@ -2327,12 +2589,43 @@ class VictronGx extends utils.Adapter {
             this.log.info(`Node-RED device: ${type}/${instance}`);
           }
         }
+        if (MGMT_STATE_TYPES.has(type) && device.ready) {
+          const mgmtBaseId = this.getBaseId(type, instance, device.serial || void 0, device);
+          if (mgmtBaseId) {
+            this.ensureRegistrationState(
+              mgmtBaseId,
+              "mgmt.connection",
+              MGMT_CONNECTION_NAME,
+              "string",
+              "text",
+              value
+            );
+          }
+        }
         break;
-      case "Mgmt.ProcessName":
+      case "Mgmt.ProcessName": {
         if (value === "dbus-victron-virtual") {
           device.virtual = true;
         }
+        const pseudoSerial = derivePseudoSerial(type, value, instance);
+        if (pseudoSerial && !device.serial) {
+          this.commitSerial(device, deviceKey, type, instance, pseudoSerial);
+        }
+        if (MGMT_STATE_TYPES.has(type) && device.ready) {
+          const mgmtBaseId = this.getBaseId(type, instance, device.serial || void 0, device);
+          if (mgmtBaseId) {
+            this.ensureRegistrationState(
+              mgmtBaseId,
+              "mgmt.processName",
+              MGMT_PROCESSNAME_NAME,
+              "string",
+              "text",
+              value
+            );
+          }
+        }
         break;
+      }
       case "Position": {
         if (!device.ready) {
           break;
@@ -2340,6 +2633,7 @@ class VictronGx extends utils.Adapter {
         const baseId = this.getBaseId(type, instance, device.serial || void 0, device);
         if (baseId) {
           const posStateId = `${baseId}.info.position`;
+          const positionStates = type === "evcharger" ? { 0: "AC Output", 1: "AC Input" } : { 0: "AC Output (behind MultiPlus)", 1: "AC Input (Grid)", 2: "AC Input 2" };
           if (!this.createdStates.has(posStateId)) {
             void this.setObjectNotExistsAsync(posStateId, {
               type: "state",
@@ -2359,11 +2653,7 @@ class VictronGx extends utils.Adapter {
                 },
                 type: "number",
                 role: "value",
-                states: {
-                  0: "AC Output (behind MultiPlus)",
-                  1: "AC Input (Grid)",
-                  2: "AC Input 2"
-                },
+                states: positionStates,
                 read: true,
                 write: false
               },
@@ -2702,6 +2992,88 @@ class VictronGx extends utils.Adapter {
     this.channelReady.add(baseId);
     this.log.debug(`Channel created: ${baseId}`);
   }
+  /**
+   * Legt control.<type>.<instance>.* für Typen aus MQTT_CONTROL_FIELDS an (S4) - eigener Kanal,
+   * eigenes Ready-Tracking ("control.<type>.<instance>" statt der Serial-basierten baseId), weil
+   * die Schreib-Topics MQTT-instanzbasiert adressiert werden (W/<vrmId>/<type>/<instance>/...),
+   * nicht serialbasiert wie devices.*. write=false, wenn mqttControlEnabled deaktiviert ist -
+   * States bleiben dann sichtbar, aber read-only (analog zu CONTROL_REGISTERS/controlEnabled).
+   *
+   * @param type Victron-Gerätetyp (Schlüssel in MQTT_CONTROL_FIELDS)
+   * @param instance MQTT-Device-Instance aus dem Topic
+   * @param device Geräte-Metadaten (für den Kanal-Anzeigenamen)
+   */
+  async ensureMqttControlChannel(type, instance, device) {
+    const fields = MQTT_CONTROL_FIELDS[type];
+    if (!fields) {
+      return;
+    }
+    const channelKey = `control.${type}.${instance}`;
+    if (this.channelReady.has(channelKey)) {
+      return;
+    }
+    this.channelReady.add(channelKey);
+    await this.setObjectNotExistsAsync("control", {
+      type: "channel",
+      common: {
+        name: {
+          en: "Control",
+          de: "Steuerung",
+          ru: "Control",
+          pt: "Control",
+          nl: "Control",
+          fr: "Control",
+          it: "Control",
+          es: "Control",
+          pl: "Control",
+          uk: "Control",
+          "zh-cn": "Control"
+        }
+      },
+      native: {}
+    });
+    await this.setObjectNotExistsAsync(`control.${type}`, {
+      type: "channel",
+      common: {
+        name: CONTROL_TYPE_CHANNEL_NAMES[type] || KNOWN_DEVICE_TYPES[type] || type
+      },
+      native: {}
+    });
+    await this.setObjectNotExistsAsync(channelKey, {
+      type: "channel",
+      common: { name: device.customName || device.productName || `${type} ${instance}` },
+      native: {}
+    });
+    for (const [field, def] of Object.entries(fields)) {
+      const commonDef = {
+        name: this.getFriendlyName(def.mqttPath),
+        type: def.valueType,
+        role: def.role,
+        unit: def.unit,
+        read: true,
+        write: this.config.mqttControlEnabled === true
+      };
+      if (def.min !== void 0) {
+        commonDef.min = def.min;
+      }
+      if (def.max !== void 0) {
+        commonDef.max = def.max;
+      }
+      if (def.step !== void 0) {
+        commonDef.step = def.step;
+      }
+      if (def.states) {
+        commonDef.states = def.states;
+      }
+      const controlStateId = `${channelKey}.${field}`;
+      await this.extendObjectAsync(controlStateId, {
+        type: "state",
+        common: commonDef,
+        native: {}
+      });
+      this.createdStates.add(controlStateId);
+    }
+  }
   // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────
   async updateBatteryCellMinMax(baseId) {
     const vals = [];
@@ -2756,7 +3128,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── onStateChange: Schreibzugriffe ───────────────────────────────────────
   onStateChange(id, state) {
-    var _a;
+    var _a, _b;
     if (!state || state.ack) {
       return;
     }
@@ -2764,6 +3136,24 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const parts = id.split(".");
+    if (parts[2] === "control" && MQTT_CONTROL_FIELDS[parts[3]]) {
+      const type = parts[3];
+      const instance = parseInt(parts[4], 10);
+      const field = parts[5];
+      const def = (_a = MQTT_CONTROL_FIELDS[type]) == null ? void 0 : _a[field];
+      if (!def || Number.isNaN(instance)) {
+        return;
+      }
+      if (!this.config.mqttControlEnabled) {
+        this.log.warn("MQTT device control not enabled (mqttControlEnabled)");
+        return;
+      }
+      const writeVal2 = def.valueType === "boolean" ? state.val ? 1 : 0 : state.val;
+      const mqttTopic2 = `W/${this.vrmId}/${type}/${instance}/${def.mqttPath}`;
+      this.log.info(`MQTT write: ${mqttTopic2} = ${writeVal2}`);
+      this.mqttClient.publish(mqttTopic2, JSON.stringify({ value: writeVal2 }));
+      return;
+    }
     if (parts[2] === "control") {
       const dpId = parts.slice(3).join(".");
       if (!this.config.controlEnabled || !this.modbusClient) {
@@ -2795,7 +3185,7 @@ class VictronGx extends utils.Adapter {
     if (!WRITABLE_OUTPUT_REGEX.test(`outputs.${outputKey}.${dpTail.replace(/\//g, ".")}`)) {
       return;
     }
-    const route = (_a = this.outputToInstance.get(serial)) == null ? void 0 : _a.get(outputKey);
+    const route = (_b = this.outputToInstance.get(serial)) == null ? void 0 : _b.get(outputKey);
     if (!route) {
       this.log.warn(`Could not determine MQTT instance for ${id} (serial=${serial}, output=${outputKey})`);
       return;
@@ -4225,6 +4615,242 @@ class VictronGx extends utils.Adapter {
         pl: "Product ID",
         uk: "Product ID",
         "zh-cn": "Product ID"
+      },
+      // temperature (dbus-adc, S2)
+      Status: {
+        en: "Status",
+        de: "Status",
+        ru: "\u0421\u0442\u0430\u0442\u0443\u0441",
+        pt: "Status",
+        nl: "Status",
+        fr: "\xC9tat",
+        it: "Stato",
+        es: "Estado",
+        pl: "Status",
+        uk: "\u0421\u0442\u0430\u0442\u0443\u0441",
+        "zh-cn": "\u72B6\u6001"
+      },
+      TemperatureType: {
+        en: "Sensor type",
+        de: "Sensortyp",
+        ru: "\u0422\u0438\u043F \u0434\u0430\u0442\u0447\u0438\u043A\u0430",
+        pt: "Tipo de sensor",
+        nl: "Sensortype",
+        fr: "Type de capteur",
+        it: "Tipo di sensore",
+        es: "Tipo de sensor",
+        pl: "Typ czujnika",
+        uk: "\u0422\u0438\u043F \u0434\u0430\u0442\u0447\u0438\u043A\u0430",
+        "zh-cn": "\u4F20\u611F\u5668\u7C7B\u578B"
+      },
+      Offset: {
+        en: "Calibration offset",
+        de: "Kalibrierungs-Offset",
+        ru: "\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043E\u0447\u043D\u043E\u0435 \u0441\u043C\u0435\u0449\u0435\u043D\u0438\u0435",
+        pt: "Offset de calibra\xE7\xE3o",
+        nl: "Kalibratie-offset",
+        fr: "D\xE9calage de calibration",
+        it: "Offset di calibrazione",
+        es: "Offset de calibraci\xF3n",
+        pl: "Przesuni\u0119cie kalibracji",
+        uk: "\u041A\u0430\u043B\u0456\u0431\u0440\u0443\u0432\u0430\u043B\u044C\u043D\u0435 \u0437\u043C\u0456\u0449\u0435\u043D\u043D\u044F",
+        "zh-cn": "\u6821\u51C6\u504F\u79FB"
+      },
+      Scale: {
+        en: "Calibration scale",
+        de: "Kalibrierungs-Skalierung",
+        ru: "\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043E\u0447\u043D\u044B\u0439 \u043C\u0430\u0441\u0448\u0442\u0430\u0431",
+        pt: "Escala de calibra\xE7\xE3o",
+        nl: "Kalibratieschaal",
+        fr: "\xC9chelle de calibration",
+        it: "Scala di calibrazione",
+        es: "Escala de calibraci\xF3n",
+        pl: "Skala kalibracji",
+        uk: "\u041A\u0430\u043B\u0456\u0431\u0440\u0443\u0432\u0430\u043B\u044C\u043D\u0438\u0439 \u043C\u0430\u0441\u0448\u0442\u0430\u0431",
+        "zh-cn": "\u6821\u51C6\u6BD4\u4F8B"
+      },
+      RawValue: {
+        en: "Raw sensor value",
+        de: "Roher Sensorwert",
+        ru: "\u041D\u0435\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043D\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0434\u0430\u0442\u0447\u0438\u043A\u0430",
+        pt: "Valor bruto do sensor",
+        nl: "Ruwe sensorwaarde",
+        fr: "Valeur brute du capteur",
+        it: "Valore grezzo del sensore",
+        es: "Valor bruto del sensor",
+        pl: "Surowa warto\u015B\u0107 czujnika",
+        uk: "\u041D\u0435\u043E\u0431\u0440\u043E\u0431\u043B\u0435\u043D\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0434\u0430\u0442\u0447\u0438\u043A\u0430",
+        "zh-cn": "\u4F20\u611F\u5668\u539F\u59CB\u503C"
+      },
+      RawUnit: {
+        en: "Raw value unit",
+        de: "Einheit des Rohwerts",
+        ru: "\u0415\u0434\u0438\u043D\u0438\u0446\u0430 \u043D\u0435\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043D\u043E\u0433\u043E \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F",
+        pt: "Unidade do valor bruto",
+        nl: "Eenheid van ruwe waarde",
+        fr: "Unit\xE9 de la valeur brute",
+        it: "Unit\xE0 del valore grezzo",
+        es: "Unidad del valor bruto",
+        pl: "Jednostka warto\u015Bci surowej",
+        uk: "\u041E\u0434\u0438\u043D\u0438\u0446\u044F \u043D\u0435\u043E\u0431\u0440\u043E\u0431\u043B\u0435\u043D\u043E\u0433\u043E \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F",
+        "zh-cn": "\u539F\u59CB\u503C\u5355\u4F4D"
+      },
+      FilterLength: {
+        en: "Filter length",
+        de: "Filterl\xE4nge",
+        ru: "\u0414\u043B\u0438\u043D\u0430 \u0444\u0438\u043B\u044C\u0442\u0440\u0430",
+        pt: "Comprimento do filtro",
+        nl: "Filterlengte",
+        fr: "Longueur du filtre",
+        it: "Lunghezza del filtro",
+        es: "Longitud del filtro",
+        pl: "D\u0142ugo\u015B\u0107 filtra",
+        uk: "\u0414\u043E\u0432\u0436\u0438\u043D\u0430 \u0444\u0456\u043B\u044C\u0442\u0440\u0430",
+        "zh-cn": "\u6EE4\u6CE2\u957F\u5EA6"
+      },
+      "Mgmt.ProcessVersion": {
+        en: "Driver version",
+        de: "Treiberversion",
+        ru: "\u0412\u0435\u0440\u0441\u0438\u044F \u0434\u0440\u0430\u0439\u0432\u0435\u0440\u0430",
+        pt: "Vers\xE3o do driver",
+        nl: "Driverversie",
+        fr: "Version du pilote",
+        it: "Versione del driver",
+        es: "Versi\xF3n del controlador",
+        pl: "Wersja sterownika",
+        uk: "\u0412\u0435\u0440\u0441\u0456\u044F \u0434\u0440\u0430\u0439\u0432\u0435\u0440\u0430",
+        "zh-cn": "\u9A71\u52A8\u7248\u672C"
+      },
+      // evcharger (S3)
+      "Ac.Voltage": {
+        en: "AC voltage",
+        de: "AC Spannung",
+        ru: "\u041D\u0430\u043F\u0440\u044F\u0436\u0435\u043D\u0438\u0435 AC",
+        pt: "Tens\xE3o AC",
+        nl: "AC-spanning",
+        fr: "Tension AC",
+        it: "Tensione AC",
+        es: "Tensi\xF3n AC",
+        pl: "Napi\u0119cie AC",
+        uk: "\u041D\u0430\u043F\u0440\u0443\u0433\u0430 AC",
+        "zh-cn": "\u4EA4\u6D41\u7535\u538B"
+      },
+      ChargingTime: {
+        en: "Charging time",
+        de: "Ladezeit",
+        ru: "\u0412\u0440\u0435\u043C\u044F \u0437\u0430\u0440\u044F\u0434\u043A\u0438",
+        pt: "Tempo de carregamento",
+        nl: "Laadtijd",
+        fr: "Temps de charge",
+        it: "Tempo di ricarica",
+        es: "Tiempo de carga",
+        pl: "Czas \u0142adowania",
+        uk: "\u0427\u0430\u0441 \u0437\u0430\u0440\u044F\u0434\u0436\u0430\u043D\u043D\u044F",
+        "zh-cn": "\u5145\u7535\u65F6\u95F4"
+      },
+      Current: {
+        en: "Current",
+        de: "Strom",
+        ru: "\u0422\u043E\u043A",
+        pt: "Corrente",
+        nl: "Stroom",
+        fr: "Courant",
+        it: "Corrente",
+        es: "Corriente",
+        pl: "Pr\u0105d",
+        uk: "\u0421\u0442\u0440\u0443\u043C",
+        "zh-cn": "\u7535\u6D41"
+      },
+      FirmwareVersion: {
+        en: "Firmware version",
+        de: "Firmware-Version",
+        ru: "\u0412\u0435\u0440\u0441\u0438\u044F \u043F\u0440\u043E\u0448\u0438\u0432\u043A\u0438",
+        pt: "Vers\xE3o do firmware",
+        nl: "Firmwareversie",
+        fr: "Version du firmware",
+        it: "Versione firmware",
+        es: "Versi\xF3n de firmware",
+        pl: "Wersja oprogramowania",
+        uk: "\u0412\u0435\u0440\u0441\u0456\u044F \u043F\u0440\u043E\u0448\u0438\u0432\u043A\u0438",
+        "zh-cn": "\u56FA\u4EF6\u7248\u672C"
+      },
+      HardwareVersion: {
+        en: "Hardware version",
+        de: "Hardware-Version",
+        ru: "\u0412\u0435\u0440\u0441\u0438\u044F \u043E\u0431\u043E\u0440\u0443\u0434\u043E\u0432\u0430\u043D\u0438\u044F",
+        pt: "Vers\xE3o de hardware",
+        nl: "Hardwareversie",
+        fr: "Version mat\xE9rielle",
+        it: "Versione hardware",
+        es: "Versi\xF3n de hardware",
+        pl: "Wersja sprz\u0119tu",
+        uk: "\u0412\u0435\u0440\u0441\u0456\u044F \u043E\u0431\u043B\u0430\u0434\u043D\u0430\u043D\u043D\u044F",
+        "zh-cn": "\u786C\u4EF6\u7248\u672C"
+      },
+      "MCU.Temperature": {
+        en: "MCU temperature",
+        de: "MCU-Temperatur",
+        ru: "\u0422\u0435\u043C\u043F\u0435\u0440\u0430\u0442\u0443\u0440\u0430 MCU",
+        pt: "Temperatura do MCU",
+        nl: "MCU-temperatuur",
+        fr: "Temp\xE9rature MCU",
+        it: "Temperatura MCU",
+        es: "Temperatura del MCU",
+        pl: "Temperatura MCU",
+        uk: "\u0422\u0435\u043C\u043F\u0435\u0440\u0430\u0442\u0443\u0440\u0430 MCU",
+        "zh-cn": "MCU\u6E29\u5EA6"
+      },
+      MaxCurrent: {
+        en: "Maximum current",
+        de: "Maximaler Strom",
+        ru: "\u041C\u0430\u043A\u0441\u0438\u043C\u0430\u043B\u044C\u043D\u044B\u0439 \u0442\u043E\u043A",
+        pt: "Corrente m\xE1xima",
+        nl: "Maximale stroom",
+        fr: "Courant maximal",
+        it: "Corrente massima",
+        es: "Corriente m\xE1xima",
+        pl: "Maksymalny pr\u0105d",
+        uk: "\u041C\u0430\u043A\u0441\u0438\u043C\u0430\u043B\u044C\u043D\u0438\u0439 \u0441\u0442\u0440\u0443\u043C",
+        "zh-cn": "\u6700\u5927\u7535\u6D41"
+      },
+      SetCurrent: {
+        en: "Charging current setpoint",
+        de: "Ladestrom-Sollwert",
+        ru: "\u0417\u0430\u0434\u0430\u043D\u043D\u044B\u0439 \u0442\u043E\u043A \u0437\u0430\u0440\u044F\u0434\u043A\u0438",
+        pt: "Ponto de ajuste da corrente de carga",
+        nl: "Instelpunt laadstroom",
+        fr: "Consigne de courant de charge",
+        it: "Setpoint corrente di ricarica",
+        es: "Punto de ajuste de corriente de carga",
+        pl: "Zadany pr\u0105d \u0142adowania",
+        uk: "\u0417\u0430\u0434\u0430\u043D\u0438\u0439 \u0441\u0442\u0440\u0443\u043C \u0437\u0430\u0440\u044F\u0434\u0436\u0430\u043D\u043D\u044F",
+        "zh-cn": "\u5145\u7535\u7535\u6D41\u8BBE\u5B9A\u503C"
+      },
+      StartStop: {
+        en: "Charging enabled",
+        de: "Laden freigegeben",
+        ru: "\u0417\u0430\u0440\u044F\u0434\u043A\u0430 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0430",
+        pt: "Carregamento habilitado",
+        nl: "Laden ingeschakeld",
+        fr: "Charge activ\xE9e",
+        it: "Ricarica abilitata",
+        es: "Carga habilitada",
+        pl: "\u0141adowanie w\u0142\u0105czone",
+        uk: "\u0417\u0430\u0440\u044F\u0434\u0436\u0430\u043D\u043D\u044F \u0434\u043E\u0437\u0432\u043E\u043B\u0435\u043D\u043E",
+        "zh-cn": "\u5145\u7535\u5DF2\u542F\u7528"
+      },
+      UpdateIndex: {
+        en: "Update index",
+        de: "Update-Index",
+        ru: "\u0418\u043D\u0434\u0435\u043A\u0441 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F",
+        pt: "\xCDndice de atualiza\xE7\xE3o",
+        nl: "Update-index",
+        fr: "Index de mise \xE0 jour",
+        it: "Indice di aggiornamento",
+        es: "\xCDndice de actualizaci\xF3n",
+        pl: "Indeks aktualizacji",
+        uk: "\u0406\u043D\u0434\u0435\u043A\u0441 \u043E\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u044F",
+        "zh-cn": "\u66F4\u65B0\u7D22\u5F15"
       }
     };
     if (names[path]) {
@@ -4270,7 +4896,7 @@ class VictronGx extends utils.Adapter {
     if (path.includes("Soc")) {
       return "%";
     }
-    if (path.startsWith("temperatures.")) {
+    if (path.startsWith("temperatures.") || path === "Temperature") {
       return "\xB0C";
     }
     if (path.endsWith(".S")) {
@@ -4309,8 +4935,11 @@ class VictronGx extends utils.Adapter {
     if (path === "WindDirection") {
       return "\xB0";
     }
-    if (path === "ExternalTemperature") {
+    if (path === "ExternalTemperature" || path === "MCU.Temperature") {
       return "\xB0C";
+    }
+    if (path === "ChargingTime") {
+      return "s";
     }
     return "";
   }
@@ -4365,6 +4994,12 @@ class VictronGx extends utils.Adapter {
     }
     if (path === "cells.minId" || path === "cells.maxId") {
       return "text";
+    }
+    if (path === "MCU.Temperature") {
+      return "value.temperature";
+    }
+    if (path === "ChargingTime") {
+      return "value.interval";
     }
     return "value";
   }

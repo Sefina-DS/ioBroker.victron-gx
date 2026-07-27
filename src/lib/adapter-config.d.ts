@@ -11,6 +11,7 @@ declare global {
             controlEnabled: boolean;
             modbusPort: number;
             cleanupOrphanedOutputs: boolean;
+            mqttControlEnabled: boolean;
         }
     }
 }

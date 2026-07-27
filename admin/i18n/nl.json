@@ -9,6 +9,8 @@
     "mqttUsername_help": "Leeg laten als er geen auth is geconfigureerd",
     "mqttPassword_label": "MQTT-wachtwoord",
     "controlEnabled_label": "Bediening inschakelen (Modbus TCP)",
+    "mqttControlEnabled_label": "MQTT-apparaatbesturing inschakelen (EV-lader, ...)",
+    "mqttControlEnabled_help": "Hiermee kan de adapter besturingswaarden via MQTT schrijven (bijv. laadstroom, start/stop, modus van de EV-lader). Onafhankelijk van de Modbus-besturing hierboven.",
     "modbusPort_label": "Modbus-poort",
     "modbusHint_text": "⚠️ Vereiste op GX-apparaat: Instellingen → Integraties → Modbus TCP-server → Ingeschakeld & Toegangsniveau → Schrijven toegestaan",
     "cleanupOrphanedOutputs_label": "Verweesde kanalen verwijderen bij opstart",
