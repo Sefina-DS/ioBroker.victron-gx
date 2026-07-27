@@ -3065,11 +3065,13 @@ class VictronGx extends utils.Adapter {
       if (def.states) {
         commonDef.states = def.states;
       }
-      await this.extendObjectAsync(`${channelKey}.${field}`, {
+      const controlStateId = `${channelKey}.${field}`;
+      await this.extendObjectAsync(controlStateId, {
         type: "state",
         common: commonDef,
         native: {}
       });
+      this.createdStates.add(controlStateId);
     }
   }
   // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────

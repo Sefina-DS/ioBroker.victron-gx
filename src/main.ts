@@ -3585,11 +3585,16 @@ class VictronGx extends utils.Adapter {
             if (def.states) {
                 (commonDef as any).states = def.states;
             }
-            await this.extendObjectAsync(`${channelKey}.${field}`, {
+            const controlStateId = `${channelKey}.${field}`;
+            await this.extendObjectAsync(controlStateId, {
                 type: 'state',
                 common: commonDef,
                 native: {},
             });
+            // Konsistent mit jedem anderen State-Erzeugungspfad im Adapter (writeStateValue()/
+            // ensureRegistrationState()) - createdStates ist die zentrale "welche States gibt es
+            // bereits"-Übersicht, u.a. für das S6-Catalog-Replay-Tooling ausgewertet.
+            this.createdStates.add(controlStateId);
         }
     }
 
