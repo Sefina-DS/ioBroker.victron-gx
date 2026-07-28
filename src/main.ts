@@ -1247,6 +1247,13 @@ class VictronGx extends utils.Adapter {
     private cellValueCache: Map<string, number> = new Map();
     private powerValueCache: Map<string, number> = new Map();
     private lastValueCache: Map<string, ioBroker.StateValue> = new Map();
+    // Läuft eine Objekt-Anlage für stateId noch (extendObjectAsync/setObjectNotExistsAsync
+    // unresolved)? Ein zweiter setState()-Kandidat für dieselbe stateId, der eintrifft während die
+    // ERSTE Anlage noch läuft (z.B. Burst-Bursts, in denen mehrere MQTT-Messages im selben Tick
+    // verarbeitet werden), muss auf DASSELBE Promise warten statt sofort zu schreiben - sonst bleibt
+    // die "has no existing object"-Race für den zweiten Aufruf bestehen, obwohl der erste bereits
+    // korrekt wartet (v0.9.3-Fix, siehe writeStateValue()/updateOverviewTotalPower()).
+    private pendingObjectCreation: Map<string, Promise<void>> = new Map();
     private mqttMsgCount: number = 0;
     private topicMap: TopicMap = {};
     private topicCatalog: Record<string, { value: unknown }> = {};
@@ -1287,56 +1294,61 @@ class VictronGx extends utils.Adapter {
 
         void this.setState('info.connection', false, true);
 
-        void this.setObjectNotExistsAsync('info.modbusConnected', {
-            type: 'state',
-            common: {
-                name: {
-                    en: 'Modbus TCP connected',
-                    de: 'Modbus TCP verbunden',
-                    ru: 'Modbus TCP connected',
-                    pt: 'Modbus TCP connected',
-                    nl: 'Modbus TCP connected',
-                    fr: 'Modbus TCP connected',
-                    it: 'Modbus TCP connected',
-                    es: 'Modbus TCP connected',
-                    pl: 'Modbus TCP connected',
-                    uk: 'Modbus TCP connected',
-                    'zh-cn': 'Modbus TCP connected',
+        // setState erst NACH Objekt-Anlage (Promise.all().then()) - siehe writeStateValue()-Fix,
+        // gleiche Race-Klasse (v0.9.3).
+        void Promise.all([
+            this.setObjectNotExistsAsync('info.modbusConnected', {
+                type: 'state',
+                common: {
+                    name: {
+                        en: 'Modbus TCP connected',
+                        de: 'Modbus TCP verbunden',
+                        ru: 'Modbus TCP connected',
+                        pt: 'Modbus TCP connected',
+                        nl: 'Modbus TCP connected',
+                        fr: 'Modbus TCP connected',
+                        it: 'Modbus TCP connected',
+                        es: 'Modbus TCP connected',
+                        pl: 'Modbus TCP connected',
+                        uk: 'Modbus TCP connected',
+                        'zh-cn': 'Modbus TCP connected',
+                    },
+                    type: 'boolean',
+                    role: 'indicator.connected',
+                    read: true,
+                    write: false,
+                    def: false,
                 },
-                type: 'boolean',
-                role: 'indicator.connected',
-                read: true,
-                write: false,
-                def: false,
-            },
-            native: {},
-        });
-        void this.setObjectNotExistsAsync('info.modbusWritable', {
-            type: 'state',
-            common: {
-                name: {
-                    en: 'Modbus write access',
-                    de: 'Modbus Schreibzugriff',
-                    ru: 'Modbus write access',
-                    pt: 'Modbus write access',
-                    nl: 'Modbus write access',
-                    fr: 'Modbus write access',
-                    it: 'Modbus write access',
-                    es: 'Modbus write access',
-                    pl: 'Modbus write access',
-                    uk: 'Modbus write access',
-                    'zh-cn': 'Modbus write access',
+                native: {},
+            }),
+            this.setObjectNotExistsAsync('info.modbusWritable', {
+                type: 'state',
+                common: {
+                    name: {
+                        en: 'Modbus write access',
+                        de: 'Modbus Schreibzugriff',
+                        ru: 'Modbus write access',
+                        pt: 'Modbus write access',
+                        nl: 'Modbus write access',
+                        fr: 'Modbus write access',
+                        it: 'Modbus write access',
+                        es: 'Modbus write access',
+                        pl: 'Modbus write access',
+                        uk: 'Modbus write access',
+                        'zh-cn': 'Modbus write access',
+                    },
+                    type: 'boolean',
+                    role: 'indicator',
+                    read: true,
+                    write: false,
+                    def: false,
                 },
-                type: 'boolean',
-                role: 'indicator',
-                read: true,
-                write: false,
-                def: false,
-            },
-            native: {},
+                native: {},
+            }),
+        ]).then(() => {
+            void this.setState('info.modbusConnected', false, true);
+            void this.setState('info.modbusWritable', false, true);
         });
-        void this.setState('info.modbusConnected', false, true);
-        void this.setState('info.modbusWritable', false, true);
 
         // acload (Shelly 1PM) und system (GX-internes Relais) können ebenfalls schreibbare
         // outputs.<key>.State-Kanäle tragen (siehe SUPPORTS_OUTPUTS/WRITABLE_TYPES) - onStateChange
@@ -1943,6 +1955,11 @@ class VictronGx extends utils.Adapter {
                 common: commonDef,
                 native: {},
             });
+            // Erst JETZT (Objekt existiert nachweislich) für handleSettingsMqttUpdate() freigeben -
+            // dessen MQTT-Settings-Echo lief bisher ungegatet und konnte control.<dpId> per setState
+            // erreichen, bevor die (sequentielle, mehrere Sekunden dauernde) Modbus-Discovery hier
+            // überhaupt bei diesem dpId angekommen war ("has no existing object", v0.9.3-Fix).
+            this.createdStates.add(`control.${dpId}`);
 
             // Initial per Modbus lesen (kein Default schreiben!)
             if (unitId === undefined) {
@@ -2317,7 +2334,13 @@ class VictronGx extends utils.Adapter {
             if (deviceType === 'tank' && typeof storeValue === 'number') {
                 if (remappedPath === 'Capacity') {
                     const literId = `${baseId}.CapacityLiter`;
+                    const writeLiter = (): void => {
+                        void this.setState(literId, { val: Math.round(storeValue * 1000), ack: true });
+                    };
                     if (!this.createdStates.has(literId)) {
+                        this.createdStates.add(literId);
+                        // setState erst NACH Objekt-Anlage (.then()) - siehe writeStateValue()-Fix
+                        // oben, gleiche Race-Klasse.
                         void this.extendObjectAsync(literId, {
                             type: 'state',
                             common: {
@@ -2341,14 +2364,18 @@ class VictronGx extends utils.Adapter {
                                 write: false,
                             },
                             native: {},
-                        });
-                        this.createdStates.add(literId);
+                        }).then(writeLiter);
+                    } else {
+                        writeLiter();
                     }
-                    void this.setState(literId, { val: Math.round(storeValue * 1000), ack: true });
                 }
                 if (remappedPath === 'Remaining') {
                     const literId = `${baseId}.RemainingLiter`;
+                    const writeLiter = (): void => {
+                        void this.setState(literId, { val: Math.round(storeValue * 1000), ack: true });
+                    };
                     if (!this.createdStates.has(literId)) {
+                        this.createdStates.add(literId);
                         void this.extendObjectAsync(literId, {
                             type: 'state',
                             common: {
@@ -2372,10 +2399,10 @@ class VictronGx extends utils.Adapter {
                                 write: false,
                             },
                             native: {},
-                        });
-                        this.createdStates.add(literId);
+                        }).then(writeLiter);
+                    } else {
+                        writeLiter();
                     }
-                    void this.setState(literId, { val: Math.round(storeValue * 1000), ack: true });
                 }
             }
 
@@ -2514,19 +2541,37 @@ class VictronGx extends utils.Adapter {
         if (!this.createdStates.has(stateId)) {
             // Async Setup-Pfad: nur beim ersten Mal
             this.createdStates.add(stateId);
+            this.lastValueCache.set(stateId, storeValue);
             // Topic Map aktualisieren
             if (device && deviceKey) {
                 this.updateTopicMap(deviceKey, normPath, stateId, device);
             }
             void this.ensureIntermediates(stateId);
-            void this.extendObjectAsync(stateId, { type: 'state', common: commonBase, native: {} });
-            void this.setState(stateId, { val: storeValue, ack: true });
+            // setState MUSS auf die Objekt-Anlage warten (.then() statt paralleles void/void) -
+            // sonst kann setState() beim allerersten Wert eines States gewinnen, bevor
+            // extendObjectAsync() das Objekt angelegt hat ("has no existing object"-Warnung,
+            // v0.9.3-Regression-Fix). createdStates wird trotzdem synchron VOR dem await markiert,
+            // damit ein zweiter, synchron nachfolgender Aufruf für denselben stateId (Burst) sofort
+            // in den else-Zweig läuft statt das Objekt doppelt anzulegen - der wartet dann über
+            // pendingObjectCreation auf GENAU diese Anlage statt selbst sofort zu schreiben.
+            const creation = this.extendObjectAsync(stateId, { type: 'state', common: commonBase, native: {} }).then(
+                () => {
+                    this.pendingObjectCreation.delete(stateId);
+                    void this.setState(stateId, { val: storeValue, ack: true });
+                },
+            );
+            this.pendingObjectCreation.set(stateId, creation);
         } else {
             // Bekannter State: nur setState wenn Wert sich geändert hat
             const lastVal = this.lastValueCache.get(stateId);
             if (lastVal !== storeValue) {
                 this.lastValueCache.set(stateId, storeValue);
-                void this.setState(stateId, { val: storeValue, ack: true });
+                const pending = this.pendingObjectCreation.get(stateId);
+                if (pending) {
+                    void pending.then(() => void this.setState(stateId, { val: storeValue, ack: true }));
+                } else {
+                    void this.setState(stateId, { val: storeValue, ack: true });
+                }
             }
         }
         // Zellwerte im RAM cachen für schnelle Min/Max-Berechnung
@@ -2544,15 +2589,19 @@ class VictronGx extends utils.Adapter {
         // MQTT-Control-Alias synchronisieren (S4): SetCurrent/StartStop/Mode kommen 1:1 auch als
         // reine devices.*-Datentopics rein (siehe RELEVANT_PATHS.evcharger) - z.B. wenn der Nutzer
         // die Werte direkt am Ladegerät/in dessen eigener App ändert statt über ioBroker. Nur wenn
-        // der Control-Kanal schon existiert (verhindert verwaiste States vor dem ersten
-        // ensureMqttControlChannel()-Lauf).
+        // der jeweilige Control-State schon TATSÄCHLICH angelegt ist. channelReady.has(channelKey)
+        // reicht dafür nicht - das wird in ensureMqttControlChannel() synchron VOR den awaits auf
+        // die eigentliche Objekt-Anlage gesetzt (siehe dort), war also selbst racy ("has no existing
+        // object", v0.9.3-Fix). createdStates wird dort erst NACH dem jeweiligen extendObjectAsync
+        // gesetzt und ist damit der verlässliche "existiert wirklich"-Marker.
         if (device) {
             const controlField = MQTT_CONTROL_FIELDS[deviceType]?.[remappedPath];
             if (controlField) {
                 const controlChannelKey = `control.${deviceType}.${device.instance}`;
-                if (this.channelReady.has(controlChannelKey)) {
+                const controlStateId = `${controlChannelKey}.${remappedPath}`;
+                if (this.createdStates.has(controlStateId)) {
                     const controlVal = controlField.valueType === 'boolean' ? storeValue !== 0 : storeValue;
-                    void this.setState(`${controlChannelKey}.${remappedPath}`, {
+                    void this.setState(controlStateId, {
                         val: controlVal as ioBroker.StateValue,
                         ack: true,
                     });
@@ -2562,7 +2611,7 @@ class VictronGx extends utils.Adapter {
             // SetCurrent.max wird dynamisch nachgezogen, sobald der Wert bekannt ist (S4).
             if (deviceType === 'evcharger' && remappedPath === 'MaxCurrent' && typeof storeValue === 'number') {
                 const controlChannelKey = `control.evcharger.${device.instance}`;
-                if (this.channelReady.has(controlChannelKey)) {
+                if (this.createdStates.has(`${controlChannelKey}.SetCurrent`)) {
                     void this.extendObjectAsync(`${controlChannelKey}.SetCurrent`, {
                         common: { max: storeValue },
                     });
@@ -2801,8 +2850,17 @@ class VictronGx extends utils.Adapter {
             }
         }
         const stateId = `overview.${entry.target}`;
+        const writeTotal = (): void => {
+            void this.setState(stateId, { val: Math.round(total), ack: true });
+        };
         if (!this.createdStates.has(stateId)) {
-            void this.extendObjectAsync(stateId, {
+            this.createdStates.add(stateId);
+            // setState erst NACH Objekt-Anlage (.then()) - siehe writeStateValue()-Fix, gleiche
+            // Race-Klasse. pendingObjectCreation fängt zusätzlich den Fall ab, dass ein zweiter
+            // Trigger (anderer Source-Pfad, gleiches Ziel) eintrifft, während diese Anlage noch
+            // läuft - mehrere OVERVIEW_TOTAL_POWER-Quellen können im selben Burst dasselbe target
+            // treffen.
+            const creation = this.extendObjectAsync(stateId, {
                 type: 'state',
                 common: {
                     name: this.getFriendlyName(entry.target),
@@ -2813,10 +2871,19 @@ class VictronGx extends utils.Adapter {
                     write: false,
                 },
                 native: {},
+            }).then(() => {
+                this.pendingObjectCreation.delete(stateId);
+                writeTotal();
             });
-            this.createdStates.add(stateId);
+            this.pendingObjectCreation.set(stateId, creation);
+        } else {
+            const pending = this.pendingObjectCreation.get(stateId);
+            if (pending) {
+                void pending.then(writeTotal);
+            } else {
+                writeTotal();
+            }
         }
-        void this.setState(stateId, { val: Math.round(total), ack: true });
     }
 
     // ── Settings MQTT → control.system.* ────────────────────────────────────
@@ -2827,6 +2894,14 @@ class VictronGx extends utils.Adapter {
         }
         const dpId = ESS_MQTT_MAP[normPath];
         if (!dpId) {
+            return;
+        }
+        // control.<dpId> wird von initControlDatapoints() angelegt (sequentielle Modbus-Discovery,
+        // kann mehrere Sekunden dauern) - vor Abschluss verwerfen statt racy setState() auf ein noch
+        // nicht existierendes Objekt ("has no existing object", v0.9.3-Fix). Kein Datenverlust:
+        // initControlDatapoints() schreibt selbst den initialen Wert per Modbus-Read, und der GX
+        // republished Settings-Werte ohnehin bei jeder Änderung/Keepalive erneut.
+        if (!this.createdStates.has(`control.${dpId}`)) {
             return;
         }
         const val = typeof rawValue === 'number' ? rawValue : parseFloat(rawValue);

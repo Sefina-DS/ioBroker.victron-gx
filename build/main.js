@@ -1076,6 +1076,13 @@ class VictronGx extends utils.Adapter {
   cellValueCache = /* @__PURE__ */ new Map();
   powerValueCache = /* @__PURE__ */ new Map();
   lastValueCache = /* @__PURE__ */ new Map();
+  // Läuft eine Objekt-Anlage für stateId noch (extendObjectAsync/setObjectNotExistsAsync
+  // unresolved)? Ein zweiter setState()-Kandidat für dieselbe stateId, der eintrifft während die
+  // ERSTE Anlage noch läuft (z.B. Burst-Bursts, in denen mehrere MQTT-Messages im selben Tick
+  // verarbeitet werden), muss auf DASSELBE Promise warten statt sofort zu schreiben - sonst bleibt
+  // die "has no existing object"-Race für den zweiten Aufruf bestehen, obwohl der erste bereits
+  // korrekt wartet (v0.9.3-Fix, siehe writeStateValue()/updateOverviewTotalPower()).
+  pendingObjectCreation = /* @__PURE__ */ new Map();
   mqttMsgCount = 0;
   topicMap = {};
   topicCatalog = {};
@@ -1112,56 +1119,59 @@ class VictronGx extends utils.Adapter {
   onReady() {
     this.cleanupEnabled = this.config.cleanupOrphanedOutputs === true;
     void this.setState("info.connection", false, true);
-    void this.setObjectNotExistsAsync("info.modbusConnected", {
-      type: "state",
-      common: {
-        name: {
-          en: "Modbus TCP connected",
-          de: "Modbus TCP verbunden",
-          ru: "Modbus TCP connected",
-          pt: "Modbus TCP connected",
-          nl: "Modbus TCP connected",
-          fr: "Modbus TCP connected",
-          it: "Modbus TCP connected",
-          es: "Modbus TCP connected",
-          pl: "Modbus TCP connected",
-          uk: "Modbus TCP connected",
-          "zh-cn": "Modbus TCP connected"
+    void Promise.all([
+      this.setObjectNotExistsAsync("info.modbusConnected", {
+        type: "state",
+        common: {
+          name: {
+            en: "Modbus TCP connected",
+            de: "Modbus TCP verbunden",
+            ru: "Modbus TCP connected",
+            pt: "Modbus TCP connected",
+            nl: "Modbus TCP connected",
+            fr: "Modbus TCP connected",
+            it: "Modbus TCP connected",
+            es: "Modbus TCP connected",
+            pl: "Modbus TCP connected",
+            uk: "Modbus TCP connected",
+            "zh-cn": "Modbus TCP connected"
+          },
+          type: "boolean",
+          role: "indicator.connected",
+          read: true,
+          write: false,
+          def: false
         },
-        type: "boolean",
-        role: "indicator.connected",
-        read: true,
-        write: false,
-        def: false
-      },
-      native: {}
-    });
-    void this.setObjectNotExistsAsync("info.modbusWritable", {
-      type: "state",
-      common: {
-        name: {
-          en: "Modbus write access",
-          de: "Modbus Schreibzugriff",
-          ru: "Modbus write access",
-          pt: "Modbus write access",
-          nl: "Modbus write access",
-          fr: "Modbus write access",
-          it: "Modbus write access",
-          es: "Modbus write access",
-          pl: "Modbus write access",
-          uk: "Modbus write access",
-          "zh-cn": "Modbus write access"
+        native: {}
+      }),
+      this.setObjectNotExistsAsync("info.modbusWritable", {
+        type: "state",
+        common: {
+          name: {
+            en: "Modbus write access",
+            de: "Modbus Schreibzugriff",
+            ru: "Modbus write access",
+            pt: "Modbus write access",
+            nl: "Modbus write access",
+            fr: "Modbus write access",
+            it: "Modbus write access",
+            es: "Modbus write access",
+            pl: "Modbus write access",
+            uk: "Modbus write access",
+            "zh-cn": "Modbus write access"
+          },
+          type: "boolean",
+          role: "indicator",
+          read: true,
+          write: false,
+          def: false
         },
-        type: "boolean",
-        role: "indicator",
-        read: true,
-        write: false,
-        def: false
-      },
-      native: {}
+        native: {}
+      })
+    ]).then(() => {
+      void this.setState("info.modbusConnected", false, true);
+      void this.setState("info.modbusWritable", false, true);
     });
-    void this.setState("info.modbusConnected", false, true);
-    void this.setState("info.modbusWritable", false, true);
     this.subscribeStates("devices.switch.*");
     this.subscribeStates("devices.acload.*");
     this.subscribeStates("devices.system.*");
@@ -1670,6 +1680,7 @@ class VictronGx extends utils.Adapter {
         common: commonDef,
         native: {}
       });
+      this.createdStates.add(`control.${dpId}`);
       if (unitId === void 0) {
         this.log.warn(`control.${dpId}: no unit ID known, skipping Modbus read`);
         continue;
@@ -1979,7 +1990,11 @@ class VictronGx extends utils.Adapter {
       if (deviceType === "tank" && typeof storeValue === "number") {
         if (remappedPath === "Capacity") {
           const literId = `${baseId}.CapacityLiter`;
+          const writeLiter = () => {
+            void this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
+          };
           if (!this.createdStates.has(literId)) {
+            this.createdStates.add(literId);
             void this.extendObjectAsync(literId, {
               type: "state",
               common: {
@@ -2003,14 +2018,18 @@ class VictronGx extends utils.Adapter {
                 write: false
               },
               native: {}
-            });
-            this.createdStates.add(literId);
+            }).then(writeLiter);
+          } else {
+            writeLiter();
           }
-          void this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
         }
         if (remappedPath === "Remaining") {
           const literId = `${baseId}.RemainingLiter`;
+          const writeLiter = () => {
+            void this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
+          };
           if (!this.createdStates.has(literId)) {
+            this.createdStates.add(literId);
             void this.extendObjectAsync(literId, {
               type: "state",
               common: {
@@ -2034,10 +2053,10 @@ class VictronGx extends utils.Adapter {
                 write: false
               },
               native: {}
-            });
-            this.createdStates.add(literId);
+            }).then(writeLiter);
+          } else {
+            writeLiter();
           }
-          void this.setState(literId, { val: Math.round(storeValue * 1e3), ack: true });
         }
       }
       if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath)) {
@@ -2127,17 +2146,28 @@ class VictronGx extends utils.Adapter {
     }
     if (!this.createdStates.has(stateId)) {
       this.createdStates.add(stateId);
+      this.lastValueCache.set(stateId, storeValue);
       if (device && deviceKey) {
         this.updateTopicMap(deviceKey, normPath, stateId, device);
       }
       void this.ensureIntermediates(stateId);
-      void this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} });
-      void this.setState(stateId, { val: storeValue, ack: true });
+      const creation = this.extendObjectAsync(stateId, { type: "state", common: commonBase, native: {} }).then(
+        () => {
+          this.pendingObjectCreation.delete(stateId);
+          void this.setState(stateId, { val: storeValue, ack: true });
+        }
+      );
+      this.pendingObjectCreation.set(stateId, creation);
     } else {
       const lastVal = this.lastValueCache.get(stateId);
       if (lastVal !== storeValue) {
         this.lastValueCache.set(stateId, storeValue);
-        void this.setState(stateId, { val: storeValue, ack: true });
+        const pending = this.pendingObjectCreation.get(stateId);
+        if (pending) {
+          void pending.then(() => void this.setState(stateId, { val: storeValue, ack: true }));
+        } else {
+          void this.setState(stateId, { val: storeValue, ack: true });
+        }
       }
     }
     if (deviceType === "battery" && CELL_PATH_RE.test(remappedPath) && typeof storeValue === "number") {
@@ -2153,9 +2183,10 @@ class VictronGx extends utils.Adapter {
       const controlField = (_b = MQTT_CONTROL_FIELDS[deviceType]) == null ? void 0 : _b[remappedPath];
       if (controlField) {
         const controlChannelKey = `control.${deviceType}.${device.instance}`;
-        if (this.channelReady.has(controlChannelKey)) {
+        const controlStateId = `${controlChannelKey}.${remappedPath}`;
+        if (this.createdStates.has(controlStateId)) {
           const controlVal = controlField.valueType === "boolean" ? storeValue !== 0 : storeValue;
-          void this.setState(`${controlChannelKey}.${remappedPath}`, {
+          void this.setState(controlStateId, {
             val: controlVal,
             ack: true
           });
@@ -2163,7 +2194,7 @@ class VictronGx extends utils.Adapter {
       }
       if (deviceType === "evcharger" && remappedPath === "MaxCurrent" && typeof storeValue === "number") {
         const controlChannelKey = `control.evcharger.${device.instance}`;
-        if (this.channelReady.has(controlChannelKey)) {
+        if (this.createdStates.has(`${controlChannelKey}.SetCurrent`)) {
           void this.extendObjectAsync(`${controlChannelKey}.SetCurrent`, {
             common: { max: storeValue }
           });
@@ -2339,8 +2370,12 @@ class VictronGx extends utils.Adapter {
       }
     }
     const stateId = `overview.${entry.target}`;
+    const writeTotal = () => {
+      void this.setState(stateId, { val: Math.round(total), ack: true });
+    };
     if (!this.createdStates.has(stateId)) {
-      void this.extendObjectAsync(stateId, {
+      this.createdStates.add(stateId);
+      const creation = this.extendObjectAsync(stateId, {
         type: "state",
         common: {
           name: this.getFriendlyName(entry.target),
@@ -2351,10 +2386,19 @@ class VictronGx extends utils.Adapter {
           write: false
         },
         native: {}
+      }).then(() => {
+        this.pendingObjectCreation.delete(stateId);
+        writeTotal();
       });
-      this.createdStates.add(stateId);
+      this.pendingObjectCreation.set(stateId, creation);
+    } else {
+      const pending = this.pendingObjectCreation.get(stateId);
+      if (pending) {
+        void pending.then(writeTotal);
+      } else {
+        writeTotal();
+      }
     }
-    void this.setState(stateId, { val: Math.round(total), ack: true });
   }
   // ── Settings MQTT → control.system.* ────────────────────────────────────
   async handleSettingsMqttUpdate(normPath, parsed) {
@@ -2364,6 +2408,9 @@ class VictronGx extends utils.Adapter {
     }
     const dpId = ESS_MQTT_MAP[normPath];
     if (!dpId) {
+      return;
+    }
+    if (!this.createdStates.has(`control.${dpId}`)) {
       return;
     }
     const val = typeof rawValue === "number" ? rawValue : parseFloat(rawValue);
