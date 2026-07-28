@@ -41,6 +41,19 @@ const objects = new Map(); // id -> object definition
 const states = new Map(); // id -> {val, ack}
 const logs = [];
 const subscribedPatterns = [];
+// v0.9.3-Regression (Problem A): setState() gewann wiederholt gegen die Objekt-Anlage, weil
+// extendObjectAsync()/setObjectNotExistsAsync() im echten Adapter fire-and-forget (ohne await)
+// vor dem setState() für denselben State standen. Ein Mock, dessen Objekt-Anlage synchron
+// resolved, kann diese Race NIE sehen (async-Funktionen ohne eigenes await laufen bis zum ersten
+// return synchron durch, das Objekt steht dann schon, bevor der Aufrufer überhaupt zum nächsten
+// void-Call kommt). Der künstliche Makrotask-Delay hier stellt die reale Objects-DB-Latenz nach
+// (Datei-/IPC-Roundtrip zum js-controller) und macht die Race für unawaited Aufrufer sichtbar -
+// genau wie in der Praxis.
+const DB_LATENCY_MS = 2;
+function dbDelay() {
+    return new Promise(resolve => setTimeout(resolve, DB_LATENCY_MS));
+}
+const missingObjectViolations = []; // setState()-Aufrufe, deren Objekt zu dem Zeitpunkt noch fehlte
 
 class MockAdapter extends EventEmitter {
     constructor(options = {}) {
@@ -56,12 +69,14 @@ class MockAdapter extends EventEmitter {
         };
     }
     async setObjectNotExistsAsync(id, obj) {
+        await dbDelay();
         if (!objects.has(id)) {
             objects.set(id, obj);
         }
         return { id };
     }
     async extendObjectAsync(id, obj) {
+        await dbDelay();
         const existing = objects.get(id) || { type: obj.type, common: {}, native: {} };
         objects.set(id, {
             type: obj.type || existing.type,
@@ -74,6 +89,12 @@ class MockAdapter extends EventEmitter {
         objects.delete(id);
     }
     setState(id, val, ack) {
+        // Reale ioBroker-Semantik: setState() auf ein nicht existierendes Objekt wirft NICHT -
+        // es schreibt den Wert trotzdem und loggt nur die "has no existing object"-Warnung. Deshalb
+        // hier hart mitzählen statt auf eine Exception zu hoffen.
+        if (!objects.has(id)) {
+            missingObjectViolations.push(id);
+        }
         if (val && typeof val === 'object' && 'val' in val) {
             states.set(id, val);
         } else {
@@ -109,6 +130,14 @@ class MockAdapter extends EventEmitter {
     }
 }
 
+// io-package.json instanceObjects (z.B. info.connection) werden von js-controller VOR dem
+// Adapter-Start angelegt, nicht vom Adapter-Code selbst - im Mock nachbilden, sonst wäre der
+// Objekt-existiert-Check für diese States ein Fehlalarm, den es in der Praxis nie gibt.
+const ioPackage = require(path.join(ADAPTER_DIR, 'io-package.json'));
+for (const obj of ioPackage.instanceObjects || []) {
+    objects.set(obj._id, { type: obj.type, common: obj.common || {}, native: obj.native || {} });
+}
+
 const acCorePath = require.resolve('@iobroker/adapter-core', { paths: [ADAPTER_DIR] });
 require.cache[acCorePath] = {
     id: acCorePath,
@@ -140,7 +169,11 @@ try {
     console.error('  Pfad mit --catalog=/pfad/zur/datei.json überschreiben.');
     process.exit(2);
 }
-const topics = Object.keys(catalog).filter(k => k.startsWith('temperature/') || k.startsWith('evcharger/'));
+// Kompletter Catalog, nicht nur temperature/evcharger: Problem A (v0.9.3) betraf praktisch jeden
+// Gerätetyp gleichzeitig (writeStateValue() wird typübergreifend genutzt) - ein Teilausschnitt
+// hätte das nicht zuverlässig gezeigt. settings/* ist für den handleSettingsMqttUpdate()-Check
+// (control.system.*) ausdrücklich mit drin.
+const topics = Object.keys(catalog);
 
 const VRM_ID = 'abc123replay';
 
@@ -164,6 +197,8 @@ for (const shortTopic of topics) {
 }
 
 // Async setObjectNotExistsAsync/extendObjectAsync-Aufrufe abwarten (fire-and-forget im echten Code).
+// Deutlich über DB_LATENCY_MS, damit auch der letzte von tausenden künstlich verzögerten Calls
+// durch ist, bevor ausgewertet wird.
 setTimeout(() => {
     const createdStates = adapter.createdStates || new Set();
     const failures = [];
@@ -208,6 +243,27 @@ setTimeout(() => {
         failures.push('Keine control.evcharger.* States erzeugt - Catalog/Fixture prüfen (Check 2 kann nichts verifizieren)');
     }
 
+    // ── Check 3: setState() darf NIE vor der Objekt-Anlage feuern (Problem A, v0.9.3) ──────
+    console.log('\n=== Check: Objekt existiert VOR jedem setState() ===');
+    if (missingObjectViolations.length === 0) {
+        console.log('  (keine Verstöße - jedes setState() traf auf ein bereits existierendes Objekt)');
+    } else {
+        const byPrefix = new Map();
+        for (const id of missingObjectViolations) {
+            const prefix = id.split('.').slice(0, 2).join('.');
+            byPrefix.set(prefix, (byPrefix.get(prefix) || 0) + 1);
+        }
+        console.log(`  ${missingObjectViolations.length} Verstöße, gruppiert nach Präfix:`);
+        for (const [prefix, count] of [...byPrefix.entries()].sort((a, b) => b[1] - a[1])) {
+            console.log(`    ${prefix}.*: ${count}`);
+        }
+        const sample = [...new Set(missingObjectViolations)].slice(0, 15);
+        console.log(`  Beispiel-IDs: ${JSON.stringify(sample)}`);
+        failures.push(
+            `${missingObjectViolations.length} setState()-Aufrufe trafen auf ein noch nicht existierendes Objekt (${byPrefix.size} betroffene Präfixe) - siehe Liste oben`,
+        );
+    }
+
     console.log('\n=== Fehler-/Warn-Logs während Replay ===');
     const errs = logs.filter(([lvl]) => lvl === 'error' || lvl === 'warn');
     if (errs.length === 0) {
@@ -225,4 +281,4 @@ setTimeout(() => {
     } else {
         console.log('\n✅ Alle Checks OK.');
     }
-}, 200);
+}, 800);
