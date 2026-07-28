@@ -240,6 +240,9 @@ If you move a channel to a different group, disable a Shelly channel, or delete 
 
 ## Changelog
 
+### 0.9.3 (2026-07-28)
+- Fixed race condition during initial object creation that caused 'no existing object' warnings after fresh installs affecting all device types.
+
 ### 0.9.2 (2026-07-28)
 - Fix: control.evcharger states became writable but stateChange events were never delivered (subscribe only reacted to controlEnabled, not mqttControlEnabled)
 
