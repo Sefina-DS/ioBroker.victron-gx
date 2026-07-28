@@ -1119,7 +1119,7 @@ class VictronGx extends utils.Adapter {
   onReady() {
     this.cleanupEnabled = this.config.cleanupOrphanedOutputs === true;
     void this.setState("info.connection", false, true);
-    void Promise.all([
+    const modbusInfoObjectsReady = Promise.all([
       this.setObjectNotExistsAsync("info.modbusConnected", {
         type: "state",
         common: {
@@ -1230,7 +1230,7 @@ class VictronGx extends utils.Adapter {
     if (this.config.controlEnabled) {
       const modbusPort = this.config.modbusPort || 502;
       this.log.info(`Control enabled \u2013 connecting Modbus TCP ${host}:${modbusPort}...`);
-      void this.connectModbus(host, modbusPort);
+      void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
     }
   }
   // ── Bereinigung alte Struktur ─────────────────────────────────────────────
@@ -3123,6 +3123,9 @@ class VictronGx extends utils.Adapter {
   }
   // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────
   async updateBatteryCellMinMax(baseId) {
+    if (!this.channelReady.has(baseId)) {
+      return;
+    }
     const vals = [];
     for (let i = 1; i <= 32; i++) {
       const key = `${baseId}.cells.cell${String(i).padStart(2, "0")}`;

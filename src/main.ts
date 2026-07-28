@@ -1295,8 +1295,12 @@ class VictronGx extends utils.Adapter {
         void this.setState('info.connection', false, true);
 
         // setState erst NACH Objekt-Anlage (Promise.all().then()) - siehe writeStateValue()-Fix,
-        // gleiche Race-Klasse (v0.9.3).
-        void Promise.all([
+        // gleiche Race-Klasse (v0.9.3). modbusInfoObjectsReady wird unten auch verwendet, um
+        // connectModbus() erst NACH dieser Anlage zu starten - dessen eigene setState()-Aufrufe
+        // (bei Erfolg sofort nach dem TCP-Connect, der auf einem lokalen Netz oft <50ms dauert)
+        // konnten sonst schneller sein als diese Objekt-Anlage auf einer echten (langsameren)
+        // Objects-DB.
+        const modbusInfoObjectsReady = Promise.all([
             this.setObjectNotExistsAsync('info.modbusConnected', {
                 type: 'state',
                 common: {
@@ -1424,7 +1428,7 @@ class VictronGx extends utils.Adapter {
         if (this.config.controlEnabled) {
             const modbusPort = this.config.modbusPort || 502;
             this.log.info(`Control enabled – connecting Modbus TCP ${host}:${modbusPort}...`);
-            void this.connectModbus(host, modbusPort);
+            void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
         }
     }
 
@@ -3680,6 +3684,15 @@ class VictronGx extends utils.Adapter {
 
     // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────
     private async updateBatteryCellMinMax(baseId: string): Promise<void> {
+        // ensureChannel() legt .cells.min/.cells.max erst gegen Ende seiner sequentiellen
+        // Objekt-Anlage an, setzt channelReady aber erst danach (siehe dort). Ein Batteriepack
+        // feuert bis zu 32 Zellspannungs-Messages im selben Burst, jede triggert diese Funktion -
+        // ohne dieses Gate gewinnt setState() auf einer realen (langsamen) Objects-DB reihenweise
+        // gegen die noch laufende Objekt-Anlage ("has no existing object", v0.9.3-Fix). Verwerfen
+        // statt warten: der nächste Zellwert im selben Burst triggert ohnehin sofort erneut.
+        if (!this.channelReady.has(baseId)) {
+            return;
+        }
         // Zellwerte aus RAM-Cache lesen statt 32x getStateAsync
         const vals: number[] = [];
         for (let i = 1; i <= 32; i++) {
