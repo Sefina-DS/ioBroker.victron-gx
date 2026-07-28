@@ -240,6 +240,9 @@ If you move a channel to a different group, disable a Shelly channel, or delete 
 
 ## Changelog
 
+### 0.9.2 (2026-07-28)
+- Fix: control.evcharger states became writable but stateChange events were never delivered (subscribe only reacted to controlEnabled, not mqttControlEnabled)
+
 ### 0.9.1 (2026-07-27)
 - Added support for EV chargers (read + experimental control) and generic temperature inputs (dbus-adc). Thanks to Samson71 for the catalog. Community testing appreciated.
 
