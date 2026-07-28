@@ -1344,7 +1344,12 @@ class VictronGx extends utils.Adapter {
         this.subscribeStates('devices.switch.*');
         this.subscribeStates('devices.acload.*');
         this.subscribeStates('devices.system.*');
-        if (this.config.controlEnabled) {
+        // control.* deckt sowohl die Modbus-Register (controlEnabled, z.B. control.inverter.*) als
+        // auch die MQTT-Direktschreibung (mqttControlEnabled, z.B. control.evcharger.*) ab - beide
+        // Flags sind unabhängig voneinander schaltbar, daher muss der Subscribe bei JEDEM der beiden
+        // greifen, sonst kommen stateChange-Events für den jeweils anderen Zweig nie an (Bug: MQTT-
+        // Control-States waren schreibbar, aber subscribeStates lief nur an controlEnabled).
+        if (this.config.controlEnabled || this.config.mqttControlEnabled) {
             this.subscribeStates('control.*');
         }
 

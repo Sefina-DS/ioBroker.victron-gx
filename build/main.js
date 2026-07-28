@@ -1165,7 +1165,7 @@ class VictronGx extends utils.Adapter {
     this.subscribeStates("devices.switch.*");
     this.subscribeStates("devices.acload.*");
     this.subscribeStates("devices.system.*");
-    if (this.config.controlEnabled) {
+    if (this.config.controlEnabled || this.config.mqttControlEnabled) {
       this.subscribeStates("control.*");
     }
     this.armCleanupTimer();
