@@ -173,6 +173,25 @@ try {
 // Gerätetyp gleichzeitig (writeStateValue() wird typübergreifend genutzt) - ein Teilausschnitt
 // hätte das nicht zuverlässig gezeigt. settings/* ist für den handleSettingsMqttUpdate()-Check
 // (control.system.*) ausdrücklich mit drin.
+//
+// Synthetische Zellspannungs-Topics (battery/<instance>/Voltages/CellN): Samson71s Catalog hat
+// KEINE einzelnen Zellspannungen (0 "Voltages/Cell*"-Topics), obwohl updateBatteryCellMinMax()
+// genau darüber getriggert wird - dieser Pfad blieb dadurch komplett ungetestet und genau dort
+// zeigte der reale Deploy-Regressionscheck auf Davids Hardware noch 24 Verstöße (cells.min), die
+// dieser Test bis dahin nicht sah (v0.9.3-Nachfix). Für jede battery/<instance> im Catalog 8
+// Zellen synthetisch injizieren, damit updateBatteryCellMinMax() im Burst mehrfach re-entrant
+// aufgerufen wird, wie es ein reales Batteriepack tut.
+const batteryInstances = new Set(
+    Object.keys(catalog)
+        .filter(k => k.startsWith('battery/'))
+        .map(k => k.split('/')[1]),
+);
+for (const instance of batteryInstances) {
+    for (let cell = 1; cell <= 8; cell++) {
+        catalog[`battery/${instance}/Voltages/Cell${cell}`] = { value: 3.3 + cell * 0.001 };
+    }
+}
+
 const topics = Object.keys(catalog);
 
 const VRM_ID = 'abc123replay';
