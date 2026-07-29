@@ -228,17 +228,41 @@ setTimeout(() => {
     const ctrlStates = [...createdStates].filter(id => id.startsWith('control.evcharger.')).sort();
     for (const id of ctrlStates) console.log(`  ${id}`);
 
-    // ── Check 1: common.write muss mqttControlEnabled widerspiegeln ──────────
-    console.log('\n=== Check: common.write auf control.evcharger.* ===');
+    // ── Check 1 (v0.9.4): kein doppeltes Gating mehr - control.evcharger.* wird NUR noch angelegt,
+    // wenn mqttControlEnabled=true, dafür ist common.write dann immer true (keine read-only-Objekte
+    // mehr, die still ignorierte Schreibversuche provozieren, siehe Samson71-Fall). Ersetzt die alte
+    // "write muss mqttControlEnabled widerspiegeln"-Prüfung durch zwei schärfere Invarianten:
+    console.log('\n=== Check 1a: common.write ist auf jedem existierenden control.evcharger.* immer true ===');
     for (const id of ctrlStates) {
         const obj = objects.get(id);
         const write = obj && obj.common && obj.common.write;
-        const expected = config.mqttControlEnabled === true;
-        const ok = write === expected;
-        console.log(`  ${id}: write=${write} (erwartet ${expected}) ${ok ? 'OK' : 'FAIL'}`);
+        const ok = write === true;
+        console.log(`  ${id}: write=${write} ${ok ? 'OK' : 'FAIL'}`);
         if (!ok) {
-            failures.push(`common.write für ${id} ist ${write}, erwartet ${expected} (mqttControlEnabled=${config.mqttControlEnabled})`);
+            failures.push(`common.write für ${id} ist ${write}, erwartet true (Objekt existiert nur noch, wenn mqttControlEnabled=true)`);
         }
+    }
+
+    console.log('\n=== Check 1b: mqttControlEnabled=false → KEINE control.evcharger.*-Objekte im Store ===');
+    if (config.mqttControlEnabled === false && ctrlStates.length > 0) {
+        console.log(`  FAIL: ${ctrlStates.length} control.evcharger.*-State(s) trotz mqttControlEnabled=false erzeugt: ${JSON.stringify(ctrlStates)}`);
+        failures.push(`mqttControlEnabled=false, aber ${ctrlStates.length} control.evcharger.*-Objekt(e) im Store (${ctrlStates.join(', ')})`);
+    } else {
+        console.log(`  OK (mqttControlEnabled=${config.mqttControlEnabled}, ${ctrlStates.length} control.evcharger.*-State(s))`);
+    }
+
+    // Symmetrischer Guard für die Modbus-Seite (control.system.*/control.inverter.*) - in diesem
+    // Harness wird connectModbus() zwar nie erreicht (kein host konfiguriert, siehe oben), aber der
+    // Check dokumentiert die Invariante und greift automatisch, sollte sich das künftig ändern.
+    console.log('\n=== Check 1c: controlEnabled=false → KEINE control.system.*/control.inverter.*-Objekte im Store ===');
+    const modbusCtrlStates = [...createdStates].filter(
+        id => id.startsWith('control.system.') || id.startsWith('control.inverter.'),
+    );
+    if (config.controlEnabled === false && modbusCtrlStates.length > 0) {
+        console.log(`  FAIL: ${modbusCtrlStates.length} control.system./control.inverter.-State(s) trotz controlEnabled=false erzeugt: ${JSON.stringify(modbusCtrlStates)}`);
+        failures.push(`controlEnabled=false, aber ${modbusCtrlStates.length} control.system./control.inverter.-Objekt(e) im Store (${modbusCtrlStates.join(', ')})`);
+    } else {
+        console.log(`  OK (controlEnabled=${config.controlEnabled}, ${modbusCtrlStates.length} control.system./control.inverter.-State(s))`);
     }
 
     // ── Check 2: subscribeStates muss control.evcharger.* abdecken, wenn irgendein
@@ -258,7 +282,11 @@ setTimeout(() => {
             failures.push(`${id} wird von keinem subscribeStates()-Pattern abgedeckt, obwohl controlEnabled=${config.controlEnabled} mqttControlEnabled=${config.mqttControlEnabled}`);
         }
     }
-    if (shouldBeSubscribed && ctrlStates.length === 0) {
+    // v0.9.4: control.evcharger.*-Objekte entstehen NUR NOCH bei mqttControlEnabled=true (nicht
+    // mehr bei jedem aktiven Control-Flag) - der Leerlauf-Fallback muss deshalb an mqttControlEnabled
+    // hängen, nicht an shouldBeSubscribed (sonst FAIL bei controlEnabled=true+mqttControlEnabled=false,
+    // wo 0 evcharger-States der korrekte, gewollte Zustand sind).
+    if (config.mqttControlEnabled === true && ctrlStates.length === 0) {
         failures.push('Keine control.evcharger.* States erzeugt - Catalog/Fixture prüfen (Check 2 kann nichts verifizieren)');
     }
 

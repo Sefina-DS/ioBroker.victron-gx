@@ -1376,6 +1376,10 @@ class VictronGx extends utils.Adapter {
         void this.cleanupNumericChannels();
         // Alte ess.* Struktur bereinigen
         void this.cleanupLegacyChannels();
+        // control.* bei deaktiviertem Schalter abräumen - MUSS abgeschlossen sein, bevor unten
+        // connectMqtt()/connectModbus() starten (einzige Auslöser für ensureMqttControlChannel()
+        // bzw. initControlDatapoints()), siehe Kommentar an cleanupControlDatapoints() für den Grund.
+        const controlCleanupReady = this.cleanupControlDatapoints();
 
         // Zwischenobjekte für Checker anlegen
         void this.setObjectNotExistsAsync('devices', {
@@ -1424,11 +1428,20 @@ class VictronGx extends utils.Adapter {
             return;
         }
         this.log.info(`Connecting to Victron GX at ${host}:${port}...`);
-        this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
+        // connectMqtt() erst NACH controlCleanupReady starten - der erste MQTT-Gerätewert kann
+        // sofort ensureMqttControlChannel() triggern, das darf dem Cleanup-Sweep oben nicht
+        // zuvorkommen (siehe cleanupControlDatapoints()-Kommentar).
+        void controlCleanupReady.then(() => {
+            this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
+        });
         if (this.config.controlEnabled) {
             const modbusPort = this.config.modbusPort || 502;
             this.log.info(`Control enabled – connecting Modbus TCP ${host}:${modbusPort}...`);
-            void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
+            // Gleicher Grund wie oben bei connectMqtt(): initControlDatapoints() (aufgerufen aus
+            // connectModbus() → discoverModbusUnits()) darf erst laufen, wenn der Cleanup-Sweep fertig ist.
+            void Promise.all([modbusInfoObjectsReady, controlCleanupReady]).then(() =>
+                this.connectModbus(host, modbusPort),
+            );
         }
     }
 
@@ -1459,6 +1472,49 @@ class VictronGx extends utils.Adapter {
                     this.log.debug(`Cleaning up numeric channel: ${id}`);
                     await this.delObjectAsync(id, { recursive: true }).catch(() => {});
                 }
+            }
+        } catch {
+            /* ignorieren */
+        }
+    }
+
+    // \u2500\u2500 Bereinigung control.* bei deaktiviertem Schalter (v0.9.4) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // L\u00e4uft bei JEDEM Adapterstart, unabh\u00e4ngig davon ob der jeweilige Schalter gerade erst
+    // umgestellt wurde - deckt damit beide Toggle-Richtungen ab, ohne Zustand \u00fcber Neustarts hinweg
+    // tracken zu m\u00fcssen: an\u2192aus r\u00e4umt auf, aus\u2192an l\u00e4sst den (dann eh nicht existierenden) Zweig in
+    // Ruhe, an\u2192an/aus\u2192aus sind No-Ops.
+    //
+    // WICHTIG - Aufreihenfolge: muss abgeschlossen sein, BEVOR initControlDatapoints() bzw.
+    // ensureMqttControlChannel() beginnen k\u00f6nnen, Objekte anzulegen. Ohne diese Reihenfolge k\u00f6nnte
+    // bei an\u2192aus ein Objekt, das der jeweilige Init-Pfad gerade erst (neu) angelegt hat, sofort
+    // danach wieder gel\u00f6scht werden (Toggle w\u00e4re nicht atomar); bei aus\u2192an k\u00f6nnte ein frisch
+    // angelegtes Objekt umgekehrt in ein noch laufendes L\u00f6sch-Fenster dieser Funktion laufen.
+    // onReady() awaitet diese Funktion deshalb, bevor connectMqtt()/connectModbus() gestartet werden
+    // - das sind die einzigen Quellen f\u00fcr initControlDatapoints() (via connectModbus() \u2192
+    // discoverModbusUnits()) bzw. f\u00fcr den ersten MQTT-Ger\u00e4tewert, der ensureMqttControlChannel()
+    // triggert. Siehe onReady() f\u00fcr die konkrete Verkettung.
+    private async cleanupControlDatapoints(): Promise<void> {
+        if (!this.config.controlEnabled) {
+            await this.delObjectAsync('control.inverter', { recursive: true }).catch(() => {});
+            await this.delObjectAsync('control.system', { recursive: true }).catch(() => {});
+        }
+        if (!this.config.mqttControlEnabled) {
+            for (const type of Object.keys(MQTT_CONTROL_FIELDS)) {
+                await this.delObjectAsync(`control.${type}`, { recursive: true }).catch(() => {});
+            }
+        }
+        // Leeren 'control'-Parent-Channel nur entfernen, wenn NACH obigen L\u00f6schungen tats\u00e4chlich
+        // keine Kinder mehr \u00fcbrig sind - NICHT optimistisch aus "beide bekannten Zweige gel\u00f6scht"
+        // schlie\u00dfen: bei z.B. mqttControlEnabled=false + controlEnabled=true bleiben
+        // control.inverter.*/control.system.* als legitime Kinder bestehen, der Parent muss dann
+        // stehen bleiben.
+        try {
+            const remaining = await this.getObjectListAsync({
+                startkey: `${this.namespace}.control.`,
+                endkey: `${this.namespace}.control.\u9999`,
+            });
+            if (remaining.rows.length === 0) {
+                await this.delObjectAsync('control', { recursive: true }).catch(() => {});
             }
         } catch {
             /* ignorieren */
@@ -1932,23 +1988,24 @@ class VictronGx extends utils.Adapter {
             const isInverter = dpId.startsWith('inverter.');
             const unitId = isInverter ? vebusUnitId : 100;
 
-            // Datenpunkt anlegen
+            // Datenpunkt anlegen. initControlDatapoints() läuft ohnehin nur, wenn controlEnabled=true
+            // (Aufrufer-Gate, siehe connectModbus()/discoverModbusUnits()) - kein zusätzliches
+            // Gating hier mehr nötig, write ist damit unconditional reg.write (v0.9.4).
             const commonDef: ioBroker.StateCommon = {
                 name: reg.name,
                 type: 'number',
-                role:
-                    reg.write && this.config.controlEnabled
-                        ? 'level'
-                        : reg.unit === 'W'
-                          ? 'value.power'
-                          : reg.unit === 'A'
-                            ? 'value.current'
-                            : reg.unit === '%'
-                              ? 'value'
-                              : 'value',
+                role: reg.write
+                    ? 'level'
+                    : reg.unit === 'W'
+                      ? 'value.power'
+                      : reg.unit === 'A'
+                        ? 'value.current'
+                        : reg.unit === '%'
+                          ? 'value'
+                          : 'value',
                 unit: reg.unit,
                 read: true,
-                write: reg.write && this.config.controlEnabled,
+                write: reg.write,
             };
             if (reg.states) {
                 (commonDef as any).states = reg.states;
@@ -3598,14 +3655,19 @@ class VictronGx extends utils.Adapter {
      * Legt control.<type>.<instance>.* für Typen aus MQTT_CONTROL_FIELDS an (S4) - eigener Kanal,
      * eigenes Ready-Tracking ("control.<type>.<instance>" statt der Serial-basierten baseId), weil
      * die Schreib-Topics MQTT-instanzbasiert adressiert werden (W/<vrmId>/<type>/<instance>/...),
-     * nicht serialbasiert wie devices.*. write=false, wenn mqttControlEnabled deaktiviert ist -
-     * States bleiben dann sichtbar, aber read-only (analog zu CONTROL_REGISTERS/controlEnabled).
+     * nicht serialbasiert wie devices.*. Ab v0.9.4: legt gar nichts mehr an, wenn
+     * mqttControlEnabled deaktiviert ist (vorher: Objekte immer sichtbar, nur read-only - UX-Falle,
+     * User schreibt und Adapter ignoriert stumm). Bestehende Objekte räumt cleanupControlDatapoints()
+     * beim nächsten Adapterstart weg, siehe dort für die Aufruf-Reihenfolge in onReady().
      *
      * @param type Victron-Gerätetyp (Schlüssel in MQTT_CONTROL_FIELDS)
      * @param instance MQTT-Device-Instance aus dem Topic
      * @param device Geräte-Metadaten (für den Kanal-Anzeigenamen)
      */
     private async ensureMqttControlChannel(type: string, instance: number, device: DeviceInfo): Promise<void> {
+        if (!this.config.mqttControlEnabled) {
+            return;
+        }
         const fields = MQTT_CONTROL_FIELDS[type];
         if (!fields) {
             return;
@@ -3655,7 +3717,9 @@ class VictronGx extends utils.Adapter {
                 role: def.role,
                 unit: def.unit,
                 read: true,
-                write: this.config.mqttControlEnabled === true,
+                // Objekt existiert nur noch, wenn mqttControlEnabled=true (Guard am Funktionsanfang) -
+                // kein doppeltes Gating mehr, write ist damit unconditional true (v0.9.4).
+                write: true,
             };
             if (def.min !== undefined) {
                 (commonDef as any).min = def.min;

@@ -1,7 +1,7 @@
 {
     "common": {
         "name": "victron-gx",
-        "version": "0.9.3",
+        "version": "0.9.4",
         "news": {
             "0.8.8": {
                 "en": "Release 0.8.8",
@@ -84,6 +84,19 @@
             "0.9.3": {
                 "en": "Fixed race condition during initial object creation that caused 'no existing object' warnings after fresh installs affecting all device types.",
                 "de": "Fixed race condition during initial object creation that caused 'no existing object' warnings after fresh installs affecting all device types.",
+                "ru": "Исправления и улучшения",
+                "pt": "Correções e melhorias",
+                "nl": "Fixes en verbeteringen",
+                "fr": "Corrections et améliorations",
+                "it": "Correzioni e miglioramenti",
+                "es": "Correcciones y mejoras",
+                "pl": "Poprawki i usprawnienia",
+                "uk": "Виправлення та покращення",
+                "zh-cn": "修复和改进"
+            },
+            "0.9.4": {
+                "en": "Semantic change: control datapoints (control.system.*, control.inverter.*, control.evcharger.*) are now only created when the matching control switch (controlEnabled / mqttControlEnabled) is active, and are then always writable (no more silently ignored writes). Existing objects are automatically removed when the switch is disabled. If you have scripts targeting control.*, check that the matching switch is enabled in the adapter settings. Note: disabling the switch discards the last known value of the affected control state - relevant for History adapter users (gap in the log).",
+                "de": "Semantik-Umbau: Control-Datenpunkte (control.system.*, control.inverter.*, control.evcharger.*) werden ab jetzt nur noch angelegt, wenn der jeweilige Steuerungs-Schalter (controlEnabled / mqttControlEnabled) aktiv ist, dafür sind sie dann immer beschreibbar (kein stilles Ignorieren von Schreibversuchen mehr). Bestehende Objekte werden bei deaktiviertem Schalter automatisch entfernt. User mit Skripten gegen control.* sollten prüfen, dass der passende Schalter in den Adapter-Einstellungen aktiviert ist. Hinweis: Beim Deaktivieren geht der zuletzt bekannte Wert des jeweiligen control-States verloren - relevant für History-Adapter-Nutzer (Datenlücke im Log).",
                 "ru": "Исправления и улучшения",
                 "pt": "Correções e melhorias",
                 "nl": "Fixes en verbeteringen",
