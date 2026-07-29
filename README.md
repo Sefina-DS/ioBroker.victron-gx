@@ -240,6 +240,9 @@ If you move a channel to a different group, disable a Shelly channel, or delete 
 
 ## Changelog
 
+### 0.9.4 (2026-07-29)
+- Semantic change: control datapoints (control.system.*, control.inverter.*, control.evcharger.*) are now only created when the matching control switch (controlEnabled / mqttControlEnabled) is active, and are then always writable (no more silently ignored writes). Existing objects are automatically removed when the switch is disabled. If you have scripts targeting control.*, check that the matching switch is enabled in the adapter settings. Note: disabling the switch discards the last known value of the affected control state - relevant for History adapter users (gap in the log).
+
 ### 0.9.3 (2026-07-28)
 - Fixed race condition during initial object creation that caused 'no existing object' warnings after fresh installs affecting all device types.
 
