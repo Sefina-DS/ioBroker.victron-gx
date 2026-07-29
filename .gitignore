@@ -20,3 +20,8 @@ admin/i18n/*/flat.txt
 *_Optimierung.md
 *_STATUS.md
 PROJEKTSTAND.md
+
+# Lokale Test-Tools (isolierte victron-gx.1-Testinstanz, siehe DEV-README.md) - bewusst nicht
+# versioniert; scripts/fake-modbus-server.js ist die einzige bewusst getrackte Ausnahme.
+scripts/evcharger-simulator.js
+scripts/local-broker/
