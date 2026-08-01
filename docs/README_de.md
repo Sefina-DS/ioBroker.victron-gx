@@ -18,7 +18,7 @@ Dieser Adapter verbindet ioBroker **direkt und lokal** mit [Victron Energy](http
 Verbindet ioBroker direkt und lokal mit Victron GX Geräten über das lokale MQTT-Protokoll. Unterstützt das Lesen aller Gerätedaten und die vollständige ESS/Wechselrichter-Steuerung via Modbus TCP.
 
 - Alle Geräte-Datenpunkte werden **automatisch erkannt** und als ioBroker States angelegt
-- Steuerung ausschließlich über den `control.*` Kanal via Modbus TCP
+- Schreibbare Datenpunkte liegen direkt unter `devices.*` – `common.write` zeigt an, ob der passende Steuer-Schalter (Modbus / MQTT) gerade aktiv ist
 - Funktioniert mit ein- und dreiphasigen Systemen
 - Automatische Modbus Unit ID Erkennung
 - **Geringer RAM-Verbrauch**: ~130 MB stabil
@@ -56,7 +56,8 @@ Da dieser Adapter noch nicht im offiziellen ioBroker Repository enthalten ist, w
 1. Instanz konfigurieren:
    - **IP-Adresse** des GX-Geräts eintragen
    - MQTT-Port: `1883` (Standard)
-   - Optional: **Steuerung aktivieren** (aktiviert Modbus TCP und `control.*` Datenpunkte)
+   - Optional: **Modbus-Steuerung** (ESS/Wechselrichter-Register werden über Modbus TCP schreibbar)
+   - Optional: **MQTT-Steuerung** (Schalter, EV-Charger, Temperatur-Sollwerte werden über MQTT schreibbar)
 
 > **Hinweis:** Node.js >= 22 ist erforderlich. Falls ioBroker noch mit Node.js 20 läuft, bitte zuerst ein Update durchführen.
 
@@ -69,8 +70,9 @@ Da dieser Adapter noch nicht im offiziellen ioBroker Repository enthalten ist, w
 | IP-Adresse des GX-Geräts | Lokale IP des Cerbo/Venus/Ekrano GX |
 | MQTT-Port | Standard: 1883 |
 | MQTT-Benutzername / Passwort | Nur wenn MQTT-Auth am GX konfiguriert ist |
-| Steuerung aktivieren | Aktiviert Modbus TCP Steuerung |
+| Modbus-Steuerung | Macht ESS/Wechselrichter-Datenpunkte (vebus, system) über Modbus TCP schreibbar |
 | Modbus-Port | Standard: 502 |
+| MQTT-Steuerung | Macht Schalter, EV-Charger und Temperatur-Sollwerte über MQTT schreibbar |
 
 ---
 
@@ -86,6 +88,7 @@ Der Adapter erkennt automatisch alle am GX-Gerät angeschlossenen Geräte:
 | `pvinverter` | PV-Wechselrichter |
 | `acload` | AC-Verbraucher (inkl. Shelly 1PM, mit Schaltausgang) |
 | `switch` | Schaltausgänge (Node-RED Virtual Switches, Shelly Pro3/Pro4/1PM, GX-internes Relais) |
+| `evcharger` | EV-Charger (Lesen + Steuerung) |
 | `temperature` | Temperatursensoren |
 | `meteo` | Wetterstationen |
 | `tank` | Tankfüllstandssensoren |
@@ -97,26 +100,29 @@ Der Adapter erkennt automatisch alle am GX-Gerät angeschlossenen Geräte:
 
 ```
 victron-gx.0
-├── control.*          → Steuerung via Modbus TCP
-├── devices.*          → Alle erkannten Geräte
+├── devices.*          → Alle erkannten Geräte - common.write am einzelnen Datenpunkt zeigt an, ob
+│   │                     er gerade schreibbar ist (siehe "Schreibbare Datenpunkte" unten)
 │   ├── battery.*
-│   ├── vebus.*
+│   ├── vebus.*                      → Mode, Ac.In1.CurrentLimit, Hub4.* schreibbar (Modbus-Steuerung)
 │   ├── grid.*
 │   ├── pvinverter.*
 │   ├── acload.<Group>.<Serial>.
 │   │   ├── Ac.*                     → Messwerte (unverändert)
 │   │   └── outputs.<N>.             → Schaltausgang, falls vorhanden (z.B. Shelly 1PM)
-│   │       ├── State                    bool, schreibbar
+│   │       ├── State                    bool, schreibbar (MQTT-Steuerung)
 │   │       ├── Status                   bool, nur lesend
 │   │       ├── Name / CustomName        string
 │   │       └── Group                    string
 │   ├── switch.<Group>.<Serial>.
 │   │   └── outputs.<N>.             → ein Sub-Kanal pro Ausgang (Node-RED: einer, Shelly Pro3/4: bis zu vier)
 │   │       ├── State / Status / Name / CustomName / Group   (wie oben)
-│   ├── temperature.*
+│   ├── evcharger.<Serial>.          → SetCurrent, StartStop, Mode schreibbar (MQTT-Steuerung)
+│   ├── temperature.<Serial>.        → Offset, Scale, FilterLength schreibbar (MQTT-Steuerung)
 │   ├── meteo.*
 │   ├── tank.*
-│   └── system.*                     → trägt auch outputs.0.* für das GX-interne Relais
+│   └── system.<Serial>.             → GridSetpoint, EssMode, MinimumSoc, ... schreibbar
+│                                       (Modbus-Steuerung); trägt auch outputs.0.* für das
+│                                       GX-interne Relais (MQTT-Steuerung)
 ├── overview.*         → Systemübersicht (aus system/0), nur lesend
 └── info.*             → Verbindungsstatus
 ```
@@ -125,32 +131,82 @@ victron-gx.0
 
 ---
 
-## Steuerung
+## Schreibbare Datenpunkte
 
-### Virtuelle Schalter (Node-RED)
-`State` auf `true`/`false` setzen → MQTT Write → GX → Node-RED → Relais
+Seit **0.10.0** gibt es keinen separaten `control.*`-Baum mehr. Jeder schreibbare Datenpunkt liegt
+direkt unter `devices.*`, genau neben seinen nur-lesbaren Geschwistern – `common.write` am Objekt
+selbst zeigt (auch in Admin-UI/VIS) an, ob er gerade schreibbar ist. Zwei unabhängige Config-Schalter
+steuern das:
 
-### ESS Grid Sollwert (einfachste Methode)
-`control.system.GridSetpoint` [W] schreiben:
+- **Modbus-Steuerung** – ESS/Wechselrichter-Register unter `devices.vebus.*` und `devices.system.*`
+- **MQTT-Steuerung** – Schalter (`devices.switch.*`/`devices.acload.*`/`devices.system.*` Outputs),
+  der EV-Charger und die Temperatursensor-Kalibrierung
+
+Ist ein Schalter aus, existiert der Datenpunkt weiterhin (History/Vis-Bindings und Skripte
+funktionieren also weiter), aber `common.write` ist `false` und Schreibversuche werden mit einer
+Log-Warnung ignoriert – keine still verschluckten Schreibzugriffe mehr auf einen Datenpunkt, der
+schreibbar aussah, es aber nicht war.
+
+### Vorher → Nachher (Update von 0.9.x)
+
+| Alt (control.\*, entfernt in 0.10.0) | Neu (devices.\*) |
+|---|---|
+| `control.inverter.Mode` | `devices.vebus.<Serial>.Mode` |
+| `control.inverter.AcPowerSetpoint` | `devices.vebus.<Serial>.Hub4.L1.AcPowerSetpoint` |
+| `control.inverter.AcIn1CurrentLimit` | `devices.vebus.<Serial>.Ac.In1.CurrentLimit` |
+| `control.inverter.DisableCharge` | `devices.vebus.<Serial>.Hub4.DisableCharge` |
+| `control.inverter.DisableFeedIn` | `devices.vebus.<Serial>.Hub4.DisableFeedIn` |
+| `control.system.GridSetpoint` | `devices.system.<Serial>.GridSetpoint` |
+| `control.system.EssMode` | `devices.system.<Serial>.EssMode` |
+| `control.system.MinimumSoc` | `devices.system.<Serial>.MinimumSoc` |
+| `control.system.BatteryLifeState` | `devices.system.<Serial>.BatteryLifeState` |
+| `control.system.MaxFeedInPower` | `devices.system.<Serial>.MaxFeedInPower` |
+| `control.system.AcFeedInEnabled` | `devices.system.<Serial>.AcFeedInEnabled` |
+| `control.system.DcFeedInEnabled` | `devices.system.<Serial>.DcFeedInEnabled` |
+| `control.system.DvccMaxChargeCurrent` | `devices.system.<Serial>.DvccMaxChargeCurrent` |
+| `control.system.MaxDischargePower` | `devices.system.<Serial>.MaxDischargePower` |
+| `control.evcharger.<Instance>.SetCurrent` | `devices.evcharger.<Serial>.SetCurrent` |
+| `control.evcharger.<Instance>.StartStop` | `devices.evcharger.<Serial>.StartStop` |
+| `control.evcharger.<Instance>.Mode` | `devices.evcharger.<Serial>.Mode` |
+
+**Was zu tun ist:** Skripte, Vis-Widgets oder Blockly-Regeln, die `control.*` direkt referenzieren,
+aktualisieren, und sicherstellen, dass der passende Schalter (Modbus-Steuerung / MQTT-Steuerung) in
+den Instanz-Einstellungen aktiviert ist, falls du auf einen dieser Datenpunkte schreibst. Der
+Adapter benennt den Config-Schlüssel `controlEnabled` beim ersten 0.10.0-Start automatisch in
+`modbusControlEnabled` um (dein Wert bleibt erhalten) – `mqttControlEnabled` ändert sich nicht. Ein
+einmaliger Aufräum-Sweep entfernt evtl. noch vorhandene `control.*`-Objekte, und eine Warnung
+erscheint bei jedem Start in 0.10.x/0.11.x als Erinnerung (entfällt ab 0.12.0).
+
+**Schalter sind jetzt ebenfalls gegated:** `outputs.<N>.State` war bisher bedingungslos schreibbar;
+jetzt ist dafür wie bei allem anderen unter diesem Schalter **MQTT-Steuerung** nötig.
+
+### Beispiele
+
+**ESS Grid Sollwert** (einfachste Methode) – `devices.system.<Serial>.GridSetpoint` [W] schreiben:
 - `0` → Zero Feed-In (Victron ESS-Algorithmus hält Netz bei 0W)
 - `-3000` → 3000W ins Netz einspeisen (Batterie entlädt)
 - `+500` → 500W aus dem Netz beziehen (Batterie lädt)
 
 Kein Keepalive nötig – Wert wird persistent gespeichert.
 
-### ESS Live-Sollwert (direkte Steuerung)
-`control.inverter.AcPowerSetpoint` [W] schreiben:
-- Erfordert `control.system.EssMode = 3` (Externe Steuerung)
+**ESS Live-Sollwert** (direkte Steuerung) – `devices.vebus.<Serial>.Hub4.L1.AcPowerSetpoint` [W] schreiben:
+- Erfordert `devices.system.<Serial>.EssMode = 3` (Externe Steuerung)
 - Der Adapter sendet den Wert alle 800ms erneut solange er ≠ 0 ist (Victron Watchdog)
 - Auf `0` setzen um die Steuerung an den Victron ESS-Algorithmus zurückzugeben
 
-### Laden / Einspeisung deaktivieren
-- `control.inverter.DisableCharge = 1` → Batterie lädt nicht
-- `control.inverter.DisableFeedIn = 1` → Wechselrichter speist nicht ein
+**Laden / Einspeisung deaktivieren:**
+- `devices.vebus.<Serial>.Hub4.DisableCharge = 1` → Batterie lädt nicht
+- `devices.vebus.<Serial>.Hub4.DisableFeedIn = 1` → Wechselrichter speist nicht ein
 
-### DVCC Limits (erfordert aktiviertes DVCC am GX)
-- `control.system.DvccMaxChargeCurrent` [A]: Systemweite Ladestrom-Begrenzung (-1 = deaktiviert)
-- `control.system.MaxDischargePower` [W]: Entladeleistungs-Begrenzung
+**DVCC Limits** (erfordert aktiviertes DVCC am GX):
+- `devices.system.<Serial>.DvccMaxChargeCurrent` [A]: Systemweite Ladestrom-Begrenzung (-1 = deaktiviert)
+- `devices.system.<Serial>.MaxDischargePower` [W]: Entladeleistungs-Begrenzung
+
+**Virtuelle Schalter** (Node-RED) – `outputs.<N>.State` auf `true`/`false` setzen → MQTT Write → GX → Node-RED → Relais
+
+**EV-Charger** – `devices.evcharger.<Serial>.SetCurrent` [A] / `StartStop` [bool] / `Mode` (0=Manuell, 1=Auto, 2=Zeitplan) schreiben
+
+**Temperatursensor-Kalibrierung** – `devices.temperature.<Serial>.Offset` [°C] / `Scale` / `FilterLength` schreiben
 
 ---
 
@@ -173,7 +229,7 @@ Shelly-Geräte, die am GX (Cerbo/Venus/Ekrano) integriert sind, werden jetzt vol
 
 - **Shelly Pro3 / Pro4**: jedes physische Gerät meldet seine Kanäle als separate MQTT-DeviceInstances mit identischer Seriennummer. Der Adapter führt sie automatisch in einem einzigen Objektbaum zusammen (`devices.switch.<Group>.<Serial>.outputs.<0..3>.*`).
 - **Shelly 1PM**: Messwerte (`Ac.*`) und der Schaltausgang (`outputs.0.*`) liegen am selben Geräte-Baum unter `devices.acload.<Group>.<Serial>`.
-- **GX-internes Relais**: das im GX-Gerät eingebaute Relais (`system/0`) ist jetzt schaltbar unter `devices.system.<Serial>.outputs.0.State`, ohne zusätzliche Konfiguration.
+- **GX-internes Relais**: das im GX-Gerät eingebaute Relais (`system/0`) ist schaltbar unter `devices.system.<Serial>.outputs.0.State`, sobald **MQTT-Steuerung** aktiviert ist (siehe [Schreibbare Datenpunkte](#schreibbare-datenpunkte)).
 
 Alle Schaltausgänge – unabhängig vom Gerätetyp – teilen sich dieselbe Unterstruktur, wodurch Wildcard-Selektoren über die gesamte Installation hinweg funktionieren:
 
