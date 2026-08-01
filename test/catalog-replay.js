@@ -419,38 +419,52 @@ async function main() {
         }
     }
 
-    // ── Szenario D: Config-Migrations-Test - controlEnabled ohne modbusControlEnabled ───────
-    console.log('\n########## Szenario D: Config-Migration controlEnabled → modbusControlEnabled ##########');
-    const adapterD = await runScenario({
-        // modbusControlEnabled bewusst NICHT gesetzt (simuliert eine pre-0.10.0 native.json ohne
-        // den neuen Key) - mqttControlEnabled ist unabhängig davon und bleibt unverändert.
-        config: { controlEnabled: true, mqttControlEnabled: false },
-        replay: false,
-    });
-    console.log('\n=== [D] this.config.modbusControlEnabled muss true sein (Wert übernommen) ===');
-    if (adapterD.config.modbusControlEnabled === true) {
-        console.log('  OK');
-    } else {
-        fail(`[D] this.config.modbusControlEnabled=${adapterD.config.modbusControlEnabled}, erwartet true`);
-    }
-    console.log('\n=== [D] native.controlEnabled muss im persistierten Instance-Object entfernt (null) sein ===');
-    const instanceObj = adapterD.objects.get(`system.adapter.${adapterD.namespace}`);
-    const persistedControlEnabled = instanceObj && instanceObj.native && instanceObj.native.controlEnabled;
-    const persistedModbusControlEnabled = instanceObj && instanceObj.native && instanceObj.native.modbusControlEnabled;
-    if (persistedControlEnabled === null && persistedModbusControlEnabled === true) {
-        console.log('  OK (native.controlEnabled=null, native.modbusControlEnabled=true)');
-    } else {
-        fail(
-            `[D] native nach Migration: controlEnabled=${JSON.stringify(persistedControlEnabled)} (erwartet null), modbusControlEnabled=${JSON.stringify(persistedModbusControlEnabled)} (erwartet true)`,
+    // ── Szenario D: Config-Migrations-Test - controlEnabled → modbusControlEnabled ──────────
+    async function runConfigMigrationCheck(label, config) {
+        console.log(`\n########## ${label} ##########`);
+        const adapter = await runScenario({ config, replay: false });
+        console.log(`\n=== [${label}] this.config.modbusControlEnabled muss true sein (Wert übernommen) ===`);
+        if (adapter.config.modbusControlEnabled === true) {
+            console.log('  OK');
+        } else {
+            fail(`[${label}] this.config.modbusControlEnabled=${adapter.config.modbusControlEnabled}, erwartet true`);
+        }
+        console.log(`\n=== [${label}] native.controlEnabled muss im persistierten Instance-Object entfernt (null) sein ===`);
+        const instanceObj = adapter.objects.get(`system.adapter.${adapter.namespace}`);
+        const persistedControlEnabled = instanceObj && instanceObj.native && instanceObj.native.controlEnabled;
+        const persistedModbusControlEnabled = instanceObj && instanceObj.native && instanceObj.native.modbusControlEnabled;
+        if (persistedControlEnabled === null && persistedModbusControlEnabled === true) {
+            console.log('  OK (native.controlEnabled=null, native.modbusControlEnabled=true)');
+        } else {
+            fail(
+                `[${label}] native nach Migration: controlEnabled=${JSON.stringify(persistedControlEnabled)} (erwartet null), modbusControlEnabled=${JSON.stringify(persistedModbusControlEnabled)} (erwartet true)`,
+            );
+        }
+        console.log(`\n=== [${label}] Migrations-Log-Eintrag muss erscheinen ===`);
+        const hasMigrationLog = adapter.logs.some(
+            ([lvl, m]) => lvl === 'info' && typeof m === 'string' && m.includes('Config key controlEnabled renamed to modbusControlEnabled'),
         );
+        console.log(hasMigrationLog ? '  OK' : '  FAIL: Migrations-Log-Eintrag fehlt');
+        if (!hasMigrationLog) fail(`[${label}] Migrations-Log-Eintrag fehlt`);
+        printLogs(adapter, label);
     }
-    console.log('\n=== [D] Migrations-Log-Eintrag muss erscheinen ===');
-    const hasMigrationLog = adapterD.logs.some(
-        ([lvl, m]) => lvl === 'info' && typeof m === 'string' && m.includes('Config key controlEnabled renamed to modbusControlEnabled'),
-    );
-    console.log(hasMigrationLog ? '  OK' : '  FAIL: Migrations-Log-Eintrag fehlt');
-    if (!hasMigrationLog) fail('[D] Migrations-Log-Eintrag fehlt');
-    printLogs(adapterD, 'D');
+    // D1: modbusControlEnabled bewusst NICHT gesetzt (simuliert eine pre-0.10.0 native.json ohne
+    // den neuen Key überhaupt) - mqttControlEnabled ist unabhängig davon und bleibt unverändert.
+    await runConfigMigrationCheck('Szenario D1: controlEnabled ohne modbusControlEnabled', {
+        controlEnabled: true,
+        mqttControlEnabled: false,
+    });
+    // D2 (S8-Live-Test-Fund): modbusControlEnabled ist BEREITS gesetzt (false, der io-package.json-
+    // Schema-Default) - js-controller populiert beim Adapter-Upgrade fehlende native.*-Keys mit dem
+    // Schema-Default, BEVOR der Adapter-Code je läuft. Die erste Migrations-Implementierung prüfte
+    // auf modbusControlEnabled===undefined und griff dadurch bei echten Upgrades NIE - dieser
+    // Sub-Fall reproduziert genau das und muss trotzdem korrekt migrieren (controlEnabled=true
+    // gewinnt gegen den false-Default).
+    await runConfigMigrationCheck('Szenario D2: modbusControlEnabled bereits schema-defaulted (js-controller-Upgrade-Fall)', {
+        controlEnabled: true,
+        modbusControlEnabled: false,
+        mqttControlEnabled: false,
+    });
 
     // ── Gesamtergebnis ────────────────────────────────────────────────────────────────────
     console.log(`\n${'='.repeat(60)}`);
