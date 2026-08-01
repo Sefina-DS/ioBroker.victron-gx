@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "victron-gx",
-    "version": "0.9.4",
+    "version": "0.10.0",
     "news": {
       "0.8.6": {
         "en": "Fix: add Ac.Power to RELEVANT_PATHS for pvinverter, acload and grid devices",
