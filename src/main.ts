@@ -78,60 +78,47 @@ const MGMT_PROCESSNAME_NAME: ioBroker.StringOrTranslated = {
 // (battery/vebus/...) nicht mit neuen, nie angefragten Objekten zu erweitern.
 const MGMT_STATE_TYPES = new Set(['temperature', 'evcharger']);
 
-// ── MQTT-basierte control.<type>.<instance>.* Schreib-Datenpunkte (S4) ──────────────────────
-// Anders als CONTROL_REGISTERS (Modbus, unit-basiert, control.inverter.*/control.system.*) sind
-// das Direktschreibungen auf einzelne, per MQTT-Instance adressierte Victron-Pfade ohne
-// Modbus-Bezug: W/<vrmId>/<type>/<instance>/<mqttPath> mit Payload {"value": ...}. Gate über den
-// eigenen this.config.mqttControlEnabled-Schalter (nicht controlEnabled - der ist explizit als
-// "Modbus TCP" beschriftet und hat mit MQTT-Schreibzugriff nichts zu tun). Kein Keepalive: laut
-// Plan zunächst ohne, da unklar ob der EV-Charger einen braucht (siehe SetCurrent/StartStop im
-// Anhang) - Verifikation ist Teil des User-Tests (S6).
-interface MqttControlField {
-    mqttPath: string; // Victron-Feldname für das Schreib-Topic == Feldname unter devices.<type>.<serial>.*
-    unit: string;
-    role: string;
-    valueType: 'number' | 'boolean';
-    min?: number;
-    max?: number;
-    step?: number;
-    states?: Record<number, string>;
-}
-const MQTT_CONTROL_FIELDS: Record<string, Record<string, MqttControlField>> = {
-    evcharger: {
-        SetCurrent: {
-            mqttPath: 'SetCurrent',
-            unit: 'A',
-            role: 'level.current',
-            valueType: 'number',
-            min: 6,
-            step: 1,
-            // max wird dynamisch aus dem MaxCurrent-Datenpunkt nachgezogen (siehe writeStateValue()).
-        },
-        StartStop: { mqttPath: 'StartStop', unit: '', role: 'switch', valueType: 'boolean' },
-        Mode: {
-            mqttPath: 'Mode',
-            unit: '',
-            role: 'level',
-            valueType: 'number',
-            states: { 0: 'Manual', 1: 'Auto', 2: 'Scheduled' },
-        },
+// ── Whitelist schreibbarer devices.*-Felder (0.10.0 control-merge) ──────────────────────────
+// Ersetzt die vormalige control.<type>.<instance>.*-Struktur (bis 0.9.4, MQTT-Direktschreibung)
+// sowie CONTROL_REGISTERS' separate Modbus-Anlage unter control.inverter.*/control.system.* -
+// beide Zweige laufen jetzt direkt in devices.*, common.write wird abhängig vom passenden
+// Config-Schalter gesetzt ('mqtt' → mqttControlEnabled, 'modbus' → controlEnabled/künftig
+// modbusControlEnabled, siehe S5). Feld-Key = exakter devices.<type>.<serial>.<Feld>-Pfad
+// (Punkt-Notation wie überall im Adapter, '/' im MQTT-Topic wird '.'), NICHT umbenannt gegenüber
+// dem bestehenden MQTT-Feldnamen (S1-Sign-off: kein zusätzlicher Breaking Change für bereits
+// vorhandene Read-Mirrors wie z.B. vebus.Hub4.L1.AcPowerSetpoint). Konsumiert von
+// writeStateValue() (common.write bei Objekt-Anlage) und onStateChange() (Schreib-Dispatch).
+const WRITABLE_DEVICE_FIELDS: Record<string, Record<string, 'mqtt' | 'modbus'>> = {
+    vebus: {
+        Mode: 'modbus',
+        'Ac.In1.CurrentLimit': 'modbus',
+        'Hub4.L1.AcPowerSetpoint': 'modbus',
+        'Hub4.DisableCharge': 'modbus',
+        'Hub4.DisableFeedIn': 'modbus',
     },
-};
-// Anzeigenamen für die control.<type>-Kanäle aus MQTT_CONTROL_FIELDS (S5) - echte Übersetzung
-// statt der wiederholten englischen KNOWN_DEVICE_TYPES-Bezeichnung in allen 11 Sprachen.
-const CONTROL_TYPE_CHANNEL_NAMES: Record<string, ioBroker.StringOrTranslated> = {
+    system: {
+        GridSetpoint: 'modbus',
+        MinimumSoc: 'modbus',
+        EssMode: 'modbus',
+        AcFeedInEnabled: 'modbus',
+        DcFeedInEnabled: 'modbus',
+        MaxFeedInPower: 'modbus',
+        BatteryLifeState: 'modbus',
+        MaxDischargePower: 'modbus',
+        DvccMaxChargeCurrent: 'modbus',
+        // BatteryLifeSocLimit (Reg 2903) / FeedInLimitActive (Reg 2709) bewusst NICHT enthalten -
+        // bleiben read-only (write:false in CONTROL_REGISTERS), S1-Sign-off: keine Hardware-
+        // Verifikation für 0.10.0 verfügbar.
+    },
     evcharger: {
-        en: 'EV Charger',
-        de: 'Ladestation',
-        ru: 'EV Charger',
-        pt: 'Carregador EV',
-        nl: 'EV-lader',
-        fr: 'Chargeur EV',
-        it: 'Caricatore EV',
-        es: 'Cargador EV',
-        pl: 'Ładowarka EV',
-        uk: 'Зарядна станція',
-        'zh-cn': '电动汽车充电器',
+        SetCurrent: 'mqtt',
+        StartStop: 'mqtt',
+        Mode: 'mqtt',
+    },
+    temperature: {
+        Offset: 'mqtt',
+        Scale: 'mqtt',
+        FilterLength: 'mqtt',
     },
 };
 // ── Relevante MQTT-Pfade pro Gerätetyp ──────────────────────────────────────
@@ -614,6 +601,19 @@ interface PendingOutput {
     values: Map<string, unknown>;
     timer: ioBroker.Timeout | null | undefined;
 }
+
+// dpId-Suffix (nach "inverter.") → tatsächlicher devices.vebus.<serial>-Feldname. Die 5 Inverter-
+// Register bilden bereits vorhandene MQTT-Read-Mirror-Felder ab, deren Namen historisch von den
+// CONTROL_REGISTERS-Keys abweichen (S1-Sign-off: bestehende MQTT-Feldnamen NICHT umbenennen).
+// system.*-Felder brauchen keine Übersetzung - deren dpId-Suffix ist bereits der Zielfeldname
+// (kein vorheriges MQTT-Pendant vorhanden, siehe initControlDatapoints()/controlRegisterTarget()).
+const INVERTER_FIELD_NAMES: Record<string, string> = {
+    Mode: 'Mode',
+    AcIn1CurrentLimit: 'Ac.In1.CurrentLimit',
+    AcPowerSetpoint: 'Hub4.L1.AcPowerSetpoint',
+    DisableCharge: 'Hub4.DisableCharge',
+    DisableFeedIn: 'Hub4.DisableFeedIn',
+};
 
 // ── Modbus Register-Mapping ──────────────────────────────────────────────────
 // vebus: Unit ID 238 (com.victronenergy.vebus)
@@ -1360,14 +1360,6 @@ class VictronGx extends utils.Adapter {
         this.subscribeStates('devices.switch.*');
         this.subscribeStates('devices.acload.*');
         this.subscribeStates('devices.system.*');
-        // control.* deckt sowohl die Modbus-Register (controlEnabled, z.B. control.inverter.*) als
-        // auch die MQTT-Direktschreibung (mqttControlEnabled, z.B. control.evcharger.*) ab - beide
-        // Flags sind unabhängig voneinander schaltbar, daher muss der Subscribe bei JEDEM der beiden
-        // greifen, sonst kommen stateChange-Events für den jeweils anderen Zweig nie an (Bug: MQTT-
-        // Control-States waren schreibbar, aber subscribeStates lief nur an controlEnabled).
-        if (this.config.controlEnabled || this.config.mqttControlEnabled) {
-            this.subscribeStates('control.*');
-        }
 
         // Auto-Cleanup initial armen, damit auch bei leerem outputToInstance (Edge-Case: keine
         // Output-Kanäle empfangen) irgendwann gesweept wird - No-Op wenn cleanupEnabled=false (§10.4).
@@ -1376,10 +1368,6 @@ class VictronGx extends utils.Adapter {
         void this.cleanupNumericChannels();
         // Alte ess.* Struktur bereinigen
         void this.cleanupLegacyChannels();
-        // control.* bei deaktiviertem Schalter abräumen - MUSS abgeschlossen sein, bevor unten
-        // connectMqtt()/connectModbus() starten (einzige Auslöser für ensureMqttControlChannel()
-        // bzw. initControlDatapoints()), siehe Kommentar an cleanupControlDatapoints() für den Grund.
-        const controlCleanupReady = this.cleanupControlDatapoints();
 
         // Zwischenobjekte für Checker anlegen
         void this.setObjectNotExistsAsync('devices', {
@@ -1428,20 +1416,11 @@ class VictronGx extends utils.Adapter {
             return;
         }
         this.log.info(`Connecting to Victron GX at ${host}:${port}...`);
-        // connectMqtt() erst NACH controlCleanupReady starten - der erste MQTT-Gerätewert kann
-        // sofort ensureMqttControlChannel() triggern, das darf dem Cleanup-Sweep oben nicht
-        // zuvorkommen (siehe cleanupControlDatapoints()-Kommentar).
-        void controlCleanupReady.then(() => {
-            this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
-        });
+        this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
         if (this.config.controlEnabled) {
             const modbusPort = this.config.modbusPort || 502;
             this.log.info(`Control enabled – connecting Modbus TCP ${host}:${modbusPort}...`);
-            // Gleicher Grund wie oben bei connectMqtt(): initControlDatapoints() (aufgerufen aus
-            // connectModbus() → discoverModbusUnits()) darf erst laufen, wenn der Cleanup-Sweep fertig ist.
-            void Promise.all([modbusInfoObjectsReady, controlCleanupReady]).then(() =>
-                this.connectModbus(host, modbusPort),
-            );
+            void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
         }
     }
 
@@ -1472,49 +1451,6 @@ class VictronGx extends utils.Adapter {
                     this.log.debug(`Cleaning up numeric channel: ${id}`);
                     await this.delObjectAsync(id, { recursive: true }).catch(() => {});
                 }
-            }
-        } catch {
-            /* ignorieren */
-        }
-    }
-
-    // \u2500\u2500 Bereinigung control.* bei deaktiviertem Schalter (v0.9.4) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-    // L\u00e4uft bei JEDEM Adapterstart, unabh\u00e4ngig davon ob der jeweilige Schalter gerade erst
-    // umgestellt wurde - deckt damit beide Toggle-Richtungen ab, ohne Zustand \u00fcber Neustarts hinweg
-    // tracken zu m\u00fcssen: an\u2192aus r\u00e4umt auf, aus\u2192an l\u00e4sst den (dann eh nicht existierenden) Zweig in
-    // Ruhe, an\u2192an/aus\u2192aus sind No-Ops.
-    //
-    // WICHTIG - Aufreihenfolge: muss abgeschlossen sein, BEVOR initControlDatapoints() bzw.
-    // ensureMqttControlChannel() beginnen k\u00f6nnen, Objekte anzulegen. Ohne diese Reihenfolge k\u00f6nnte
-    // bei an\u2192aus ein Objekt, das der jeweilige Init-Pfad gerade erst (neu) angelegt hat, sofort
-    // danach wieder gel\u00f6scht werden (Toggle w\u00e4re nicht atomar); bei aus\u2192an k\u00f6nnte ein frisch
-    // angelegtes Objekt umgekehrt in ein noch laufendes L\u00f6sch-Fenster dieser Funktion laufen.
-    // onReady() awaitet diese Funktion deshalb, bevor connectMqtt()/connectModbus() gestartet werden
-    // - das sind die einzigen Quellen f\u00fcr initControlDatapoints() (via connectModbus() \u2192
-    // discoverModbusUnits()) bzw. f\u00fcr den ersten MQTT-Ger\u00e4tewert, der ensureMqttControlChannel()
-    // triggert. Siehe onReady() f\u00fcr die konkrete Verkettung.
-    private async cleanupControlDatapoints(): Promise<void> {
-        if (!this.config.controlEnabled) {
-            await this.delObjectAsync('control.inverter', { recursive: true }).catch(() => {});
-            await this.delObjectAsync('control.system', { recursive: true }).catch(() => {});
-        }
-        if (!this.config.mqttControlEnabled) {
-            for (const type of Object.keys(MQTT_CONTROL_FIELDS)) {
-                await this.delObjectAsync(`control.${type}`, { recursive: true }).catch(() => {});
-            }
-        }
-        // Leeren 'control'-Parent-Channel nur entfernen, wenn NACH obigen L\u00f6schungen tats\u00e4chlich
-        // keine Kinder mehr \u00fcbrig sind - NICHT optimistisch aus "beide bekannten Zweige gel\u00f6scht"
-        // schlie\u00dfen: bei z.B. mqttControlEnabled=false + controlEnabled=true bleiben
-        // control.inverter.*/control.system.* als legitime Kinder bestehen, der Parent muss dann
-        // stehen bleiben.
-        try {
-            const remaining = await this.getObjectListAsync({
-                startkey: `${this.namespace}.control.`,
-                endkey: `${this.namespace}.control.\u9999`,
-            });
-            if (remaining.rows.length === 0) {
-                await this.delObjectAsync('control', { recursive: true }).catch(() => {});
             }
         } catch {
             /* ignorieren */
@@ -1915,70 +1851,54 @@ class VictronGx extends utils.Adapter {
         }
     }
 
-    // ── control.* Datenpunkte anlegen und initial per Modbus lesen ───────────
+    // ── CONTROL_REGISTERS-dpId → devices.<type>.<serial>-Zielfeld auflösen ───
+    private controlRegisterTarget(dpId: string): { type: 'vebus' | 'system'; field: string } {
+        const isInverter = dpId.startsWith('inverter.');
+        const suffix = dpId.slice(dpId.indexOf('.') + 1);
+        if (isInverter) {
+            return { type: 'vebus', field: INVERTER_FIELD_NAMES[suffix] ?? suffix };
+        }
+        return { type: 'system', field: suffix };
+    }
+
+    // Serial für einen (annahmegemäß singulären) Gerätetyp - vebus/system kommen pro Anlage genau
+    // einmal vor, eine lineare deviceMap-Suche (wie findDeviceForOutput()) ist daher ausreichend.
+    private findSerialForType(type: string): string | undefined {
+        for (const device of this.deviceMap.values()) {
+            if (device.type === type && device.serial) {
+                return device.serial;
+            }
+        }
+        return undefined;
+    }
+
+    private controlRegisterStateId(dpId: string): string | undefined {
+        const target = this.controlRegisterTarget(dpId);
+        const serial = this.findSerialForType(target.type);
+        if (!serial) {
+            return undefined;
+        }
+        return `devices.${target.type}.${serial}.${target.field}`;
+    }
+
+    // ── Modbus-Steuerregister anlegen und initial lesen ──────────────────────
+    // vebus-Felder (inverter.*) sind bereits vorhandene MQTT-Read-Mirrors - writeStateValue() legt
+    // deren Objekt inkl. common.write (WRITABLE_DEVICE_FIELDS) an, hier wird NUR der initiale
+    // Modbus-Lesewert nachgezogen (kein Objekt-Merge, um mit der MQTT-Seite nicht um Metadaten wie
+    // name/role zu konkurrieren). system-Felder haben kein MQTT-Pendant und werden hier komplett
+    // (inkl. Objekt-Anlage) verwaltet.
+    //
+    // Bekannte Race (bewusst in Kauf genommen, siehe S8-Live-Test-Auftrag): findSerialForType()
+    // liefert nur etwas, wenn die jeweilige Serial (vebus: MQTT-Read-Mirror, system: system/0/Serial)
+    // VOR Abschluss dieser sequentiellen, mehrere Sekunden dauernden Modbus-Discovery bereits bekannt
+    // ist. MQTT liefert retained Werte i.d.R. binnen Millisekunden nach dem Connect, also deutlich
+    // früher - ohne Garantie aber. Ist die Serial zu diesem Zeitpunkt unbekannt, wird der jeweilige
+    // dpId übersprungen (Warn-Log) statt auf eine unsichere BaseId zu schreiben; für system-Felder
+    // bedeutet das im Zweifel: State erscheint erst nach einem weiteren Adapter-Restart.
     private async initControlDatapoints(): Promise<void> {
         if (!this.modbusClient) {
             return;
         }
-
-        // Channel-Struktur anlegen
-        await this.setObjectNotExistsAsync('control', {
-            type: 'channel',
-            common: {
-                name: {
-                    en: 'Control',
-                    de: 'Steuerung',
-                    ru: 'Control',
-                    pt: 'Control',
-                    nl: 'Control',
-                    fr: 'Control',
-                    it: 'Control',
-                    es: 'Control',
-                    pl: 'Control',
-                    uk: 'Control',
-                    'zh-cn': 'Control',
-                },
-            },
-            native: {},
-        });
-        await this.setObjectNotExistsAsync('control.inverter', {
-            type: 'channel',
-            common: {
-                name: {
-                    en: 'Inverter (MP2)',
-                    de: 'Wechselrichter (MP2)',
-                    ru: 'Inverter (MP2)',
-                    pt: 'Inverter (MP2)',
-                    nl: 'Inverter (MP2)',
-                    fr: 'Inverter (MP2)',
-                    it: 'Inverter (MP2)',
-                    es: 'Inverter (MP2)',
-                    pl: 'Inverter (MP2)',
-                    uk: 'Inverter (MP2)',
-                    'zh-cn': 'Inverter (MP2)',
-                },
-            },
-            native: {},
-        });
-        await this.setObjectNotExistsAsync('control.system', {
-            type: 'channel',
-            common: {
-                name: {
-                    en: 'System / ESS settings',
-                    de: 'System / ESS-Einstellungen',
-                    ru: 'System / ESS settings',
-                    pt: 'System / ESS settings',
-                    nl: 'System / ESS settings',
-                    fr: 'System / ESS settings',
-                    it: 'System / ESS settings',
-                    es: 'System / ESS settings',
-                    pl: 'System / ESS settings',
-                    uk: 'System / ESS settings',
-                    'zh-cn': 'System / ESS settings',
-                },
-            },
-            native: {},
-        });
 
         // vebus Unit ID ermitteln
         const vebusEntry = Array.from(this.modbusUnitMap.entries()).find(([k]) => k.startsWith('vebus/'));
@@ -1987,44 +1907,50 @@ class VictronGx extends utils.Adapter {
         for (const [dpId, reg] of Object.entries(CONTROL_REGISTERS)) {
             const isInverter = dpId.startsWith('inverter.');
             const unitId = isInverter ? vebusUnitId : 100;
-
-            // Datenpunkt anlegen. initControlDatapoints() läuft ohnehin nur, wenn controlEnabled=true
-            // (Aufrufer-Gate, siehe connectModbus()/discoverModbusUnits()) - kein zusätzliches
-            // Gating hier mehr nötig, write ist damit unconditional reg.write (v0.9.4).
-            const commonDef: ioBroker.StateCommon = {
-                name: reg.name,
-                type: 'number',
-                role: reg.write
-                    ? 'level'
-                    : reg.unit === 'W'
-                      ? 'value.power'
-                      : reg.unit === 'A'
-                        ? 'value.current'
-                        : reg.unit === '%'
-                          ? 'value'
-                          : 'value',
-                unit: reg.unit,
-                read: true,
-                write: reg.write,
-            };
-            if (reg.states) {
-                (commonDef as any).states = reg.states;
+            const target = this.controlRegisterTarget(dpId);
+            const serial = this.findSerialForType(target.type);
+            if (!serial) {
+                this.log.warn(`${dpId}: no ${target.type} serial known yet, skipping Modbus init`);
+                continue;
             }
+            const stateId = `devices.${target.type}.${serial}.${target.field}`;
 
-            await this.extendObjectAsync(`control.${dpId}`, {
-                type: 'state',
-                common: commonDef,
-                native: {},
-            });
-            // Erst JETZT (Objekt existiert nachweislich) für handleSettingsMqttUpdate() freigeben -
-            // dessen MQTT-Settings-Echo lief bisher ungegatet und konnte control.<dpId> per setState
-            // erreichen, bevor die (sequentielle, mehrere Sekunden dauernde) Modbus-Discovery hier
-            // überhaupt bei diesem dpId angekommen war ("has no existing object", v0.9.3-Fix).
-            this.createdStates.add(`control.${dpId}`);
+            if (isInverter) {
+                if (!this.createdStates.has(stateId)) {
+                    this.log.debug(`${stateId}: MQTT read-mirror not created yet, skipping Modbus init read`);
+                    continue;
+                }
+            } else {
+                const isWritable =
+                    WRITABLE_DEVICE_FIELDS.system?.[target.field] === 'modbus' && this.config.controlEnabled;
+                const commonDef: ioBroker.StateCommon = {
+                    name: reg.name,
+                    type: 'number',
+                    role: isWritable
+                        ? 'level'
+                        : reg.unit === 'W'
+                          ? 'value.power'
+                          : reg.unit === 'A'
+                            ? 'value.current'
+                            : 'value',
+                    unit: reg.unit,
+                    read: true,
+                    write: isWritable,
+                };
+                if (reg.states) {
+                    (commonDef as any).states = reg.states;
+                }
+                await this.extendObjectAsync(stateId, { type: 'state', common: commonDef, native: {} });
+                // Erst JETZT (Objekt existiert nachweislich) für handleSettingsMqttUpdate() freigeben -
+                // dessen MQTT-Settings-Echo lief bisher ungegatet und konnte den State per setState
+                // erreichen, bevor die (sequentielle, mehrere Sekunden dauernde) Modbus-Discovery hier
+                // überhaupt bei diesem dpId angekommen war ("has no existing object", v0.9.3-Fix).
+                this.createdStates.add(stateId);
+            }
 
             // Initial per Modbus lesen (kein Default schreiben!)
             if (unitId === undefined) {
-                this.log.warn(`control.${dpId}: no unit ID known, skipping Modbus read`);
+                this.log.warn(`${stateId}: no unit ID known, skipping Modbus read`);
                 continue;
             }
             try {
@@ -2040,14 +1966,14 @@ class VictronGx extends utils.Adapter {
                     raw = raw - 65536;
                 }
                 const val = Math.round(raw * reg.scaleRead * 100) / 100;
-                await this.setState(`control.${dpId}`, { val, ack: true });
-                this.log.info(`control.${dpId} = ${val}${reg.unit} (Reg ${reg.register})`);
+                await this.setState(stateId, { val, ack: true });
+                this.log.info(`${stateId} = ${val}${reg.unit} (Reg ${reg.register})`);
             } catch (err) {
                 this.modbusBusy = false;
-                this.log.warn(`control.${dpId} Modbus read error: ${(err as Error).message}`);
+                this.log.warn(`${stateId} Modbus read error: ${(err as Error).message}`);
             }
         }
-        this.log.info('control.* datapoints initialized');
+        this.log.info('Modbus control datapoints initialized');
     }
 
     // ── Modbus Write ─────────────────────────────────────────────────────────
@@ -2057,7 +1983,12 @@ class VictronGx extends utils.Adapter {
         }
         const reg = CONTROL_REGISTERS[dpId];
         if (!reg) {
-            this.log.warn(`No register for control.${dpId}`);
+            this.log.warn(`No register for ${dpId}`);
+            return;
+        }
+        const stateId = this.controlRegisterStateId(dpId);
+        if (!stateId) {
+            this.log.warn(`${dpId}: no serial known, cannot resolve target state`);
             return;
         }
 
@@ -2070,7 +2001,7 @@ class VictronGx extends utils.Adapter {
             unitId = this.modbusUnitMap.get('ess/0');
         }
         if (unitId === undefined) {
-            this.log.warn(`control.${dpId}: no Modbus unit ID known`);
+            this.log.warn(`${stateId}: no Modbus unit ID known`);
             return;
         }
 
@@ -2088,13 +2019,13 @@ class VictronGx extends utils.Adapter {
             await this.modbusClient.writeRegister(reg.register, writeValue);
             this.modbusBusy = false;
             this.log.info(
-                `Modbus write: control.${dpId} = ${value}${reg.unit} → reg ${reg.register} = ${writeValue} (unit ${unitId})`,
+                `Modbus write: ${stateId} = ${value}${reg.unit} → reg ${reg.register} = ${writeValue} (unit ${unitId})`,
             );
             // Bestätigung zurückschreiben
-            await this.setState(`control.${dpId}`, { val: value, ack: true });
+            await this.setState(stateId, { val: value, ack: true });
         } catch (err) {
             this.modbusBusy = false;
-            this.log.error(`Modbus write error control.${dpId}: ${(err as Error).message}`);
+            this.log.error(`Modbus write error ${stateId}: ${(err as Error).message}`);
         }
     }
 
@@ -2130,7 +2061,11 @@ class VictronGx extends utils.Adapter {
         this.acPowerSetpointInterval = this.setInterval(() => {
             void (async () => {
                 try {
-                    const s = await this.getStateAsync('control.inverter.AcPowerSetpoint');
+                    const stateId = this.controlRegisterStateId('inverter.AcPowerSetpoint');
+                    if (!stateId) {
+                        return;
+                    }
+                    const s = await this.getStateAsync(stateId);
                     const v = typeof s?.val === 'number' ? s.val : 0;
                     if (v === 0) {
                         if (this.acPowerSetpointInterval) {
@@ -2342,11 +2277,6 @@ class VictronGx extends utils.Adapter {
             if (!this.channelReady.has(baseId)) {
                 if (device) {
                     void this.ensureChannel(baseId, device);
-                    // MQTT-Control-Alias (S4) - eigener Kanal control.<type>.<instance>.*, nur für
-                    // Typen in MQTT_CONTROL_FIELDS. Gleicher "erster Wert"-Trigger wie ensureChannel().
-                    if (MQTT_CONTROL_FIELDS[deviceType]) {
-                        void this.ensureMqttControlChannel(deviceType, instance, device);
-                    }
                 } else if (baseId === 'overview') {
                     this.channelReady.add('overview');
                     void this.setObjectNotExistsAsync('overview', {
@@ -2536,14 +2466,28 @@ class VictronGx extends utils.Adapter {
                 ? 'boolean'
                 : 'string';
 
-        // Schreibbarkeit: outputs.<key>.State für alle WRITABLE_TYPES per MQTT schreibbar.
-        const isWritable = isOutputBool && outputBoolSub[1] === 'State' && WRITABLE_TYPES.has(deviceType);
+        // Schreibbarkeit: outputs.<key>.State für WRITABLE_TYPES per MQTT schreibbar - ab 0.10.0
+        // zusätzlich an mqttControlEnabled gebunden (vorher unconditional writable, siehe Motivation
+        // in CONTROL_MERGE_PLAN.md). WRITABLE_DEVICE_FIELDS deckt die 0.10.0-Merge-Felder ab
+        // (vebus/system-Modbus-Register → controlEnabled, evcharger/temperature-MQTT → mqttControlEnabled).
+        const writableChannel = WRITABLE_DEVICE_FIELDS[deviceType]?.[remappedPath];
+        const isWritable =
+            (isOutputBool &&
+                outputBoolSub[1] === 'State' &&
+                WRITABLE_TYPES.has(deviceType) &&
+                this.config.mqttControlEnabled) ||
+            (writableChannel === 'modbus' && this.config.controlEnabled) ||
+            (writableChannel === 'mqtt' && this.config.mqttControlEnabled);
 
         const stateId = `${baseId}.${remappedPath}`;
-        // Rolle: outputs.*.State → switch (schreibbar), outputs.*.Status → indicator
+        // Rolle: outputs.*.State → switch (schreibbar), outputs.*.Status → indicator, sonstige
+        // WRITABLE_DEVICE_FIELDS-Felder → level (strukturell, unabhängig vom Toggle-Zustand -
+        // konsistent zur alten CONTROL_REGISTERS-Konvention "write:true → role:level").
         let stateRole = this.getRole(remappedPath);
         if (isOutputBool) {
             stateRole = outputBoolSub[1] === 'State' ? 'switch' : 'indicator';
+        } else if (writableChannel) {
+            stateRole = 'level';
         }
         const commonBase: ioBroker.StateCommon = {
             name: this.getFriendlyName(remappedPath),
@@ -2575,10 +2519,8 @@ class VictronGx extends utils.Adapter {
             commonBase.role = 'indicator.status';
         }
         // Offset/Scale/FilterLength sind laut dbus-adc Kalibrierungsparameter (siehe
-        // github.com/victronenergy/dbus-adc) - Rolle "level" statt "value", aktuell aber
-        // read-only: ein MQTT-Schreibpfad für Nicht-Output-Datenpunkte existiert im Adapter noch
-        // nicht (nur SwitchableOutput.* ist heute schreibbar, siehe WRITABLE_OUTPUT_REGEX). Wird
-        // zusammen mit dem evcharger-Control-Pfad (S4) als generischer Mechanismus nachgezogen.
+        // github.com/victronenergy/dbus-adc) - Rolle "level", ab 0.10.0 schreibbar über
+        // WRITABLE_DEVICE_FIELDS + writeDeviceMqtt() (Generic MQTT-Write-Path, siehe onStateChange()).
         if (
             deviceType === 'temperature' &&
             (remappedPath === 'Offset' || remappedPath === 'Scale' || remappedPath === 'FilterLength')
@@ -2611,6 +2553,13 @@ class VictronGx extends utils.Adapter {
         }
         if (deviceType === 'evcharger' && remappedPath === 'FirmwareVersion') {
             commonBase.role = 'text';
+        }
+        // SetCurrent-Grenzen (min=6A/step=1A laut Victron-EVCS-Spezifikation) - max wird dynamisch
+        // aus dem MaxCurrent-Datenpunkt nachgezogen (siehe unten, "MaxCurrent ist das Hardware-Limit").
+        if (deviceType === 'evcharger' && remappedPath === 'SetCurrent') {
+            commonBase.role = 'level.current';
+            (commonBase as any).min = 6;
+            (commonBase as any).step = 1;
         }
 
         if (!this.createdStates.has(stateId)) {
@@ -2661,36 +2610,15 @@ class VictronGx extends utils.Adapter {
             this.powerValueCache.set(stateId, storeValue);
         }
 
-        // MQTT-Control-Alias synchronisieren (S4): SetCurrent/StartStop/Mode kommen 1:1 auch als
-        // reine devices.*-Datentopics rein (siehe RELEVANT_PATHS.evcharger) - z.B. wenn der Nutzer
-        // die Werte direkt am Ladegerät/in dessen eigener App ändert statt über ioBroker. Nur wenn
-        // der jeweilige Control-State schon TATSÄCHLICH angelegt ist. channelReady.has(channelKey)
-        // reicht dafür nicht - das wird in ensureMqttControlChannel() synchron VOR den awaits auf
-        // die eigentliche Objekt-Anlage gesetzt (siehe dort), war also selbst racy ("has no existing
-        // object", v0.9.3-Fix). createdStates wird dort erst NACH dem jeweiligen extendObjectAsync
-        // gesetzt und ist damit der verlässliche "existiert wirklich"-Marker.
-        if (device) {
-            const controlField = MQTT_CONTROL_FIELDS[deviceType]?.[remappedPath];
-            if (controlField) {
-                const controlChannelKey = `control.${deviceType}.${device.instance}`;
-                const controlStateId = `${controlChannelKey}.${remappedPath}`;
-                if (this.createdStates.has(controlStateId)) {
-                    const controlVal = controlField.valueType === 'boolean' ? storeValue !== 0 : storeValue;
-                    void this.setState(controlStateId, {
-                        val: controlVal as ioBroker.StateValue,
-                        ack: true,
-                    });
-                }
-            }
-            // MaxCurrent ist das Hardware-Limit des Ladegeräts - control.evcharger.<instance>.
-            // SetCurrent.max wird dynamisch nachgezogen, sobald der Wert bekannt ist (S4).
-            if (deviceType === 'evcharger' && remappedPath === 'MaxCurrent' && typeof storeValue === 'number') {
-                const controlChannelKey = `control.evcharger.${device.instance}`;
-                if (this.createdStates.has(`${controlChannelKey}.SetCurrent`)) {
-                    void this.extendObjectAsync(`${controlChannelKey}.SetCurrent`, {
-                        common: { max: storeValue },
-                    });
-                }
+        // MaxCurrent ist das Hardware-Limit des Ladegeräts - devices.evcharger.<serial>.SetCurrent.max
+        // wird dynamisch nachgezogen, sobald der Wert bekannt ist. Kein separater control.*-Alias
+        // mehr nötig ab 0.10.0 (SetCurrent trägt sein eigenes common.write direkt, siehe oben) -
+        // MaxCurrent und SetCurrent teilen sich dieselbe baseId (gleiche Serial), daher reicht ein
+        // direkter extendObjectAsync auf `${baseId}.SetCurrent`.
+        if (device && deviceType === 'evcharger' && remappedPath === 'MaxCurrent' && typeof storeValue === 'number') {
+            const setCurrentStateId = `${baseId}.SetCurrent`;
+            if (this.createdStates.has(setCurrentStateId)) {
+                void this.extendObjectAsync(setCurrentStateId, { common: { max: storeValue } });
             }
         }
 
@@ -3665,101 +3593,6 @@ class VictronGx extends utils.Adapter {
         this.log.debug(`Channel created: ${baseId}`);
     }
 
-    /**
-     * Legt control.<type>.<instance>.* für Typen aus MQTT_CONTROL_FIELDS an (S4) - eigener Kanal,
-     * eigenes Ready-Tracking ("control.<type>.<instance>" statt der Serial-basierten baseId), weil
-     * die Schreib-Topics MQTT-instanzbasiert adressiert werden (W/<vrmId>/<type>/<instance>/...),
-     * nicht serialbasiert wie devices.*. Ab v0.9.4: legt gar nichts mehr an, wenn
-     * mqttControlEnabled deaktiviert ist (vorher: Objekte immer sichtbar, nur read-only - UX-Falle,
-     * User schreibt und Adapter ignoriert stumm). Bestehende Objekte räumt cleanupControlDatapoints()
-     * beim nächsten Adapterstart weg, siehe dort für die Aufruf-Reihenfolge in onReady().
-     *
-     * @param type Victron-Gerätetyp (Schlüssel in MQTT_CONTROL_FIELDS)
-     * @param instance MQTT-Device-Instance aus dem Topic
-     * @param device Geräte-Metadaten (für den Kanal-Anzeigenamen)
-     */
-    private async ensureMqttControlChannel(type: string, instance: number, device: DeviceInfo): Promise<void> {
-        if (!this.config.mqttControlEnabled) {
-            return;
-        }
-        const fields = MQTT_CONTROL_FIELDS[type];
-        if (!fields) {
-            return;
-        }
-        const channelKey = `control.${type}.${instance}`;
-        if (this.channelReady.has(channelKey)) {
-            return;
-        }
-        this.channelReady.add(channelKey);
-
-        await this.setObjectNotExistsAsync('control', {
-            type: 'channel',
-            common: {
-                name: {
-                    en: 'Control',
-                    de: 'Steuerung',
-                    ru: 'Control',
-                    pt: 'Control',
-                    nl: 'Control',
-                    fr: 'Control',
-                    it: 'Control',
-                    es: 'Control',
-                    pl: 'Control',
-                    uk: 'Control',
-                    'zh-cn': 'Control',
-                },
-            },
-            native: {},
-        });
-        await this.setObjectNotExistsAsync(`control.${type}`, {
-            type: 'channel',
-            common: {
-                name: CONTROL_TYPE_CHANNEL_NAMES[type] || KNOWN_DEVICE_TYPES[type] || type,
-            },
-            native: {},
-        });
-        await this.setObjectNotExistsAsync(channelKey, {
-            type: 'channel',
-            common: { name: device.customName || device.productName || `${type} ${instance}` },
-            native: {},
-        });
-
-        for (const [field, def] of Object.entries(fields)) {
-            const commonDef: ioBroker.StateCommon = {
-                name: this.getFriendlyName(def.mqttPath),
-                type: def.valueType,
-                role: def.role,
-                unit: def.unit,
-                read: true,
-                // Objekt existiert nur noch, wenn mqttControlEnabled=true (Guard am Funktionsanfang) -
-                // kein doppeltes Gating mehr, write ist damit unconditional true (v0.9.4).
-                write: true,
-            };
-            if (def.min !== undefined) {
-                (commonDef as any).min = def.min;
-            }
-            if (def.max !== undefined) {
-                (commonDef as any).max = def.max;
-            }
-            if (def.step !== undefined) {
-                (commonDef as any).step = def.step;
-            }
-            if (def.states) {
-                (commonDef as any).states = def.states;
-            }
-            const controlStateId = `${channelKey}.${field}`;
-            await this.extendObjectAsync(controlStateId, {
-                type: 'state',
-                common: commonDef,
-                native: {},
-            });
-            // Konsistent mit jedem anderen State-Erzeugungspfad im Adapter (writeStateValue()/
-            // ensureRegistrationState()) - createdStates ist die zentrale "welche States gibt es
-            // bereits"-Übersicht, u.a. für das S6-Catalog-Replay-Tooling ausgewertet.
-            this.createdStates.add(controlStateId);
-        }
-    }
-
     // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────
     private async updateBatteryCellMinMax(baseId: string): Promise<void> {
         // ensureChannel() legt .cells.min/.cells.max erst gegen Ende seiner sequentiellen
@@ -3838,42 +3671,12 @@ class VictronGx extends utils.Adapter {
 
         const parts = id.split('.');
 
-        // victron-gx.0.control.<type>.<instance>.<Field> (S4, z.B. control.evcharger.46.SetCurrent)
-        // - MQTT-Direktschreibung, kein Modbus. Muss vor dem generischen control.*-Zweig unten
-        // geprüft werden, sonst würde parts.slice(3).join('.') als Modbus-dpId interpretiert.
-        if (parts[2] === 'control' && MQTT_CONTROL_FIELDS[parts[3]]) {
-            const type = parts[3];
-            const instance = parseInt(parts[4], 10);
-            const field = parts[5];
-            const def = MQTT_CONTROL_FIELDS[type]?.[field];
-            if (!def || Number.isNaN(instance)) {
-                return;
-            }
-            if (!this.config.mqttControlEnabled) {
-                this.log.warn('MQTT device control not enabled (mqttControlEnabled)');
-                return;
-            }
-            const writeVal = def.valueType === 'boolean' ? (state.val ? 1 : 0) : state.val;
-            this.writeDeviceMqtt(type, instance, def.mqttPath, writeVal);
-            return;
-        }
-
-        // victron-gx.0.control.inverter.* oder control.system.*
-        if (parts[2] === 'control') {
-            const dpId = parts.slice(3).join('.'); // z.B. "inverter.Mode"
-            if (!this.config.controlEnabled || !this.modbusClient) {
-                this.log.warn('Control: Modbus not enabled or not connected');
-                return;
-            }
-            void (async () => {
-                await this.writeControlModbus(dpId, state.val as number);
-                // AcPowerSetpoint Keepalive starten/stoppen
-                if (dpId === 'inverter.AcPowerSetpoint') {
-                    this.startAcPowerSetpointKeepalive(state.val as number);
-                }
-            })();
-            return;
-        }
+        // TODO(S4): Schreib-Dispatch für die 0.10.0-Merge-Felder (devices.vebus.*/devices.system.*
+        // → Modbus, devices.evcharger.*/devices.temperature.* → MQTT) fehlt hier noch - kommt mit
+        // der WRITABLE_DEVICE_FIELDS-Whitelist in S4. Bis dahin sind diese Felder zwar bereits
+        // common.write=true (siehe writeStateValue()/initControlDatapoints()), ein User-Write läuft
+        // aber ins Leere (kein Dispatch-Zweig reagiert). Rein innerhalb dieser Session zwischen S3
+        // und S4, kein Release-relevanter Zustand.
 
         // Struktur: devices.<type>.[<Group>.]<Serial>.outputs.<key>.State - Group optional.
         if (parts.length < 5 || parts[2] !== 'devices') {
@@ -3881,6 +3684,13 @@ class VictronGx extends utils.Adapter {
         }
         const deviceType = parts[3];
         if (!WRITABLE_TYPES.has(deviceType)) {
+            return;
+        }
+        // Ab 0.10.0 an mqttControlEnabled gebunden (vorher unconditional writable) - zweite
+        // Verteidigungslinie zusätzlich zu common.write=false auf dem Objekt (siehe writeStateValue()),
+        // falls ein Skript per setForeignState(..., {ack:false}) am UI vorbei schreibt.
+        if (!this.config.mqttControlEnabled) {
+            this.log.warn('Switch/output write ignored: MQTT control not enabled (mqttControlEnabled)');
             return;
         }
 

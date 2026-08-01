@@ -66,40 +66,37 @@ const MGMT_PROCESSNAME_NAME = {
   "zh-cn": "\u9A71\u52A8\u8FDB\u7A0B"
 };
 const MGMT_STATE_TYPES = /* @__PURE__ */ new Set(["temperature", "evcharger"]);
-const MQTT_CONTROL_FIELDS = {
+const WRITABLE_DEVICE_FIELDS = {
+  vebus: {
+    Mode: "modbus",
+    "Ac.In1.CurrentLimit": "modbus",
+    "Hub4.L1.AcPowerSetpoint": "modbus",
+    "Hub4.DisableCharge": "modbus",
+    "Hub4.DisableFeedIn": "modbus"
+  },
+  system: {
+    GridSetpoint: "modbus",
+    MinimumSoc: "modbus",
+    EssMode: "modbus",
+    AcFeedInEnabled: "modbus",
+    DcFeedInEnabled: "modbus",
+    MaxFeedInPower: "modbus",
+    BatteryLifeState: "modbus",
+    MaxDischargePower: "modbus",
+    DvccMaxChargeCurrent: "modbus"
+    // BatteryLifeSocLimit (Reg 2903) / FeedInLimitActive (Reg 2709) bewusst NICHT enthalten -
+    // bleiben read-only (write:false in CONTROL_REGISTERS), S1-Sign-off: keine Hardware-
+    // Verifikation für 0.10.0 verfügbar.
+  },
   evcharger: {
-    SetCurrent: {
-      mqttPath: "SetCurrent",
-      unit: "A",
-      role: "level.current",
-      valueType: "number",
-      min: 6,
-      step: 1
-      // max wird dynamisch aus dem MaxCurrent-Datenpunkt nachgezogen (siehe writeStateValue()).
-    },
-    StartStop: { mqttPath: "StartStop", unit: "", role: "switch", valueType: "boolean" },
-    Mode: {
-      mqttPath: "Mode",
-      unit: "",
-      role: "level",
-      valueType: "number",
-      states: { 0: "Manual", 1: "Auto", 2: "Scheduled" }
-    }
-  }
-};
-const CONTROL_TYPE_CHANNEL_NAMES = {
-  evcharger: {
-    en: "EV Charger",
-    de: "Ladestation",
-    ru: "EV Charger",
-    pt: "Carregador EV",
-    nl: "EV-lader",
-    fr: "Chargeur EV",
-    it: "Caricatore EV",
-    es: "Cargador EV",
-    pl: "\u0141adowarka EV",
-    uk: "\u0417\u0430\u0440\u044F\u0434\u043D\u0430 \u0441\u0442\u0430\u043D\u0446\u0456\u044F",
-    "zh-cn": "\u7535\u52A8\u6C7D\u8F66\u5145\u7535\u5668"
+    SetCurrent: "mqtt",
+    StartStop: "mqtt",
+    Mode: "mqtt"
+  },
+  temperature: {
+    Offset: "mqtt",
+    Scale: "mqtt",
+    FilterLength: "mqtt"
   }
 };
 const RELEVANT_PATHS = {
@@ -508,6 +505,13 @@ const SUPPORTS_OUTPUTS = /* @__PURE__ */ new Set(["switch", "acload", "system"])
 const WRITABLE_TYPES = /* @__PURE__ */ new Set(["switch", "acload", "system"]);
 const DEVICE_GROUP_RACE_TYPES = /* @__PURE__ */ new Set(["switch", "acload"]);
 const WRITABLE_OUTPUT_REGEX = /^outputs\.([^.]+)\.State$/;
+const INVERTER_FIELD_NAMES = {
+  Mode: "Mode",
+  AcIn1CurrentLimit: "Ac.In1.CurrentLimit",
+  AcPowerSetpoint: "Hub4.L1.AcPowerSetpoint",
+  DisableCharge: "Hub4.DisableCharge",
+  DisableFeedIn: "Hub4.DisableFeedIn"
+};
 const CONTROL_REGISTERS = {
   // ── Inverter (vebus, Unit 238) ───────────────────────────────────────────
   "inverter.Mode": {
@@ -1175,13 +1179,9 @@ class VictronGx extends utils.Adapter {
     this.subscribeStates("devices.switch.*");
     this.subscribeStates("devices.acload.*");
     this.subscribeStates("devices.system.*");
-    if (this.config.controlEnabled || this.config.mqttControlEnabled) {
-      this.subscribeStates("control.*");
-    }
     this.armCleanupTimer();
     void this.cleanupNumericChannels();
     void this.cleanupLegacyChannels();
-    const controlCleanupReady = this.cleanupControlDatapoints();
     void this.setObjectNotExistsAsync("devices", {
       type: "folder",
       common: {
@@ -1227,15 +1227,11 @@ class VictronGx extends utils.Adapter {
       return;
     }
     this.log.info(`Connecting to Victron GX at ${host}:${port}...`);
-    void controlCleanupReady.then(() => {
-      this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
-    });
+    this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
     if (this.config.controlEnabled) {
       const modbusPort = this.config.modbusPort || 502;
       this.log.info(`Control enabled \u2013 connecting Modbus TCP ${host}:${modbusPort}...`);
-      void Promise.all([modbusInfoObjectsReady, controlCleanupReady]).then(
-        () => this.connectModbus(host, modbusPort)
-      );
+      void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
     }
   }
   // ── Bereinigung alte Struktur ─────────────────────────────────────────────
@@ -1263,46 +1259,6 @@ class VictronGx extends utils.Adapter {
           await this.delObjectAsync(id, { recursive: true }).catch(() => {
           });
         }
-      }
-    } catch {
-    }
-  }
-  // \u2500\u2500 Bereinigung control.* bei deaktiviertem Schalter (v0.9.4) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  // L\u00e4uft bei JEDEM Adapterstart, unabh\u00e4ngig davon ob der jeweilige Schalter gerade erst
-  // umgestellt wurde - deckt damit beide Toggle-Richtungen ab, ohne Zustand \u00fcber Neustarts hinweg
-  // tracken zu m\u00fcssen: an\u2192aus r\u00e4umt auf, aus\u2192an l\u00e4sst den (dann eh nicht existierenden) Zweig in
-  // Ruhe, an\u2192an/aus\u2192aus sind No-Ops.
-  //
-  // WICHTIG - Aufreihenfolge: muss abgeschlossen sein, BEVOR initControlDatapoints() bzw.
-  // ensureMqttControlChannel() beginnen k\u00f6nnen, Objekte anzulegen. Ohne diese Reihenfolge k\u00f6nnte
-  // bei an\u2192aus ein Objekt, das der jeweilige Init-Pfad gerade erst (neu) angelegt hat, sofort
-  // danach wieder gel\u00f6scht werden (Toggle w\u00e4re nicht atomar); bei aus\u2192an k\u00f6nnte ein frisch
-  // angelegtes Objekt umgekehrt in ein noch laufendes L\u00f6sch-Fenster dieser Funktion laufen.
-  // onReady() awaitet diese Funktion deshalb, bevor connectMqtt()/connectModbus() gestartet werden
-  // - das sind die einzigen Quellen f\u00fcr initControlDatapoints() (via connectModbus() \u2192
-  // discoverModbusUnits()) bzw. f\u00fcr den ersten MQTT-Ger\u00e4tewert, der ensureMqttControlChannel()
-  // triggert. Siehe onReady() f\u00fcr die konkrete Verkettung.
-  async cleanupControlDatapoints() {
-    if (!this.config.controlEnabled) {
-      await this.delObjectAsync("control.inverter", { recursive: true }).catch(() => {
-      });
-      await this.delObjectAsync("control.system", { recursive: true }).catch(() => {
-      });
-    }
-    if (!this.config.mqttControlEnabled) {
-      for (const type of Object.keys(MQTT_CONTROL_FIELDS)) {
-        await this.delObjectAsync(`control.${type}`, { recursive: true }).catch(() => {
-        });
-      }
-    }
-    try {
-      const remaining = await this.getObjectListAsync({
-        startkey: `${this.namespace}.control.`,
-        endkey: `${this.namespace}.control.\u9999`
-      });
-      if (remaining.rows.length === 0) {
-        await this.delObjectAsync("control", { recursive: true }).catch(() => {
-        });
       }
     } catch {
     }
@@ -1642,92 +1598,88 @@ class VictronGx extends utils.Adapter {
       }
     }
   }
-  // ── control.* Datenpunkte anlegen und initial per Modbus lesen ───────────
+  // ── CONTROL_REGISTERS-dpId → devices.<type>.<serial>-Zielfeld auflösen ───
+  controlRegisterTarget(dpId) {
+    var _a;
+    const isInverter = dpId.startsWith("inverter.");
+    const suffix = dpId.slice(dpId.indexOf(".") + 1);
+    if (isInverter) {
+      return { type: "vebus", field: (_a = INVERTER_FIELD_NAMES[suffix]) != null ? _a : suffix };
+    }
+    return { type: "system", field: suffix };
+  }
+  // Serial für einen (annahmegemäß singulären) Gerätetyp - vebus/system kommen pro Anlage genau
+  // einmal vor, eine lineare deviceMap-Suche (wie findDeviceForOutput()) ist daher ausreichend.
+  findSerialForType(type) {
+    for (const device of this.deviceMap.values()) {
+      if (device.type === type && device.serial) {
+        return device.serial;
+      }
+    }
+    return void 0;
+  }
+  controlRegisterStateId(dpId) {
+    const target = this.controlRegisterTarget(dpId);
+    const serial = this.findSerialForType(target.type);
+    if (!serial) {
+      return void 0;
+    }
+    return `devices.${target.type}.${serial}.${target.field}`;
+  }
+  // ── Modbus-Steuerregister anlegen und initial lesen ──────────────────────
+  // vebus-Felder (inverter.*) sind bereits vorhandene MQTT-Read-Mirrors - writeStateValue() legt
+  // deren Objekt inkl. common.write (WRITABLE_DEVICE_FIELDS) an, hier wird NUR der initiale
+  // Modbus-Lesewert nachgezogen (kein Objekt-Merge, um mit der MQTT-Seite nicht um Metadaten wie
+  // name/role zu konkurrieren). system-Felder haben kein MQTT-Pendant und werden hier komplett
+  // (inkl. Objekt-Anlage) verwaltet.
+  //
+  // Bekannte Race (bewusst in Kauf genommen, siehe S8-Live-Test-Auftrag): findSerialForType()
+  // liefert nur etwas, wenn die jeweilige Serial (vebus: MQTT-Read-Mirror, system: system/0/Serial)
+  // VOR Abschluss dieser sequentiellen, mehrere Sekunden dauernden Modbus-Discovery bereits bekannt
+  // ist. MQTT liefert retained Werte i.d.R. binnen Millisekunden nach dem Connect, also deutlich
+  // früher - ohne Garantie aber. Ist die Serial zu diesem Zeitpunkt unbekannt, wird der jeweilige
+  // dpId übersprungen (Warn-Log) statt auf eine unsichere BaseId zu schreiben; für system-Felder
+  // bedeutet das im Zweifel: State erscheint erst nach einem weiteren Adapter-Restart.
   async initControlDatapoints() {
+    var _a;
     if (!this.modbusClient) {
       return;
     }
-    await this.setObjectNotExistsAsync("control", {
-      type: "channel",
-      common: {
-        name: {
-          en: "Control",
-          de: "Steuerung",
-          ru: "Control",
-          pt: "Control",
-          nl: "Control",
-          fr: "Control",
-          it: "Control",
-          es: "Control",
-          pl: "Control",
-          uk: "Control",
-          "zh-cn": "Control"
-        }
-      },
-      native: {}
-    });
-    await this.setObjectNotExistsAsync("control.inverter", {
-      type: "channel",
-      common: {
-        name: {
-          en: "Inverter (MP2)",
-          de: "Wechselrichter (MP2)",
-          ru: "Inverter (MP2)",
-          pt: "Inverter (MP2)",
-          nl: "Inverter (MP2)",
-          fr: "Inverter (MP2)",
-          it: "Inverter (MP2)",
-          es: "Inverter (MP2)",
-          pl: "Inverter (MP2)",
-          uk: "Inverter (MP2)",
-          "zh-cn": "Inverter (MP2)"
-        }
-      },
-      native: {}
-    });
-    await this.setObjectNotExistsAsync("control.system", {
-      type: "channel",
-      common: {
-        name: {
-          en: "System / ESS settings",
-          de: "System / ESS-Einstellungen",
-          ru: "System / ESS settings",
-          pt: "System / ESS settings",
-          nl: "System / ESS settings",
-          fr: "System / ESS settings",
-          it: "System / ESS settings",
-          es: "System / ESS settings",
-          pl: "System / ESS settings",
-          uk: "System / ESS settings",
-          "zh-cn": "System / ESS settings"
-        }
-      },
-      native: {}
-    });
     const vebusEntry = Array.from(this.modbusUnitMap.entries()).find(([k]) => k.startsWith("vebus/"));
     const vebusUnitId = vebusEntry == null ? void 0 : vebusEntry[1];
     for (const [dpId, reg] of Object.entries(CONTROL_REGISTERS)) {
       const isInverter = dpId.startsWith("inverter.");
       const unitId = isInverter ? vebusUnitId : 100;
-      const commonDef = {
-        name: reg.name,
-        type: "number",
-        role: reg.write ? "level" : reg.unit === "W" ? "value.power" : reg.unit === "A" ? "value.current" : reg.unit === "%" ? "value" : "value",
-        unit: reg.unit,
-        read: true,
-        write: reg.write
-      };
-      if (reg.states) {
-        commonDef.states = reg.states;
+      const target = this.controlRegisterTarget(dpId);
+      const serial = this.findSerialForType(target.type);
+      if (!serial) {
+        this.log.warn(`${dpId}: no ${target.type} serial known yet, skipping Modbus init`);
+        continue;
       }
-      await this.extendObjectAsync(`control.${dpId}`, {
-        type: "state",
-        common: commonDef,
-        native: {}
-      });
-      this.createdStates.add(`control.${dpId}`);
+      const stateId = `devices.${target.type}.${serial}.${target.field}`;
+      if (isInverter) {
+        if (!this.createdStates.has(stateId)) {
+          this.log.debug(`${stateId}: MQTT read-mirror not created yet, skipping Modbus init read`);
+          continue;
+        }
+      } else {
+        const isWritable = ((_a = WRITABLE_DEVICE_FIELDS.system) == null ? void 0 : _a[target.field]) === "modbus" && this.config.controlEnabled;
+        const commonDef = {
+          name: reg.name,
+          type: "number",
+          role: isWritable ? "level" : reg.unit === "W" ? "value.power" : reg.unit === "A" ? "value.current" : "value",
+          unit: reg.unit,
+          read: true,
+          write: isWritable
+        };
+        if (reg.states) {
+          commonDef.states = reg.states;
+        }
+        await this.extendObjectAsync(stateId, { type: "state", common: commonDef, native: {} });
+        this.createdStates.add(stateId);
+      }
       if (unitId === void 0) {
-        this.log.warn(`control.${dpId}: no unit ID known, skipping Modbus read`);
+        this.log.warn(`${stateId}: no unit ID known, skipping Modbus read`);
         continue;
       }
       try {
@@ -1743,14 +1695,14 @@ class VictronGx extends utils.Adapter {
           raw = raw - 65536;
         }
         const val = Math.round(raw * reg.scaleRead * 100) / 100;
-        await this.setState(`control.${dpId}`, { val, ack: true });
-        this.log.info(`control.${dpId} = ${val}${reg.unit} (Reg ${reg.register})`);
+        await this.setState(stateId, { val, ack: true });
+        this.log.info(`${stateId} = ${val}${reg.unit} (Reg ${reg.register})`);
       } catch (err) {
         this.modbusBusy = false;
-        this.log.warn(`control.${dpId} Modbus read error: ${err.message}`);
+        this.log.warn(`${stateId} Modbus read error: ${err.message}`);
       }
     }
-    this.log.info("control.* datapoints initialized");
+    this.log.info("Modbus control datapoints initialized");
   }
   // ── Modbus Write ─────────────────────────────────────────────────────────
   async writeControlModbus(dpId, value) {
@@ -1759,7 +1711,12 @@ class VictronGx extends utils.Adapter {
     }
     const reg = CONTROL_REGISTERS[dpId];
     if (!reg) {
-      this.log.warn(`No register for control.${dpId}`);
+      this.log.warn(`No register for ${dpId}`);
+      return;
+    }
+    const stateId = this.controlRegisterStateId(dpId);
+    if (!stateId) {
+      this.log.warn(`${dpId}: no serial known, cannot resolve target state`);
       return;
     }
     const isInverter = dpId.startsWith("inverter.");
@@ -1771,7 +1728,7 @@ class VictronGx extends utils.Adapter {
       unitId = this.modbusUnitMap.get("ess/0");
     }
     if (unitId === void 0) {
-      this.log.warn(`control.${dpId}: no Modbus unit ID known`);
+      this.log.warn(`${stateId}: no Modbus unit ID known`);
       return;
     }
     const rawValue = Math.round(value * reg.scaleWrite);
@@ -1785,12 +1742,12 @@ class VictronGx extends utils.Adapter {
       await this.modbusClient.writeRegister(reg.register, writeValue);
       this.modbusBusy = false;
       this.log.info(
-        `Modbus write: control.${dpId} = ${value}${reg.unit} \u2192 reg ${reg.register} = ${writeValue} (unit ${unitId})`
+        `Modbus write: ${stateId} = ${value}${reg.unit} \u2192 reg ${reg.register} = ${writeValue} (unit ${unitId})`
       );
-      await this.setState(`control.${dpId}`, { val: value, ack: true });
+      await this.setState(stateId, { val: value, ack: true });
     } catch (err) {
       this.modbusBusy = false;
-      this.log.error(`Modbus write error control.${dpId}: ${err.message}`);
+      this.log.error(`Modbus write error ${stateId}: ${err.message}`);
     }
   }
   waitModbus() {
@@ -1823,7 +1780,11 @@ class VictronGx extends utils.Adapter {
     this.acPowerSetpointInterval = this.setInterval(() => {
       void (async () => {
         try {
-          const s = await this.getStateAsync("control.inverter.AcPowerSetpoint");
+          const stateId = this.controlRegisterStateId("inverter.AcPowerSetpoint");
+          if (!stateId) {
+            return;
+          }
+          const s = await this.getStateAsync(stateId);
           const v = typeof (s == null ? void 0 : s.val) === "number" ? s.val : 0;
           if (v === 0) {
             if (this.acPowerSetpointInterval) {
@@ -1988,9 +1949,6 @@ class VictronGx extends utils.Adapter {
       if (!this.channelReady.has(baseId)) {
         if (device) {
           void this.ensureChannel(baseId, device);
-          if (MQTT_CONTROL_FIELDS[deviceType]) {
-            void this.ensureMqttControlChannel(deviceType, instance, device);
-          }
         } else if (baseId === "overview") {
           this.channelReady.add("overview");
           void this.setObjectNotExistsAsync("overview", {
@@ -2150,11 +2108,14 @@ class VictronGx extends utils.Adapter {
     const isOutputBool = outputBoolSub !== null && SUPPORTS_OUTPUTS.has(deviceType);
     const storeValue = isOutputBool ? rawValue !== 0 : rawValue;
     const storeType = isOutputBool ? "boolean" : typeof rawValue === "number" ? "number" : typeof rawValue === "boolean" ? "boolean" : "string";
-    const isWritable = isOutputBool && outputBoolSub[1] === "State" && WRITABLE_TYPES.has(deviceType);
+    const writableChannel = (_a = WRITABLE_DEVICE_FIELDS[deviceType]) == null ? void 0 : _a[remappedPath];
+    const isWritable = isOutputBool && outputBoolSub[1] === "State" && WRITABLE_TYPES.has(deviceType) && this.config.mqttControlEnabled || writableChannel === "modbus" && this.config.controlEnabled || writableChannel === "mqtt" && this.config.mqttControlEnabled;
     const stateId = `${baseId}.${remappedPath}`;
     let stateRole = this.getRole(remappedPath);
     if (isOutputBool) {
       stateRole = outputBoolSub[1] === "State" ? "switch" : "indicator";
+    } else if (writableChannel) {
+      stateRole = "level";
     }
     const commonBase = {
       name: this.getFriendlyName(remappedPath),
@@ -2167,7 +2128,7 @@ class VictronGx extends utils.Adapter {
     if (deviceType === "pvinverter" && remappedPath === "StatusCode") {
       commonBase.states = PVINVERTER_STATUS;
     }
-    const statesForPath = (_a = STATES_MAP[deviceType]) == null ? void 0 : _a[remappedPath];
+    const statesForPath = (_b = STATES_MAP[deviceType]) == null ? void 0 : _b[remappedPath];
     if (statesForPath) {
       commonBase.states = statesForPath;
     }
@@ -2201,6 +2162,11 @@ class VictronGx extends utils.Adapter {
     }
     if (deviceType === "evcharger" && remappedPath === "FirmwareVersion") {
       commonBase.role = "text";
+    }
+    if (deviceType === "evcharger" && remappedPath === "SetCurrent") {
+      commonBase.role = "level.current";
+      commonBase.min = 6;
+      commonBase.step = 1;
     }
     if (!this.createdStates.has(stateId)) {
       this.createdStates.add(stateId);
@@ -2237,26 +2203,10 @@ class VictronGx extends utils.Adapter {
     if (typeof storeValue === "number" && stateId.startsWith("overview.")) {
       this.powerValueCache.set(stateId, storeValue);
     }
-    if (device) {
-      const controlField = (_b = MQTT_CONTROL_FIELDS[deviceType]) == null ? void 0 : _b[remappedPath];
-      if (controlField) {
-        const controlChannelKey = `control.${deviceType}.${device.instance}`;
-        const controlStateId = `${controlChannelKey}.${remappedPath}`;
-        if (this.createdStates.has(controlStateId)) {
-          const controlVal = controlField.valueType === "boolean" ? storeValue !== 0 : storeValue;
-          void this.setState(controlStateId, {
-            val: controlVal,
-            ack: true
-          });
-        }
-      }
-      if (deviceType === "evcharger" && remappedPath === "MaxCurrent" && typeof storeValue === "number") {
-        const controlChannelKey = `control.evcharger.${device.instance}`;
-        if (this.createdStates.has(`${controlChannelKey}.SetCurrent`)) {
-          void this.extendObjectAsync(`${controlChannelKey}.SetCurrent`, {
-            common: { max: storeValue }
-          });
-        }
+    if (device && deviceType === "evcharger" && remappedPath === "MaxCurrent" && typeof storeValue === "number") {
+      const setCurrentStateId = `${baseId}.SetCurrent`;
+      if (this.createdStates.has(setCurrentStateId)) {
+        void this.extendObjectAsync(setCurrentStateId, { common: { max: storeValue } });
       }
     }
     return storeValue;
@@ -3097,95 +3047,6 @@ class VictronGx extends utils.Adapter {
     this.channelReady.add(baseId);
     this.log.debug(`Channel created: ${baseId}`);
   }
-  /**
-   * Legt control.<type>.<instance>.* für Typen aus MQTT_CONTROL_FIELDS an (S4) - eigener Kanal,
-   * eigenes Ready-Tracking ("control.<type>.<instance>" statt der Serial-basierten baseId), weil
-   * die Schreib-Topics MQTT-instanzbasiert adressiert werden (W/<vrmId>/<type>/<instance>/...),
-   * nicht serialbasiert wie devices.*. Ab v0.9.4: legt gar nichts mehr an, wenn
-   * mqttControlEnabled deaktiviert ist (vorher: Objekte immer sichtbar, nur read-only - UX-Falle,
-   * User schreibt und Adapter ignoriert stumm). Bestehende Objekte räumt cleanupControlDatapoints()
-   * beim nächsten Adapterstart weg, siehe dort für die Aufruf-Reihenfolge in onReady().
-   *
-   * @param type Victron-Gerätetyp (Schlüssel in MQTT_CONTROL_FIELDS)
-   * @param instance MQTT-Device-Instance aus dem Topic
-   * @param device Geräte-Metadaten (für den Kanal-Anzeigenamen)
-   */
-  async ensureMqttControlChannel(type, instance, device) {
-    if (!this.config.mqttControlEnabled) {
-      return;
-    }
-    const fields = MQTT_CONTROL_FIELDS[type];
-    if (!fields) {
-      return;
-    }
-    const channelKey = `control.${type}.${instance}`;
-    if (this.channelReady.has(channelKey)) {
-      return;
-    }
-    this.channelReady.add(channelKey);
-    await this.setObjectNotExistsAsync("control", {
-      type: "channel",
-      common: {
-        name: {
-          en: "Control",
-          de: "Steuerung",
-          ru: "Control",
-          pt: "Control",
-          nl: "Control",
-          fr: "Control",
-          it: "Control",
-          es: "Control",
-          pl: "Control",
-          uk: "Control",
-          "zh-cn": "Control"
-        }
-      },
-      native: {}
-    });
-    await this.setObjectNotExistsAsync(`control.${type}`, {
-      type: "channel",
-      common: {
-        name: CONTROL_TYPE_CHANNEL_NAMES[type] || KNOWN_DEVICE_TYPES[type] || type
-      },
-      native: {}
-    });
-    await this.setObjectNotExistsAsync(channelKey, {
-      type: "channel",
-      common: { name: device.customName || device.productName || `${type} ${instance}` },
-      native: {}
-    });
-    for (const [field, def] of Object.entries(fields)) {
-      const commonDef = {
-        name: this.getFriendlyName(def.mqttPath),
-        type: def.valueType,
-        role: def.role,
-        unit: def.unit,
-        read: true,
-        // Objekt existiert nur noch, wenn mqttControlEnabled=true (Guard am Funktionsanfang) -
-        // kein doppeltes Gating mehr, write ist damit unconditional true (v0.9.4).
-        write: true
-      };
-      if (def.min !== void 0) {
-        commonDef.min = def.min;
-      }
-      if (def.max !== void 0) {
-        commonDef.max = def.max;
-      }
-      if (def.step !== void 0) {
-        commonDef.step = def.step;
-      }
-      if (def.states) {
-        commonDef.states = def.states;
-      }
-      const controlStateId = `${channelKey}.${field}`;
-      await this.extendObjectAsync(controlStateId, {
-        type: "state",
-        common: commonDef,
-        native: {}
-      });
-      this.createdStates.add(controlStateId);
-    }
-  }
   // ── Batterie Zell-Min/Max berechnen ──────────────────────────────────────
   async updateBatteryCellMinMax(baseId) {
     if (!this.channelReady.has(baseId)) {
@@ -3243,7 +3104,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── onStateChange: Schreibzugriffe ───────────────────────────────────────
   onStateChange(id, state) {
-    var _a, _b;
+    var _a;
     if (!state || state.ack) {
       return;
     }
@@ -3251,41 +3112,15 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const parts = id.split(".");
-    if (parts[2] === "control" && MQTT_CONTROL_FIELDS[parts[3]]) {
-      const type = parts[3];
-      const instance = parseInt(parts[4], 10);
-      const field = parts[5];
-      const def = (_a = MQTT_CONTROL_FIELDS[type]) == null ? void 0 : _a[field];
-      if (!def || Number.isNaN(instance)) {
-        return;
-      }
-      if (!this.config.mqttControlEnabled) {
-        this.log.warn("MQTT device control not enabled (mqttControlEnabled)");
-        return;
-      }
-      const writeVal2 = def.valueType === "boolean" ? state.val ? 1 : 0 : state.val;
-      this.writeDeviceMqtt(type, instance, def.mqttPath, writeVal2);
-      return;
-    }
-    if (parts[2] === "control") {
-      const dpId = parts.slice(3).join(".");
-      if (!this.config.controlEnabled || !this.modbusClient) {
-        this.log.warn("Control: Modbus not enabled or not connected");
-        return;
-      }
-      void (async () => {
-        await this.writeControlModbus(dpId, state.val);
-        if (dpId === "inverter.AcPowerSetpoint") {
-          this.startAcPowerSetpointKeepalive(state.val);
-        }
-      })();
-      return;
-    }
     if (parts.length < 5 || parts[2] !== "devices") {
       return;
     }
     const deviceType = parts[3];
     if (!WRITABLE_TYPES.has(deviceType)) {
+      return;
+    }
+    if (!this.config.mqttControlEnabled) {
+      this.log.warn("Switch/output write ignored: MQTT control not enabled (mqttControlEnabled)");
       return;
     }
     const outputsIdx = parts.indexOf("outputs", 5);
@@ -3298,7 +3133,7 @@ class VictronGx extends utils.Adapter {
     if (!WRITABLE_OUTPUT_REGEX.test(`outputs.${outputKey}.${dpTail.replace(/\//g, ".")}`)) {
       return;
     }
-    const route = (_b = this.outputToInstance.get(serial)) == null ? void 0 : _b.get(outputKey);
+    const route = (_a = this.outputToInstance.get(serial)) == null ? void 0 : _a.get(outputKey);
     if (!route) {
       this.log.warn(`Could not determine MQTT instance for ${id} (serial=${serial}, output=${outputKey})`);
       return;
