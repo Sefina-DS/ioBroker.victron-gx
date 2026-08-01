@@ -2102,6 +2102,20 @@ class VictronGx extends utils.Adapter {
         return new Promise(r => this.setTimeout(r, 100));
     }
 
+    // ── Generic MQTT Write (S2) ──────────────────────────────────────────────
+    // Zentraler Gegenpart zu writeControlModbus() für die MQTT-Seite. mqttField ist der komplette
+    // Pfad hinter der Instance (z.B. "SetCurrent" für evcharger, "SwitchableOutput/output_1/State"
+    // für Switch-Outputs) - der Aufrufer löst deviceType/instance/mqttField auf, diese Funktion
+    // konstruiert nur noch das Topic und published.
+    private writeDeviceMqtt(deviceType: string, instance: number, mqttField: string, value: ioBroker.StateValue): void {
+        if (!this.mqttClient || !this.vrmId) {
+            return;
+        }
+        const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${mqttField}`;
+        this.log.info(`MQTT write: ${mqttTopic} = ${String(value)}`);
+        this.mqttClient.publish(mqttTopic, JSON.stringify({ value }));
+    }
+
     // ── AcPowerSetpoint Keepalive ─────────────────────────────────────────────
     // Victron erwartet Reg 37 alle ~1s neu wenn externe Steuerung aktiv
     private startAcPowerSetpointKeepalive(value: number): void {
@@ -3840,9 +3854,7 @@ class VictronGx extends utils.Adapter {
                 return;
             }
             const writeVal = def.valueType === 'boolean' ? (state.val ? 1 : 0) : state.val;
-            const mqttTopic = `W/${this.vrmId}/${type}/${instance}/${def.mqttPath}`;
-            this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
-            this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
+            this.writeDeviceMqtt(type, instance, def.mqttPath, writeVal);
             return;
         }
 
@@ -3895,9 +3907,7 @@ class VictronGx extends utils.Adapter {
         }
 
         const writeVal = state.val ? 1 : 0;
-        const mqttTopic = `W/${this.vrmId}/${deviceType}/${route.instance}/SwitchableOutput/${route.mqttKey}/${dpTail}`;
-        this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
-        this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
+        this.writeDeviceMqtt(deviceType, route.instance, `SwitchableOutput/${route.mqttKey}/${dpTail}`, writeVal);
     }
 
     // ── Hilfsfunktionen ──────────────────────────────────────────────────────

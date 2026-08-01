@@ -1796,6 +1796,19 @@ class VictronGx extends utils.Adapter {
   waitModbus() {
     return new Promise((r) => this.setTimeout(r, 100));
   }
+  // ── Generic MQTT Write (S2) ──────────────────────────────────────────────
+  // Zentraler Gegenpart zu writeControlModbus() für die MQTT-Seite. mqttField ist der komplette
+  // Pfad hinter der Instance (z.B. "SetCurrent" für evcharger, "SwitchableOutput/output_1/State"
+  // für Switch-Outputs) - der Aufrufer löst deviceType/instance/mqttField auf, diese Funktion
+  // konstruiert nur noch das Topic und published.
+  writeDeviceMqtt(deviceType, instance, mqttField, value) {
+    if (!this.mqttClient || !this.vrmId) {
+      return;
+    }
+    const mqttTopic = `W/${this.vrmId}/${deviceType}/${instance}/${mqttField}`;
+    this.log.info(`MQTT write: ${mqttTopic} = ${String(value)}`);
+    this.mqttClient.publish(mqttTopic, JSON.stringify({ value }));
+  }
   // ── AcPowerSetpoint Keepalive ─────────────────────────────────────────────
   // Victron erwartet Reg 37 alle ~1s neu wenn externe Steuerung aktiv
   startAcPowerSetpointKeepalive(value) {
@@ -3251,9 +3264,7 @@ class VictronGx extends utils.Adapter {
         return;
       }
       const writeVal2 = def.valueType === "boolean" ? state.val ? 1 : 0 : state.val;
-      const mqttTopic2 = `W/${this.vrmId}/${type}/${instance}/${def.mqttPath}`;
-      this.log.info(`MQTT write: ${mqttTopic2} = ${writeVal2}`);
-      this.mqttClient.publish(mqttTopic2, JSON.stringify({ value: writeVal2 }));
+      this.writeDeviceMqtt(type, instance, def.mqttPath, writeVal2);
       return;
     }
     if (parts[2] === "control") {
@@ -3293,9 +3304,7 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const writeVal = state.val ? 1 : 0;
-    const mqttTopic = `W/${this.vrmId}/${deviceType}/${route.instance}/SwitchableOutput/${route.mqttKey}/${dpTail}`;
-    this.log.info(`MQTT write: ${mqttTopic} = ${writeVal}`);
-    this.mqttClient.publish(mqttTopic, JSON.stringify({ value: writeVal }));
+    this.writeDeviceMqtt(deviceType, route.instance, `SwitchableOutput/${route.mqttKey}/${dpTail}`, writeVal);
   }
   // ── Hilfsfunktionen ──────────────────────────────────────────────────────
   getFriendlyName(path) {
