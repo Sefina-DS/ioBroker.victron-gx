@@ -1315,6 +1315,7 @@ class VictronGx extends utils.Adapter {
                 '[MIGRATION 0.10.0] Config key controlEnabled renamed to modbusControlEnabled - value preserved.',
             );
         }
+        this.logStructuralChangeWarning();
 
         this.cleanupEnabled = this.config.cleanupOrphanedOutputs === true;
 
@@ -1400,6 +1401,9 @@ class VictronGx extends utils.Adapter {
         void this.cleanupNumericChannels();
         // Alte ess.* Struktur bereinigen
         void this.cleanupLegacyChannels();
+        // control.*-Altlast aus Installationen vor 0.10.0 entfernen - MUSS abgeschlossen sein, bevor
+        // unten connectMqtt()/connectModbus() starten (siehe migrateLegacyControlBranch()-Kommentar).
+        const migrationSweepReady = this.migrateLegacyControlBranch();
 
         // Zwischenobjekte für Checker anlegen
         void this.setObjectNotExistsAsync('devices', {
@@ -1448,11 +1452,15 @@ class VictronGx extends utils.Adapter {
             return;
         }
         this.log.info(`Connecting to Victron GX at ${host}:${port}...`);
-        this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
+        void migrationSweepReady.then(() => {
+            this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
+        });
         if (this.config.modbusControlEnabled) {
             const modbusPort = this.config.modbusPort || 502;
             this.log.info(`Control enabled – connecting Modbus TCP ${host}:${modbusPort}...`);
-            void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
+            void Promise.all([modbusInfoObjectsReady, migrationSweepReady]).then(() =>
+                this.connectModbus(host, modbusPort),
+            );
         }
     }
 
@@ -1464,6 +1472,74 @@ class VictronGx extends utils.Adapter {
             this.log.info('Legacy ess.* structure cleaned up');
         } catch {
             /* existierte nicht */
+        }
+    }
+
+    // ── Migrations-Sweep: control.* aus Installationen vor 0.10.0 entfernen ──
+    // Ersetzt die alte, toggle-basierte cleanupControlDatapoints() (siehe S3-Commit): control.*
+    // wird ab 0.10.0 nirgends mehr erzeugt, ein evtl. noch vorhandener Baum stammt zwangsläufig aus
+    // einer Installation vor 0.10.0 und wird bedingungslos entfernt (kein Toggle-Zustand mehr
+    // relevant - anders als die alte Funktion, die je nach controlEnabled/mqttControlEnabled
+    // unterschiedliche Unterzweige stehen ließ). Läuft bei JEDEM Adapterstart, VOR den S3-Init-Pfaden
+    // (connectMqtt()/connectModbus(), siehe onReady()), damit kein frisch angelegtes devices.*-Objekt
+    // in ein noch laufendes Lösch-Fenster laufen kann.
+    //
+    // Darf NIEMALS rejecten (äußeres try/catch, nicht nur .catch() auf den einzelnen Aufrufen) -
+    // onReady() verkettet connectMqtt()/connectModbus() über migrationSweepReady.then(...) OHNE
+    // Reject-Handler; ein Reject hier würde beide Verbindungsaufbauten sang- und klanglos ausfallen
+    // lassen (unhandled rejection statt einer klaren Fehlermeldung).
+    private async migrateLegacyControlBranch(): Promise<void> {
+        try {
+            const controlObj = await this.getObjectAsync('control');
+            if (controlObj) {
+                await this.delObjectAsync('control', { recursive: true });
+                this.log.info('[MIGRATION 0.10.0] Legacy control.* branch removed.');
+            }
+        } catch (err) {
+            this.log.warn(`Legacy control.* branch cleanup failed: ${(err as Error).message}`);
+        }
+    }
+
+    // Warn-Log-Block bei jedem Adapterstart in 0.10.x/0.11.x (siehe CONTROL_MERGE_PLAN.md S6) -
+    // Steuerung rein über die Adapter-Version, kein native.migrationsDone-Marker (läuft daher
+    // unabhängig davon, ob migrateLegacyControlBranch() oben tatsächlich etwas gefunden hat - auch
+    // frische 0.10.x-Installationen ohne jemals vorhandenes control.* sehen die Warnung, bewusst so).
+    // TODO(0.12.0-Zyklus): diese Funktion inkl. Aufruf in onReady() ersatzlos entfernen.
+    private logStructuralChangeWarning(): void {
+        const version = this.version || (this.pack?.version as string | undefined) || '';
+        if (!/^0\.(10|11)\./.test(version)) {
+            return;
+        }
+        const lines = [
+            '[MIGRATION 0.10.x] Structural changes since 0.10.0:',
+            '[MIGRATION] 1. The control.* branch has been removed. Writable data points are now in devices.* with common.write gated by config toggles.',
+            '[MIGRATION] 2. Switches (devices.switch.*.outputs.<n>.State) are now gated on the MQTT control toggle. If you use switches via scripts and the toggle is off, enable it in adapter settings.',
+            '[MIGRATION] 3. The config key controlEnabled was renamed to modbusControlEnabled (value preserved automatically).',
+            '[MIGRATION] Old → new mapping:',
+            '[MIGRATION]   control.inverter.Mode                →  devices.vebus.<serial>.Mode',
+            '[MIGRATION]   control.inverter.AcIn1CurrentLimit    →  devices.vebus.<serial>.Ac.In1.CurrentLimit',
+            '[MIGRATION]   control.inverter.AcPowerSetpoint      →  devices.vebus.<serial>.Hub4.L1.AcPowerSetpoint',
+            '[MIGRATION]   control.inverter.DisableCharge        →  devices.vebus.<serial>.Hub4.DisableCharge',
+            '[MIGRATION]   control.inverter.DisableFeedIn        →  devices.vebus.<serial>.Hub4.DisableFeedIn',
+            '[MIGRATION]   control.system.GridSetpoint           →  devices.system.<serial>.GridSetpoint',
+            '[MIGRATION]   control.system.MinimumSoc             →  devices.system.<serial>.MinimumSoc',
+            '[MIGRATION]   control.system.EssMode                →  devices.system.<serial>.EssMode',
+            '[MIGRATION]   control.system.BatteryLifeState       →  devices.system.<serial>.BatteryLifeState',
+            '[MIGRATION]   control.system.BatteryLifeSocLimit    →  devices.system.<serial>.BatteryLifeSocLimit (still read-only)',
+            '[MIGRATION]   control.system.MaxFeedInPower         →  devices.system.<serial>.MaxFeedInPower',
+            '[MIGRATION]   control.system.AcFeedInEnabled        →  devices.system.<serial>.AcFeedInEnabled',
+            '[MIGRATION]   control.system.DcFeedInEnabled        →  devices.system.<serial>.DcFeedInEnabled',
+            '[MIGRATION]   control.system.FeedInLimitActive      →  devices.system.<serial>.FeedInLimitActive (still read-only)',
+            '[MIGRATION]   control.system.DvccMaxChargeCurrent   →  devices.system.<serial>.DvccMaxChargeCurrent',
+            '[MIGRATION]   control.system.MaxDischargePower      →  devices.system.<serial>.MaxDischargePower',
+            '[MIGRATION]   control.evcharger.<inst>.SetCurrent   →  devices.evcharger.<serial>.SetCurrent',
+            '[MIGRATION]   control.evcharger.<inst>.StartStop    →  devices.evcharger.<serial>.StartStop',
+            '[MIGRATION]   control.evcharger.<inst>.Mode         →  devices.evcharger.<serial>.Mode',
+            '[MIGRATION] See README and forum topic 84991 for details.',
+            '[MIGRATION] This warning will be removed in version 0.12.0.',
+        ];
+        for (const line of lines) {
+            this.log.warn(line);
         }
     }
 
