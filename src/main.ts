@@ -1295,11 +1295,18 @@ class VictronGx extends utils.Adapter {
         // In-Memory-Zuweisung MUSS synchron hier (vor allem anderen) passieren, da der Rest von
         // onReady() sofort this.config.modbusControlEnabled liest (z.B. für connectModbus() weiter
         // unten). Das Zurückschreiben nach native.* ist reine Persistenz für künftige Restarts und
-        // muss dafür nicht abgewartet werden. Idempotent: native.controlEnabled wird auf null
-        // gesetzt (nicht gelöscht) - der !== undefined-Check bleibt beim nächsten Start dennoch
-        // korrekt, weil dann bereits modbusControlEnabled gesetzt ist und die äußere Bedingung nicht
-        // mehr zutrifft.
-        if (this.config.controlEnabled !== undefined && this.config.modbusControlEnabled === undefined) {
+        // muss dafür nicht abgewartet werden.
+        //
+        // S8-Live-Test-Fund: NICHT auf "modbusControlEnabled === undefined" prüfen (erste Version
+        // dieser Migration tat das) - js-controller populiert beim Adapter-Upgrade fehlende
+        // native.*-Keys bereits VOR dem ersten 0.10.0-Start mit dem io-package.json-Schema-Default
+        // (hier modbusControlEnabled: false), das Feld ist also nie "undefined", selbst bei einer
+        // echten Alt-Installation. Die Migration griff dadurch nie. Robusteres Signal: die reine
+        // Existenz von controlEnabled (alter Key, wird von js-controller nicht proaktiv entfernt,
+        // nur nicht mehr neu angelegt). Idempotent über null statt undefined: nach der ersten
+        // Migration steht native.controlEnabled auf null (nicht gelöscht), die zweite Bedingung
+        // verhindert eine erneute (destruktive) Migration bei jedem weiteren Restart.
+        if (this.config.controlEnabled !== undefined && this.config.controlEnabled !== null) {
             this.config.modbusControlEnabled = this.config.controlEnabled;
             // try/catch statt nur .catch() auf dem Promise - ein synchroner Wurf beim Aufruf selbst
             // (z.B. falls extendForeignObjectAsync aus irgendeinem Grund nicht verfügbar ist) darf

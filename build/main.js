@@ -1121,7 +1121,7 @@ class VictronGx extends utils.Adapter {
   }
   // ── Adapter-Start ────────────────────────────────────────────────────────
   onReady() {
-    if (this.config.controlEnabled !== void 0 && this.config.modbusControlEnabled === void 0) {
+    if (this.config.controlEnabled !== void 0 && this.config.controlEnabled !== null) {
       this.config.modbusControlEnabled = this.config.controlEnabled;
       try {
         void this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, {
