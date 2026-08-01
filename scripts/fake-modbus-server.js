@@ -1,5 +1,6 @@
 'use strict';
-// Minimaler Fake-Modbus-TCP-Server für den 0.9.4 controlEnabled-Test auf victron-gx.1.
+// Minimaler Fake-Modbus-TCP-Server für den modbusControlEnabled-Test (bis 0.9.4: controlEnabled)
+// auf victron-gx.1.
 // Beantwortet JEDE Holding-Register-Lese-/Schreibanfrage auf JEDER Unit-ID mit 0 - reicht aus,
 // damit discoverModbusUnits()/initControlDatapoints() im echten Adapter-Code erfolgreich durchlaufen
 // (Werte selbst sind für den Objekt-Erzeugungstest irrelevant). Nur für diesen manuellen Test,

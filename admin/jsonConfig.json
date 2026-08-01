@@ -48,9 +48,9 @@
                 "divider": {
                     "type": "divider"
                 },
-                "controlEnabled": {
+                "modbusControlEnabled": {
                     "type": "checkbox",
-                    "label": "controlEnabled_label",
+                    "label": "modbusControlEnabled_label",
                     "default": false,
                     "sm": 12,
                     "md": 6,

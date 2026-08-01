@@ -185,7 +185,7 @@
     "port": 1883,
     "mqttUsername": "",
     "mqttPassword": "",
-    "controlEnabled": false,
+    "modbusControlEnabled": false,
     "modbusPort": 502
   },
   "objects": [],

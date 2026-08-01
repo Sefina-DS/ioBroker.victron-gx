@@ -8,7 +8,9 @@ declare global {
             mqttUsername: string;
             mqttPassword: string;
             pollingInterval: number;
-            controlEnabled: boolean;
+            modbusControlEnabled: boolean;
+            /** @deprecated renamed to modbusControlEnabled in 0.10.0 - only present in pre-0.10.0 native configs, migrated in onReady(). */
+            controlEnabled?: boolean;
             modbusPort: number;
             cleanupOrphanedOutputs: boolean;
             mqttControlEnabled: boolean;

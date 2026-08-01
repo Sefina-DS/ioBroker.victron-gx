@@ -1121,6 +1121,19 @@ class VictronGx extends utils.Adapter {
   }
   // ── Adapter-Start ────────────────────────────────────────────────────────
   onReady() {
+    if (this.config.controlEnabled !== void 0 && this.config.modbusControlEnabled === void 0) {
+      this.config.modbusControlEnabled = this.config.controlEnabled;
+      try {
+        void this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, {
+          native: { modbusControlEnabled: this.config.controlEnabled, controlEnabled: null }
+        }).catch((err) => this.log.warn(`Config migration persist failed: ${err.message}`));
+      } catch (err) {
+        this.log.warn(`Config migration persist failed: ${err.message}`);
+      }
+      this.log.info(
+        "[MIGRATION 0.10.0] Config key controlEnabled renamed to modbusControlEnabled - value preserved."
+      );
+    }
     this.cleanupEnabled = this.config.cleanupOrphanedOutputs === true;
     void this.setState("info.connection", false, true);
     const modbusInfoObjectsReady = Promise.all([
@@ -1231,7 +1244,7 @@ class VictronGx extends utils.Adapter {
     }
     this.log.info(`Connecting to Victron GX at ${host}:${port}...`);
     this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
-    if (this.config.controlEnabled) {
+    if (this.config.modbusControlEnabled) {
       const modbusPort = this.config.modbusPort || 502;
       this.log.info(`Control enabled \u2013 connecting Modbus TCP ${host}:${modbusPort}...`);
       void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
@@ -1583,7 +1596,7 @@ class VictronGx extends utils.Adapter {
       });
     }
     this.log.info(`Modbus discovery completed. ${this.modbusUnitMap.size} devices found.`);
-    if (this.config.controlEnabled) {
+    if (this.config.modbusControlEnabled) {
       try {
         if (this.modbusBusy) {
           await this.waitModbus();
@@ -1688,7 +1701,7 @@ class VictronGx extends utils.Adapter {
           continue;
         }
       } else {
-        const isWritable = ((_a = WRITABLE_DEVICE_FIELDS.system) == null ? void 0 : _a[target.field]) === "modbus" && this.config.controlEnabled;
+        const isWritable = ((_a = WRITABLE_DEVICE_FIELDS.system) == null ? void 0 : _a[target.field]) === "modbus" && this.config.modbusControlEnabled;
         const commonDef = {
           name: reg.name,
           type: "number",
@@ -2134,7 +2147,7 @@ class VictronGx extends utils.Adapter {
     const storeValue = isOutputBool ? rawValue !== 0 : rawValue;
     const storeType = isOutputBool ? "boolean" : typeof rawValue === "number" ? "number" : typeof rawValue === "boolean" ? "boolean" : "string";
     const writableChannel = (_a = WRITABLE_DEVICE_FIELDS[deviceType]) == null ? void 0 : _a[remappedPath];
-    const isWritable = isOutputBool && outputBoolSub[1] === "State" && WRITABLE_TYPES.has(deviceType) && this.config.mqttControlEnabled || writableChannel === "modbus" && this.config.controlEnabled || writableChannel === "mqtt" && this.config.mqttControlEnabled;
+    const isWritable = isOutputBool && outputBoolSub[1] === "State" && WRITABLE_TYPES.has(deviceType) && this.config.mqttControlEnabled || writableChannel === "modbus" && this.config.modbusControlEnabled || writableChannel === "mqtt" && this.config.mqttControlEnabled;
     const stateId = `${baseId}.${remappedPath}`;
     let stateRole = this.getRole(remappedPath);
     if (isOutputBool) {
@@ -3187,7 +3200,7 @@ class VictronGx extends utils.Adapter {
   async dispatchWritableDeviceField(id, deviceType, field, channel, state) {
     var _a;
     if (channel === "modbus") {
-      if (!this.config.controlEnabled || !this.modbusClient) {
+      if (!this.config.modbusControlEnabled || !this.modbusClient) {
         this.log.warn(`${id}: Modbus control not enabled or not connected`);
         return;
       }

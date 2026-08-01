@@ -82,8 +82,9 @@ const MGMT_STATE_TYPES = new Set(['temperature', 'evcharger']);
 // Ersetzt die vormalige control.<type>.<instance>.*-Struktur (bis 0.9.4, MQTT-Direktschreibung)
 // sowie CONTROL_REGISTERS' separate Modbus-Anlage unter control.inverter.*/control.system.* -
 // beide Zweige laufen jetzt direkt in devices.*, common.write wird abhängig vom passenden
-// Config-Schalter gesetzt ('mqtt' → mqttControlEnabled, 'modbus' → controlEnabled/künftig
-// modbusControlEnabled, siehe S5). Feld-Key = exakter devices.<type>.<serial>.<Feld>-Pfad
+// Config-Schalter gesetzt ('mqtt' → mqttControlEnabled, 'modbus' → modbusControlEnabled, bis
+// 0.9.4 hieß der zweite Schalter controlEnabled, siehe Migration in onReady()). Feld-Key = exakter
+// devices.<type>.<serial>.<Feld>-Pfad
 // (Punkt-Notation wie überall im Adapter, '/' im MQTT-Topic wird '.'), NICHT umbenannt gegenüber
 // dem bestehenden MQTT-Feldnamen (S1-Sign-off: kein zusätzlicher Breaking Change für bereits
 // vorhandene Read-Mirrors wie z.B. vebus.Hub4.L1.AcPowerSetpoint). Konsumiert von
@@ -1290,6 +1291,31 @@ class VictronGx extends utils.Adapter {
 
     // ── Adapter-Start ────────────────────────────────────────────────────────
     private onReady(): void {
+        // ── Config-Migration 0.10.0: controlEnabled → modbusControlEnabled ──────────────────────
+        // In-Memory-Zuweisung MUSS synchron hier (vor allem anderen) passieren, da der Rest von
+        // onReady() sofort this.config.modbusControlEnabled liest (z.B. für connectModbus() weiter
+        // unten). Das Zurückschreiben nach native.* ist reine Persistenz für künftige Restarts und
+        // muss dafür nicht abgewartet werden. Idempotent: native.controlEnabled wird auf null
+        // gesetzt (nicht gelöscht) - der !== undefined-Check bleibt beim nächsten Start dennoch
+        // korrekt, weil dann bereits modbusControlEnabled gesetzt ist und die äußere Bedingung nicht
+        // mehr zutrifft.
+        if (this.config.controlEnabled !== undefined && this.config.modbusControlEnabled === undefined) {
+            this.config.modbusControlEnabled = this.config.controlEnabled;
+            // try/catch statt nur .catch() auf dem Promise - ein synchroner Wurf beim Aufruf selbst
+            // (z.B. falls extendForeignObjectAsync aus irgendeinem Grund nicht verfügbar ist) darf
+            // onReady() nicht komplett abbrechen, die In-Memory-Korrektur oben ist bereits sicher.
+            try {
+                void this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, {
+                    native: { modbusControlEnabled: this.config.controlEnabled, controlEnabled: null },
+                }).catch(err => this.log.warn(`Config migration persist failed: ${(err as Error).message}`));
+            } catch (err) {
+                this.log.warn(`Config migration persist failed: ${(err as Error).message}`);
+            }
+            this.log.info(
+                '[MIGRATION 0.10.0] Config key controlEnabled renamed to modbusControlEnabled - value preserved.',
+            );
+        }
+
         this.cleanupEnabled = this.config.cleanupOrphanedOutputs === true;
 
         void this.setState('info.connection', false, true);
@@ -1423,7 +1449,7 @@ class VictronGx extends utils.Adapter {
         }
         this.log.info(`Connecting to Victron GX at ${host}:${port}...`);
         this.connectMqtt(host, port, this.config.mqttUsername, this.config.mqttPassword);
-        if (this.config.controlEnabled) {
+        if (this.config.modbusControlEnabled) {
             const modbusPort = this.config.modbusPort || 502;
             this.log.info(`Control enabled – connecting Modbus TCP ${host}:${modbusPort}...`);
             void modbusInfoObjectsReady.then(() => this.connectModbus(host, modbusPort));
@@ -1838,7 +1864,7 @@ class VictronGx extends utils.Adapter {
         this.log.info(`Modbus discovery completed. ${this.modbusUnitMap.size} devices found.`);
 
         // ESS/settings ist immer Unit 100
-        if (this.config.controlEnabled) {
+        if (this.config.modbusControlEnabled) {
             try {
                 if (this.modbusBusy) {
                     await this.waitModbus();
@@ -1952,7 +1978,7 @@ class VictronGx extends utils.Adapter {
                 }
             } else {
                 const isWritable =
-                    WRITABLE_DEVICE_FIELDS.system?.[target.field] === 'modbus' && this.config.controlEnabled;
+                    WRITABLE_DEVICE_FIELDS.system?.[target.field] === 'modbus' && this.config.modbusControlEnabled;
                 const commonDef: ioBroker.StateCommon = {
                     name: reg.name,
                     type: 'number',
@@ -2499,14 +2525,14 @@ class VictronGx extends utils.Adapter {
         // Schreibbarkeit: outputs.<key>.State für WRITABLE_TYPES per MQTT schreibbar - ab 0.10.0
         // zusätzlich an mqttControlEnabled gebunden (vorher unconditional writable, siehe Motivation
         // in CONTROL_MERGE_PLAN.md). WRITABLE_DEVICE_FIELDS deckt die 0.10.0-Merge-Felder ab
-        // (vebus/system-Modbus-Register → controlEnabled, evcharger/temperature-MQTT → mqttControlEnabled).
+        // (vebus/system-Modbus-Register → modbusControlEnabled, evcharger/temperature-MQTT → mqttControlEnabled).
         const writableChannel = WRITABLE_DEVICE_FIELDS[deviceType]?.[remappedPath];
         const isWritable =
             (isOutputBool &&
                 outputBoolSub[1] === 'State' &&
                 WRITABLE_TYPES.has(deviceType) &&
                 this.config.mqttControlEnabled) ||
-            (writableChannel === 'modbus' && this.config.controlEnabled) ||
+            (writableChannel === 'modbus' && this.config.modbusControlEnabled) ||
             (writableChannel === 'mqtt' && this.config.mqttControlEnabled);
 
         const stateId = `${baseId}.${remappedPath}`;
@@ -3774,7 +3800,7 @@ class VictronGx extends utils.Adapter {
         state: ioBroker.State,
     ): Promise<void> {
         if (channel === 'modbus') {
-            if (!this.config.controlEnabled || !this.modbusClient) {
+            if (!this.config.modbusControlEnabled || !this.modbusClient) {
                 this.log.warn(`${id}: Modbus control not enabled or not connected`);
                 return;
             }
