@@ -21,7 +21,7 @@ This adapter connects ioBroker **directly and locally** to [Victron Energy](http
 Connects ioBroker directly and locally to Victron GX devices via the local MQTT protocol. Supports reading all device data and full ESS/inverter control via Modbus TCP.
 
 - All device datapoints are **discovered automatically** and created as ioBroker states
-- Control exclusively through the `control.*` channel via Modbus TCP
+- Writable datapoints live directly under `devices.*` – `common.write` reflects whether the matching control toggle (Modbus / MQTT) is currently enabled
 - Works with single-phase and three-phase systems
 - Automatic Modbus Unit ID discovery
 - **Low RAM footprint**: ~130 MB stable
@@ -59,7 +59,8 @@ Since this adapter is not yet in the official ioBroker repository, install it vi
 1. Configure the instance:
    - Enter **IP address** of GX device
    - MQTT port: `1883` (default)
-   - Optional: **Enable control** (activates Modbus TCP and `control.*` datapoints)
+   - Optional: **Modbus control** (ESS/inverter registers become writable via Modbus TCP)
+   - Optional: **MQTT control** (switches, EV charger, temperature setpoints become writable via MQTT)
 
 > **Note:** Node.js >= 22 is required. If your ioBroker is running on Node.js 20, please update first.
 
@@ -74,8 +75,9 @@ Since this adapter is not yet in the official ioBroker repository, install it vi
 | IP address of GX device | Local IP of Cerbo/Venus/Ekrano GX |
 | MQTT port | Default: 1883 |
 | MQTT username / password | Only if MQTT auth is configured on GX |
-| Enable control | Activates Modbus TCP control |
+| Modbus control | Makes ESS/inverter (vebus, system) datapoints writable via Modbus TCP |
 | Modbus port | Default: 502 |
+| MQTT control | Makes switches, EV charger and temperature setpoints writable via MQTT |
 
 ---
 
@@ -93,6 +95,7 @@ The adapter automatically discovers all devices connected to the GX device:
 | `pvinverter` | PV inverters |
 | `acload` | AC loads (incl. Shelly 1PM, with switchable output) |
 | `switch` | Switchable outputs (Node-RED virtual switches, Shelly Pro3/Pro4/1PM, GX internal relay) |
+| `evcharger` | EV chargers (read + control) |
 | `temperature` | Temperature sensors |
 | `meteo` | Weather stations |
 | `tank` | Tank level sensors |
@@ -106,26 +109,28 @@ The adapter automatically discovers all devices connected to the GX device:
 
 ```
 victron-gx.0
-├── control.*          → Control via Modbus TCP
-├── devices.*          → All discovered devices
+├── devices.*          → All discovered devices - common.write on the individual datapoint tells
+│   │                     you whether it's currently writable (see "Writable Data Points" below)
 │   ├── battery.*
-│   ├── vebus.*
+│   ├── vebus.*                      → Mode, Ac.In1.CurrentLimit, Hub4.* writable (Modbus control)
 │   ├── grid.*
 │   ├── pvinverter.*
 │   ├── acload.<Group>.<Serial>.
 │   │   ├── Ac.*                     → measurements (unchanged)
 │   │   └── outputs.<N>.             → switchable output, if the device has one (e.g. Shelly 1PM)
-│   │       ├── State                    bool, writable
+│   │       ├── State                    bool, writable (MQTT control)
 │   │       ├── Status                   bool, read-only
 │   │       ├── Name / CustomName        string
 │   │       └── Group                    string
 │   ├── switch.<Group>.<Serial>.
 │   │   └── outputs.<N>.             → one sub-channel per output (Node-RED: one, Shelly Pro3/4: up to four)
 │   │       ├── State / Status / Name / CustomName / Group   (same as above)
-│   ├── temperature.*
+│   ├── evcharger.<Serial>.          → SetCurrent, StartStop, Mode writable (MQTT control)
+│   ├── temperature.<Serial>.        → Offset, Scale, FilterLength writable (MQTT control)
 │   ├── meteo.*
 │   ├── tank.*
-│   └── system.*                     → also carries outputs.0.* for the GX internal relay
+│   └── system.<Serial>.             → GridSetpoint, EssMode, MinimumSoc, ... writable (Modbus control);
+│                                       also carries outputs.0.* for the GX internal relay (MQTT control)
 ├── overview.*         → System overview (from system/0), read-only
 └── info.*             → Connection status
 ```
@@ -150,32 +155,80 @@ The **All Topics** tab shows all MQTT topics that the GX device has sent since t
 
 ---
 
-## Control
+## Writable Data Points
 
-### Virtual Switches (Node-RED)
-Set `State` to `true`/`false` → MQTT write → GX → Node-RED → relay
+Since **0.10.0**, there is no separate `control.*` tree anymore. Every writable datapoint lives
+directly under `devices.*`, right next to its read-only siblings – `common.write` on the object
+itself tells you (and the Admin UI / VIS) whether it's currently writable. Two independent config
+toggles gate this:
 
-### ESS Grid Setpoint (simplest approach)
-Write `control.system.GridSetpoint` [W]:
+- **Modbus control** – ESS/inverter registers on `devices.vebus.*` and `devices.system.*`
+- **MQTT control** – switches (`devices.switch.*`/`devices.acload.*`/`devices.system.*` outputs),
+  the EV charger, and temperature-sensor calibration setpoints
+
+If a toggle is off, the datapoint still exists (so History/Vis bindings and scripts keep working)
+but `common.write` is `false` and writes are ignored with a log warning – no more silently swallowed
+writes to a datapoint that looked writable but wasn't.
+
+### Before → after (upgrading from 0.9.x)
+
+| Old (control.\*, removed in 0.10.0) | New (devices.\*) |
+|---|---|
+| `control.inverter.Mode` | `devices.vebus.<Serial>.Mode` |
+| `control.inverter.AcPowerSetpoint` | `devices.vebus.<Serial>.Hub4.L1.AcPowerSetpoint` |
+| `control.inverter.AcIn1CurrentLimit` | `devices.vebus.<Serial>.Ac.In1.CurrentLimit` |
+| `control.inverter.DisableCharge` | `devices.vebus.<Serial>.Hub4.DisableCharge` |
+| `control.inverter.DisableFeedIn` | `devices.vebus.<Serial>.Hub4.DisableFeedIn` |
+| `control.system.GridSetpoint` | `devices.system.<Serial>.GridSetpoint` |
+| `control.system.EssMode` | `devices.system.<Serial>.EssMode` |
+| `control.system.MinimumSoc` | `devices.system.<Serial>.MinimumSoc` |
+| `control.system.BatteryLifeState` | `devices.system.<Serial>.BatteryLifeState` |
+| `control.system.MaxFeedInPower` | `devices.system.<Serial>.MaxFeedInPower` |
+| `control.system.AcFeedInEnabled` | `devices.system.<Serial>.AcFeedInEnabled` |
+| `control.system.DcFeedInEnabled` | `devices.system.<Serial>.DcFeedInEnabled` |
+| `control.system.DvccMaxChargeCurrent` | `devices.system.<Serial>.DvccMaxChargeCurrent` |
+| `control.system.MaxDischargePower` | `devices.system.<Serial>.MaxDischargePower` |
+| `control.evcharger.<Instance>.SetCurrent` | `devices.evcharger.<Serial>.SetCurrent` |
+| `control.evcharger.<Instance>.StartStop` | `devices.evcharger.<Serial>.StartStop` |
+| `control.evcharger.<Instance>.Mode` | `devices.evcharger.<Serial>.Mode` |
+
+**What to do:** update any scripts, Vis widgets, or Blockly rules that reference `control.*`
+directly, and make sure the matching toggle (Modbus control / MQTT control) is enabled in the
+instance settings if you rely on writing to any of these. The adapter renames the config key
+`controlEnabled` to `modbusControlEnabled` automatically on first 0.10.0 start (your setting is
+preserved) – `mqttControlEnabled` is unchanged. A one-time cleanup removes any leftover `control.*`
+objects, and a warning is logged on every start in 0.10.x/0.11.x as a reminder (removed in 0.12.0).
+
+**Switches are now gated too:** `outputs.<N>.State` used to be writable unconditionally; it now
+requires **MQTT control** to be enabled, same as everything else under this toggle.
+
+### Examples
+
+**ESS Grid Setpoint** (simplest approach) – write `devices.system.<Serial>.GridSetpoint` [W]:
 - `0` → zero feed-in (Victron ESS algorithm keeps grid at 0W)
 - `-3000` → feed 3000W into grid (battery discharges)
 - `+500` → draw 500W from grid (battery charges)
 
 No keepalive needed – value is stored persistently.
 
-### ESS Live Setpoint (direct control)
-Write `control.inverter.AcPowerSetpoint` [W]:
-- Requires `control.system.EssMode = 3` (External control)
+**ESS Live Setpoint** (direct control) – write `devices.vebus.<Serial>.Hub4.L1.AcPowerSetpoint` [W]:
+- Requires `devices.system.<Serial>.EssMode = 3` (External control)
 - The adapter resends the value every 800ms while it is ≠ 0 (Victron watchdog)
 - Set to `0` to return control to the Victron ESS algorithm
 
-### Disable Charge / Feed-In
-- `control.inverter.DisableCharge = 1` → battery will not charge
-- `control.inverter.DisableFeedIn = 1` → inverter will not feed into grid
+**Disable Charge / Feed-In:**
+- `devices.vebus.<Serial>.Hub4.DisableCharge = 1` → battery will not charge
+- `devices.vebus.<Serial>.Hub4.DisableFeedIn = 1` → inverter will not feed into grid
 
-### DVCC Limits (requires DVCC enabled on GX)
-- `control.system.DvccMaxChargeCurrent` [A]: system-wide charge current limit (-1 = disabled)
-- `control.system.MaxDischargePower` [W]: discharge power limit
+**DVCC Limits** (requires DVCC enabled on GX):
+- `devices.system.<Serial>.DvccMaxChargeCurrent` [A]: system-wide charge current limit (-1 = disabled)
+- `devices.system.<Serial>.MaxDischargePower` [W]: discharge power limit
+
+**Virtual Switches** (Node-RED) – set `outputs.<N>.State` to `true`/`false` → MQTT write → GX → Node-RED → relay
+
+**EV Charger** – write `devices.evcharger.<Serial>.SetCurrent` [A] / `StartStop` [bool] / `Mode` (0=Manual, 1=Auto, 2=Scheduled)
+
+**Temperature sensor calibration** – write `devices.temperature.<Serial>.Offset` [°C] / `Scale` / `FilterLength`
 
 ---
 
@@ -198,7 +251,7 @@ Shelly devices connected to the GX (Cerbo/Venus/Ekrano) integration are now full
 
 - **Shelly Pro3 / Pro4**: each physical device reports its channels as separate MQTT device instances that share the same serial number. The adapter automatically merges them into a single object tree (`devices.switch.<Group>.<Serial>.outputs.<0..3>.*`).
 - **Shelly 1PM**: measurement values (`Ac.*`) and the switchable output (`outputs.0.*`) live on the same device tree under `devices.acload.<Group>.<Serial>`.
-- **GX internal relay**: the relay built into the GX device itself (`system/0`) is now switchable under `devices.system.<Serial>.outputs.0.State`, without any extra configuration.
+- **GX internal relay**: the relay built into the GX device itself (`system/0`) is switchable under `devices.system.<Serial>.outputs.0.State`, once **MQTT control** is enabled (see [Writable Data Points](#writable-data-points)).
 
 All switchable outputs – regardless of device type – share the same sub-structure, so wildcard selectors work across your whole installation:
 
@@ -239,6 +292,14 @@ If you move a channel to a different group, disable a Shelly channel, or delete 
 ---
 
 ## Changelog
+
+### 0.10.0 (2026-08-01)
+- **BREAKING:** the `control.*` branch has been removed - writable datapoints now live directly under `devices.*`, with `common.write` gated by two config toggles (Modbus control / MQTT control). See README section "Writable Data Points" for the full old→new mapping and migration steps.
+- **BREAKING:** switches (`outputs.<N>.State`) now require MQTT control to stay writable (previously unconditional).
+- **BREAKING:** the config key `controlEnabled` was renamed to `modbusControlEnabled` (value preserved automatically on first start).
+- EV charger control is no longer experimental - treated the same as any other device type now.
+- Temperature sensor calibration (`Offset`/`Scale`/`FilterLength`) is now writable.
+- A migration warning with the full old→new mapping is logged on every start in 0.10.x/0.11.x and will be removed in 0.12.0.
 
 ### 0.9.4 (2026-07-29)
 - Semantic change: control datapoints (control.system.*, control.inverter.*, control.evcharger.*) are now only created when the matching control switch (controlEnabled / mqttControlEnabled) is active, and are then always writable (no more silently ignored writes). Existing objects are automatically removed when the switch is disabled. If you have scripts targeting control.*, check that the matching switch is enabled in the adapter settings. Note: disabling the switch discards the last known value of the affected control state - relevant for History adapter users (gap in the log).
