@@ -1360,6 +1360,12 @@ class VictronGx extends utils.Adapter {
         this.subscribeStates('devices.switch.*');
         this.subscribeStates('devices.acload.*');
         this.subscribeStates('devices.system.*');
+        // WRITABLE_DEVICE_FIELDS-Typen (0.10.0 control-merge) - onStateChange filtert selbst auf
+        // ack=false + Whitelist-Treffer, der breitere Subscribe ist unkritisch (§4.13, gleiches
+        // Muster wie oben).
+        this.subscribeStates('devices.vebus.*');
+        this.subscribeStates('devices.evcharger.*');
+        this.subscribeStates('devices.temperature.*');
 
         // Auto-Cleanup initial armen, damit auch bei leerem outputToInstance (Edge-Case: keine
         // Output-Kanäle empfangen) irgendwann gesweept wird - No-Op wenn cleanupEnabled=false (§10.4).
@@ -1879,6 +1885,30 @@ class VictronGx extends utils.Adapter {
             return undefined;
         }
         return `devices.${target.type}.${serial}.${target.field}`;
+    }
+
+    // Rückrichtung zu controlRegisterTarget() - für den Schreib-Dispatch in onStateChange() (S4),
+    // der vom aufgelösten devices.<type>.<field>-Pfad zurück auf den CONTROL_REGISTERS-dpId muss.
+    private controlRegisterDpId(type: string, field: string): string | undefined {
+        for (const dpId of Object.keys(CONTROL_REGISTERS)) {
+            const target = this.controlRegisterTarget(dpId);
+            if (target.type === type && target.field === field) {
+                return dpId;
+            }
+        }
+        return undefined;
+    }
+
+    // MQTT-Instance für eine (Type, Serial)-Kombination - Gegenstück zu findSerialForType(), für
+    // den MQTT-Schreib-Dispatch (W/<vrmId>/<type>/<instance>/...) benötigt, der über Instance statt
+    // Serial adressiert wird.
+    private findInstanceForSerial(type: string, serial: string): number | undefined {
+        for (const device of this.deviceMap.values()) {
+            if (device.type === type && device.serial === serial) {
+                return device.instance;
+            }
+        }
+        return undefined;
     }
 
     // ── Modbus-Steuerregister anlegen und initial lesen ──────────────────────
@@ -3670,19 +3700,32 @@ class VictronGx extends utils.Adapter {
         }
 
         const parts = id.split('.');
-
-        // TODO(S4): Schreib-Dispatch für die 0.10.0-Merge-Felder (devices.vebus.*/devices.system.*
-        // → Modbus, devices.evcharger.*/devices.temperature.* → MQTT) fehlt hier noch - kommt mit
-        // der WRITABLE_DEVICE_FIELDS-Whitelist in S4. Bis dahin sind diese Felder zwar bereits
-        // common.write=true (siehe writeStateValue()/initControlDatapoints()), ein User-Write läuft
-        // aber ins Leere (kein Dispatch-Zweig reagiert). Rein innerhalb dieser Session zwischen S3
-        // und S4, kein Release-relevanter Zustand.
-
-        // Struktur: devices.<type>.[<Group>.]<Serial>.outputs.<key>.State - Group optional.
         if (parts.length < 5 || parts[2] !== 'devices') {
             return;
         }
         const deviceType = parts[3];
+
+        // WRITABLE_DEVICE_FIELDS-Zweig (0.10.0 control-merge): devices.<type>.[<Group>.]<Serial>.<Feld>,
+        // <Feld> kann mehrsegmentig sein (z.B. "Hub4.L1.AcPowerSetpoint") - da Feldnamen aus einer
+        // festen Whitelist stammen, wird von hinten gematcht (Suffix-Vergleich) statt über feste
+        // Segment-Indizes, damit der optionale Group-Zwischenordner nicht extra behandelt werden muss.
+        const writableFields = WRITABLE_DEVICE_FIELDS[deviceType];
+        if (writableFields) {
+            const tail = parts.slice(4).join('.');
+            const matchedField = Object.keys(writableFields).find(f => tail === f || tail.endsWith(`.${f}`));
+            if (matchedField) {
+                void this.dispatchWritableDeviceField(
+                    id,
+                    deviceType,
+                    matchedField,
+                    writableFields[matchedField],
+                    state,
+                );
+                return;
+            }
+        }
+
+        // Struktur: devices.<type>.[<Group>.]<Serial>.outputs.<key>.State - Group optional.
         if (!WRITABLE_TYPES.has(deviceType)) {
             return;
         }
@@ -3718,6 +3761,60 @@ class VictronGx extends utils.Adapter {
 
         const writeVal = state.val ? 1 : 0;
         this.writeDeviceMqtt(deviceType, route.instance, `SwitchableOutput/${route.mqttKey}/${dpTail}`, writeVal);
+    }
+
+    // Schreib-Dispatch für WRITABLE_DEVICE_FIELDS-Treffer (0.10.0 control-merge). Prüft Config-
+    // Schalter UND common.write auf dem Objekt (zweite Verteidigungslinie, falls ein Skript per
+    // setForeignState(..., {ack:false}) direkt schreibt statt über die Admin-UI/VIS).
+    private async dispatchWritableDeviceField(
+        id: string,
+        deviceType: string,
+        field: string,
+        channel: 'mqtt' | 'modbus',
+        state: ioBroker.State,
+    ): Promise<void> {
+        if (channel === 'modbus') {
+            if (!this.config.controlEnabled || !this.modbusClient) {
+                this.log.warn(`${id}: Modbus control not enabled or not connected`);
+                return;
+            }
+        } else if (!this.config.mqttControlEnabled) {
+            this.log.warn(`${id}: MQTT device control not enabled (mqttControlEnabled)`);
+            return;
+        }
+        const obj = await this.getObjectAsync(id);
+        if (!obj?.common?.write) {
+            this.log.warn(`${id}: write ignored, common.write is not set on the object`);
+            return;
+        }
+
+        if (channel === 'modbus') {
+            const dpId = this.controlRegisterDpId(deviceType, field);
+            if (!dpId) {
+                this.log.warn(`${id}: no CONTROL_REGISTERS entry for ${deviceType}.${field}`);
+                return;
+            }
+            await this.writeControlModbus(dpId, state.val as number);
+            if (dpId === 'inverter.AcPowerSetpoint') {
+                this.startAcPowerSetpointKeepalive(state.val as number);
+            }
+            return;
+        }
+
+        // MQTT-Zweig: Serial aus der stateId extrahieren (letztes Segment vor dem gematchten Feld -
+        // deckt sowohl "devices.<type>.<Serial>.<Feld>" als auch "devices.<type>.<Group>.<Serial>.<Feld>"
+        // ab, ohne Group separat behandeln zu müssen) und über findInstanceForSerial() in die
+        // MQTT-Instance auflösen, die das W/<vrmId>/<type>/<instance>/...-Topic braucht.
+        const idParts = id.split('.');
+        const tailParts = idParts.slice(4);
+        const fieldParts = field.split('.');
+        const serial = tailParts[tailParts.length - fieldParts.length - 1];
+        const instance = serial !== undefined ? this.findInstanceForSerial(deviceType, serial) : undefined;
+        if (instance === undefined) {
+            this.log.warn(`${id}: could not determine MQTT instance (serial=${serial})`);
+            return;
+        }
+        this.writeDeviceMqtt(deviceType, instance, field.replace(/\./g, '/'), state.val);
     }
 
     // ── Hilfsfunktionen ──────────────────────────────────────────────────────

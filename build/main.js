@@ -1179,6 +1179,9 @@ class VictronGx extends utils.Adapter {
     this.subscribeStates("devices.switch.*");
     this.subscribeStates("devices.acload.*");
     this.subscribeStates("devices.system.*");
+    this.subscribeStates("devices.vebus.*");
+    this.subscribeStates("devices.evcharger.*");
+    this.subscribeStates("devices.temperature.*");
     this.armCleanupTimer();
     void this.cleanupNumericChannels();
     void this.cleanupLegacyChannels();
@@ -1625,6 +1628,28 @@ class VictronGx extends utils.Adapter {
       return void 0;
     }
     return `devices.${target.type}.${serial}.${target.field}`;
+  }
+  // Rückrichtung zu controlRegisterTarget() - für den Schreib-Dispatch in onStateChange() (S4),
+  // der vom aufgelösten devices.<type>.<field>-Pfad zurück auf den CONTROL_REGISTERS-dpId muss.
+  controlRegisterDpId(type, field) {
+    for (const dpId of Object.keys(CONTROL_REGISTERS)) {
+      const target = this.controlRegisterTarget(dpId);
+      if (target.type === type && target.field === field) {
+        return dpId;
+      }
+    }
+    return void 0;
+  }
+  // MQTT-Instance für eine (Type, Serial)-Kombination - Gegenstück zu findSerialForType(), für
+  // den MQTT-Schreib-Dispatch (W/<vrmId>/<type>/<instance>/...) benötigt, der über Instance statt
+  // Serial adressiert wird.
+  findInstanceForSerial(type, serial) {
+    for (const device of this.deviceMap.values()) {
+      if (device.type === type && device.serial === serial) {
+        return device.instance;
+      }
+    }
+    return void 0;
   }
   // ── Modbus-Steuerregister anlegen und initial lesen ──────────────────────
   // vebus-Felder (inverter.*) sind bereits vorhandene MQTT-Read-Mirrors - writeStateValue() legt
@@ -3116,6 +3141,21 @@ class VictronGx extends utils.Adapter {
       return;
     }
     const deviceType = parts[3];
+    const writableFields = WRITABLE_DEVICE_FIELDS[deviceType];
+    if (writableFields) {
+      const tail = parts.slice(4).join(".");
+      const matchedField = Object.keys(writableFields).find((f) => tail === f || tail.endsWith(`.${f}`));
+      if (matchedField) {
+        void this.dispatchWritableDeviceField(
+          id,
+          deviceType,
+          matchedField,
+          writableFields[matchedField],
+          state
+        );
+        return;
+      }
+    }
     if (!WRITABLE_TYPES.has(deviceType)) {
       return;
     }
@@ -3140,6 +3180,48 @@ class VictronGx extends utils.Adapter {
     }
     const writeVal = state.val ? 1 : 0;
     this.writeDeviceMqtt(deviceType, route.instance, `SwitchableOutput/${route.mqttKey}/${dpTail}`, writeVal);
+  }
+  // Schreib-Dispatch für WRITABLE_DEVICE_FIELDS-Treffer (0.10.0 control-merge). Prüft Config-
+  // Schalter UND common.write auf dem Objekt (zweite Verteidigungslinie, falls ein Skript per
+  // setForeignState(..., {ack:false}) direkt schreibt statt über die Admin-UI/VIS).
+  async dispatchWritableDeviceField(id, deviceType, field, channel, state) {
+    var _a;
+    if (channel === "modbus") {
+      if (!this.config.controlEnabled || !this.modbusClient) {
+        this.log.warn(`${id}: Modbus control not enabled or not connected`);
+        return;
+      }
+    } else if (!this.config.mqttControlEnabled) {
+      this.log.warn(`${id}: MQTT device control not enabled (mqttControlEnabled)`);
+      return;
+    }
+    const obj = await this.getObjectAsync(id);
+    if (!((_a = obj == null ? void 0 : obj.common) == null ? void 0 : _a.write)) {
+      this.log.warn(`${id}: write ignored, common.write is not set on the object`);
+      return;
+    }
+    if (channel === "modbus") {
+      const dpId = this.controlRegisterDpId(deviceType, field);
+      if (!dpId) {
+        this.log.warn(`${id}: no CONTROL_REGISTERS entry for ${deviceType}.${field}`);
+        return;
+      }
+      await this.writeControlModbus(dpId, state.val);
+      if (dpId === "inverter.AcPowerSetpoint") {
+        this.startAcPowerSetpointKeepalive(state.val);
+      }
+      return;
+    }
+    const idParts = id.split(".");
+    const tailParts = idParts.slice(4);
+    const fieldParts = field.split(".");
+    const serial = tailParts[tailParts.length - fieldParts.length - 1];
+    const instance = serial !== void 0 ? this.findInstanceForSerial(deviceType, serial) : void 0;
+    if (instance === void 0) {
+      this.log.warn(`${id}: could not determine MQTT instance (serial=${serial})`);
+      return;
+    }
+    this.writeDeviceMqtt(deviceType, instance, field.replace(/\./g, "/"), state.val);
   }
   // ── Hilfsfunktionen ──────────────────────────────────────────────────────
   getFriendlyName(path) {
