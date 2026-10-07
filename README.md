@@ -294,6 +294,9 @@ If you move a channel to a different group, disable a Shelly channel, or delete 
 
 ## Changelog
 
+### 0.10.1 (2026-10-07)
+- Fix: orphan cleanup no longer deletes active device folders when one serial is exposed by several services (e.g. Shelly as switch + acload) and clears stale caches after deletions (fixes repeated 'has no existing object' warnings). The sweep now waits until all device commits have settled. Update mqtt to 5.16.0 (security fixes) and @iobroker/testing to 6.2.2, add Node.js 26 to the CI matrix.
+
 ### 0.10.0 (2026-08-01)
 - **BREAKING:** the `control.*` branch has been removed - writable datapoints now live directly under `devices.*`, with `common.write` gated by two config toggles (Modbus control / MQTT control). See README section "Writable Data Points" for the full old→new mapping and migration steps.
 - **BREAKING:** switches (`outputs.<N>.State`) now require MQTT control to stay writable (previously unconditional).

@@ -1097,10 +1097,17 @@ class VictronGx extends utils.Adapter {
   cleanupEnabled = false;
   cleanupTimer = null;
   cleanupDoneOnce = false;
+  // S16-Fix Teil 2: gesetzt beim ersten Verschiebungsversuch (attemptOrphanSweep()), harte
+  // Obergrenze dafür - null, solange kein Verschiebungszyklus läuft.
+  cleanupDeadline = null;
   // Ruhezeit: Sweep läuft erst, wenn seit dem letzten neu erkannten Kanal in outputToInstance
   // mindestens so lange nichts mehr reinkam - schützt Multi-Instance-Devices (Shelly Pro3),
   // deren Instances zeitlich gestaffelt reinkommen (§10.1).
   CLEANUP_QUIET_MS = 3e4;
+  // S16-Fix Teil 2: Wiederhol-Intervall, solange attemptOrphanSweep() auf ausstehende
+  // S14-Geräte-Commits wartet (siehe dort) - bewusst kurz, da nur ein Re-Check, kein Warten auf
+  // neue MQTT-Aktivität wie bei CLEANUP_QUIET_MS.
+  CLEANUP_RETRY_MS = 5e3;
   // S13: Key "<serial>|<outputKey>" -> noch nicht committeter Kanal (siehe PendingOutput).
   pendingOutputs = /* @__PURE__ */ new Map();
   // Max. Wartezeit auf Settings/Group nach dem ersten Wert eines neuen Kanals, bevor ohne
@@ -1368,7 +1375,8 @@ class VictronGx extends utils.Adapter {
   /**
    * Wird bei jedem neu erkannten Output-Kanal aufgerufen (Message-Handler) sowie initial nach
    * dem Subscribe. Setzt den Ruhezeit-Timer zur\u00fcck; erst wenn CLEANUP_QUIET_MS ohne neuen Kanal
-   * verstrichen sind, l\u00e4uft der Sweep - aber nur einmal pro Adapter-Start.
+   * verstrichen sind, wird ein Sweep-Versuch unternommen (attemptOrphanSweep()) - aber nur einmal
+   * pro Adapter-Start (cleanupDoneOnce).
    */
   armCleanupTimer() {
     if (!this.cleanupEnabled || this.cleanupDoneOnce) {
@@ -1379,8 +1387,105 @@ class VictronGx extends utils.Adapter {
     }
     this.cleanupTimer = this.setTimeout(() => {
       this.cleanupTimer = null;
-      void this.runOrphanSweep();
+      this.attemptOrphanSweep();
     }, this.CLEANUP_QUIET_MS);
+  }
+  /**
+   * S16-Fix Teil 2: Startet runOrphanSweep() erst, wenn kein DeviceInfo im deviceMap mehr
+   * baseIdCommitted===false hat (siehe DEVICE_GROUP_RACE_TYPES/bufferDeviceMessage()) - solange
+   * ein Ger\u00e4t noch im S14-Puffer h\u00e4ngt, kennt runOrphanSweep() dessen k\u00fcnftige Serial/BaseId
+   * noch nicht und k\u00f6nnte einen zu dieser Serial geh\u00f6renden, aus einer fr\u00fcheren Session
+   * persistierten Ordner f\u00e4lschlich als verwaist werten (Live-Fund 2026-10-07, siehe
+   * PROJEKTSTAND.md). Pr\u00fcft bei jedem Aufruf neu und verschiebt sich notfalls selbst alle
+   * CLEANUP_RETRY_MS - mit harter Obergrenze (DEVICE_QUIET_MS + 10s ab dem ERSTEN
+   * Verschiebungsversuch, nicht ab jedem Retry), damit ein Ger\u00e4t, das nie committed (z.B. tote
+   * MQTT-Instance ohne jede weitere Nachricht), den Sweep nicht dauerhaft blockiert.
+   */
+  attemptOrphanSweep() {
+    if (this.cleanupDoneOnce) {
+      return;
+    }
+    const pendingDevice = Array.from(this.deviceMap.values()).find((d) => !d.baseIdCommitted);
+    if (pendingDevice) {
+      if (this.cleanupDeadline === null) {
+        this.cleanupDeadline = Date.now() + this.DEVICE_QUIET_MS + 1e4;
+      }
+      if (Date.now() < this.cleanupDeadline) {
+        this.log.debug(
+          `Orphan sweep deferred: ${pendingDevice.type}/${pendingDevice.instance} still buffering (baseIdCommitted=false)`
+        );
+        this.cleanupTimer = this.setTimeout(() => {
+          this.cleanupTimer = null;
+          this.attemptOrphanSweep();
+        }, this.CLEANUP_RETRY_MS);
+        return;
+      }
+      this.log.info(
+        `Orphan sweep upper bound reached - running with ${pendingDevice.type}/${pendingDevice.instance} still uncommitted.`
+      );
+    }
+    this.cleanupDeadline = null;
+    void this.runOrphanSweep();
+  }
+  /**
+   * S16-Fix: Entfernt alle In-Memory-Cache-Eintr\u00e4ge, deren Schl\u00fcssel `id` selbst ist oder mit
+   * `${id}.` beginnt (channelReady, createdStates, lastValueCache, powerValueCache,
+   * cellValueCache, topicMap-stateIds). Muss nach JEDEM `delObjectAsync(id, {recursive:true})`
+   * auf ein Device-/Channel-Objekt aufgerufen werden (runOrphanSweep()-Pass 1-3, commitSerial()s
+   * Alt-Instanz-L\u00f6schung) - sonst h\u00e4lt z.B. channelReady/createdStates die gel\u00f6schte ID weiterhin
+   * f\u00fcr "angelegt", ein folgender setState() nimmt dann NICHT den Anlage-Pfad
+   * (setObjectNotExistsAsync davor), sondern schreibt blind auf ein nicht mehr existierendes
+   * Objekt ("has no existing object", zyklisch bei jeder weiteren Message).
+   *
+   * @param id Objekt-ID (Channel oder State), die soeben rekursiv gel\u00f6scht wurde
+   */
+  invalidateCachesForPrefix(id) {
+    const prefix = `${id}.`;
+    const matches = (key) => key === id || key.startsWith(prefix);
+    let removed = 0;
+    for (const key of this.channelReady) {
+      if (matches(key)) {
+        this.channelReady.delete(key);
+        removed++;
+      }
+    }
+    for (const key of this.createdStates) {
+      if (matches(key)) {
+        this.createdStates.delete(key);
+        removed++;
+      }
+    }
+    for (const key of this.lastValueCache.keys()) {
+      if (matches(key)) {
+        this.lastValueCache.delete(key);
+        removed++;
+      }
+    }
+    for (const key of this.powerValueCache.keys()) {
+      if (matches(key)) {
+        this.powerValueCache.delete(key);
+        removed++;
+      }
+    }
+    for (const key of this.cellValueCache.keys()) {
+      if (matches(key)) {
+        this.cellValueCache.delete(key);
+        removed++;
+      }
+    }
+    for (const dev of Object.values(this.topicMap)) {
+      for (const [normPath, entry] of Object.entries(dev.paths)) {
+        if (matches(entry.stateId)) {
+          delete dev.paths[normPath];
+          removed++;
+        }
+      }
+    }
+    if (removed > 0) {
+      this.log.debug(
+        `Cache invalidation: removed ${removed} cached entr${removed === 1 ? "y" : "ies"} for ${id}`
+      );
+    }
   }
   /**
    * L\u00f6scht alle outputs.<key>-Kan\u00e4le, deren (BaseId, OutputKey)-Kombination nicht mehr mit dem
@@ -1391,12 +1496,22 @@ class VictronGx extends utils.Adapter {
    * <Serial>-Ordner ab, deren Serial inzwischen unter einer ANDEREN BaseId aktiv ist - sowohl
    * gruppenlos\u2192Group- als auch Group\u2192Group-Umz\u00fcge (z.B. GX-seitiges Umh\u00e4ngen in eine andere
    * Group), siehe unten S10-Fix "groupless leftovers" + Group-migration-Erweiterung.
+   *
+   * S16-Fix: "aktive BaseId je Serial" wird jetzt NICHT mehr nur \u00fcber outputToInstance/
+   * findDeviceForOutput ermittelt (das erfasst nur Instances MIT Output), sondern \u00fcber ALLE
+   * DeviceInfo-Eintr\u00e4ge im deviceMap mit dieser Serial - als Set, nicht als Einzelwert. Grund:
+   * dieselbe Victron-Serial kann unter MEHREREN Typen/Instances parallel aktiv sein (z.B. ein
+   * physischer Schaltausgang als `switch.<Group>.<Serial>` MIT Output und gleichzeitig als reines
+   * Energiez\u00e4hler-Ger\u00e4t `acload.<Serial>` OHNE jeden Output) - beide BaseIds sind gleichzeitig
+   * aktiv und d\u00fcrfen nicht gegeneinander als "verwaist" gewertet werden. Die alte
+   * Einzelwert-Variante (`activeBaseIdBySerial.set(serial, baseId)`) lie\u00df den jeweils ZULETZT
+   * iterierten Output-Treffer gewinnen und l\u00f6schte dadurch die andere, weiterhin aktiv
+   * beschriebene BaseId.
    */
   async runOrphanSweep() {
     this.cleanupDoneOnce = true;
     this.log.info("Starting cleanup of orphaned output channels...");
     const activeKeys = /* @__PURE__ */ new Set();
-    const activeBaseIdBySerial = /* @__PURE__ */ new Map();
     for (const [serial, keyMap] of this.outputToInstance.entries()) {
       for (const [outputKey, route] of keyMap.entries()) {
         const device = this.findDeviceForOutput(serial, route.instance);
@@ -1406,8 +1521,33 @@ class VictronGx extends utils.Adapter {
         const baseId = this.getBaseId(device.type, device.instance, serial, device, true);
         if (baseId) {
           activeKeys.add(`${baseId}|${outputKey}`);
-          activeBaseIdBySerial.set(serial, baseId);
         }
+      }
+    }
+    const activeBaseIdsBySerial = /* @__PURE__ */ new Map();
+    for (const device of this.deviceMap.values()) {
+      if (!device.serial || !SUPPORTS_OUTPUTS.has(device.type)) {
+        continue;
+      }
+      const baseId = this.getBaseId(device.type, device.instance, device.serial, device, true);
+      if (!baseId) {
+        continue;
+      }
+      let set = activeBaseIdsBySerial.get(device.serial);
+      if (!set) {
+        set = /* @__PURE__ */ new Set();
+        activeBaseIdsBySerial.set(device.serial, set);
+      }
+      set.add(baseId);
+    }
+    for (const [serial, ids] of activeBaseIdsBySerial.entries()) {
+      if (ids.size > 1) {
+        const instances = Array.from(this.deviceMap.values()).filter((d) => d.serial === serial && SUPPORTS_OUTPUTS.has(d.type)).map((d) => `${d.type}/${d.instance}`);
+        this.log.info(
+          `Sweep: serial ${serial} has ${ids.size} active base paths at once (${Array.from(ids).join(
+            ", "
+          )}, instances: ${instances.join(", ")}) - keeping all of them.`
+        );
       }
     }
     let deletedOutputs = 0;
@@ -1427,7 +1567,7 @@ class VictronGx extends utils.Adapter {
         if (activeKeys.has(`${m[1]}|${m[2]}`)) {
           continue;
         }
-        await this.delObjectAsync(id, { recursive: true }).catch(() => {
+        await this.delObjectAsync(id, { recursive: true }).then(() => this.invalidateCachesForPrefix(id)).catch(() => {
         });
         deletedOutputs++;
       }
@@ -1438,14 +1578,11 @@ class VictronGx extends utils.Adapter {
           continue;
         }
         const serial = parts[parts.length - 1];
-        if (!this.outputToInstance.has(serial)) {
+        const activeBaseIds = activeBaseIdsBySerial.get(serial);
+        if (!activeBaseIds || activeBaseIds.size === 0 || activeBaseIds.has(id)) {
           continue;
         }
-        const activeBaseId = activeBaseIdBySerial.get(serial);
-        if (!activeBaseId || activeBaseId === id) {
-          continue;
-        }
-        await this.delObjectAsync(id, { recursive: true }).catch(() => {
+        await this.delObjectAsync(id, { recursive: true }).then(() => this.invalidateCachesForPrefix(id)).catch(() => {
         });
         deletedFolders++;
       }
@@ -1454,7 +1591,12 @@ class VictronGx extends utils.Adapter {
     }
     let deletedGroups = 0;
     try {
-      const activeBaseIds = new Set(activeBaseIdBySerial.values());
+      const activeBaseIds = /* @__PURE__ */ new Set();
+      for (const ids of activeBaseIdsBySerial.values()) {
+        for (const id of ids) {
+          activeBaseIds.add(id);
+        }
+      }
       const remaining = await this.getObjectListAsync({
         startkey: `${this.namespace}.devices.`,
         endkey: `${this.namespace}.devices.\u9999`
@@ -1473,7 +1615,7 @@ class VictronGx extends utils.Adapter {
         if (hasChildren) {
           continue;
         }
-        await this.delObjectAsync(id, { recursive: true }).catch(() => {
+        await this.delObjectAsync(id, { recursive: true }).then(() => this.invalidateCachesForPrefix(id)).catch(() => {
         });
         deletedGroups++;
       }
@@ -2633,7 +2775,10 @@ class VictronGx extends utils.Adapter {
     const deleteKey = `deleted:${oldId}`;
     if (type !== "system" && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
       this.loggedDevices.add(deleteKey);
-      void this.delObjectAsync(oldId, { recursive: true }).then(() => this.log.debug(`Old channel deleted: ${oldId}`)).catch(() => {
+      void this.delObjectAsync(oldId, { recursive: true }).then(() => {
+        this.invalidateCachesForPrefix(oldId);
+        this.log.debug(`Old channel deleted: ${oldId}`);
+      }).catch(() => {
       });
     }
   }
