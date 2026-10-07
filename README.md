@@ -286,7 +286,8 @@ iobroker object list | grep -oP 'victron-gx\.0\.devices\.switch\.[^.]+\.[^.]+\.(
 If you move a channel to a different group, disable a Shelly channel, or delete a Node-RED switch, its MQTT topic disappears – but the ioBroker objects stay behind. Enable **Remove orphaned channels on startup** (Main Settings tab, off by default) to have the adapter delete them automatically:
 
 - Runs once per adapter start, only after ~30 seconds without a newly-discovered channel (so multi-channel devices like the Shelly Pro3, whose instances report in at slightly different times, aren't affected mid-startup).
-- Only touches `outputs.<N>` channels. Device-level metadata, `Ac.*` measurements, and `overview.*` are never removed by this.
+- Removes `outputs.<N>` channels that are no longer active, and entire leftover device folders left behind by a group move (e.g. a channel that got its group assigned only after the adapter had already created it without one, or a Shelly channel moved from one group to another). `overview.*` is never touched by this.
+- A Victron serial shared by more than one service at once (e.g. a relay exposed as both `switch.*` and `acload.*`) is handled correctly – every currently active path for that serial is kept, even if only one of them has a group.
 - Leave it off if your devices are frequently offline – a channel that hasn't reported back yet by the time the sweep runs looks orphaned and would be deleted.
 
 ---

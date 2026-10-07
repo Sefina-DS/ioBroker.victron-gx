@@ -1605,6 +1605,68 @@ class VictronGx extends utils.Adapter {
     }
 
     /**
+     * S16-Fix: Entfernt alle In-Memory-Cache-Eintr\u00e4ge, deren Schl\u00fcssel `id` selbst ist oder mit
+     * `${id}.` beginnt (channelReady, createdStates, lastValueCache, powerValueCache,
+     * cellValueCache, topicMap-stateIds). Muss nach JEDEM `delObjectAsync(id, {recursive:true})`
+     * auf ein Device-/Channel-Objekt aufgerufen werden (runOrphanSweep()-Pass 1-3, commitSerial()s
+     * Alt-Instanz-L\u00f6schung) - sonst h\u00e4lt z.B. channelReady/createdStates die gel\u00f6schte ID weiterhin
+     * f\u00fcr "angelegt", ein folgender setState() nimmt dann NICHT den Anlage-Pfad
+     * (setObjectNotExistsAsync davor), sondern schreibt blind auf ein nicht mehr existierendes
+     * Objekt ("has no existing object", zyklisch bei jeder weiteren Message).
+     *
+     * @param id Objekt-ID (Channel oder State), die soeben rekursiv gel\u00f6scht wurde
+     */
+    private invalidateCachesForPrefix(id: string): void {
+        const prefix = `${id}.`;
+        const matches = (key: string): boolean => key === id || key.startsWith(prefix);
+
+        let removed = 0;
+        for (const key of this.channelReady) {
+            if (matches(key)) {
+                this.channelReady.delete(key);
+                removed++;
+            }
+        }
+        for (const key of this.createdStates) {
+            if (matches(key)) {
+                this.createdStates.delete(key);
+                removed++;
+            }
+        }
+        for (const key of this.lastValueCache.keys()) {
+            if (matches(key)) {
+                this.lastValueCache.delete(key);
+                removed++;
+            }
+        }
+        for (const key of this.powerValueCache.keys()) {
+            if (matches(key)) {
+                this.powerValueCache.delete(key);
+                removed++;
+            }
+        }
+        for (const key of this.cellValueCache.keys()) {
+            if (matches(key)) {
+                this.cellValueCache.delete(key);
+                removed++;
+            }
+        }
+        for (const dev of Object.values(this.topicMap)) {
+            for (const [normPath, entry] of Object.entries(dev.paths)) {
+                if (matches(entry.stateId)) {
+                    delete dev.paths[normPath];
+                    removed++;
+                }
+            }
+        }
+        if (removed > 0) {
+            this.log.debug(
+                `Cache invalidation: removed ${removed} cached entr${removed === 1 ? 'y' : 'ies'} for ${id}`,
+            );
+        }
+    }
+
+    /**
      * L\u00f6scht alle outputs.<key>-Kan\u00e4le, deren (BaseId, OutputKey)-Kombination nicht mehr mit dem
      * aktuellen outputToInstance-Zustand \u00fcbereinstimmt (Kanal umgruppiert, Ger\u00e4t entfernt/offline
      * deaktiviert). Betrifft ausschlie\u00dflich outputs.*-Objekte - Device-Level-Metadaten, Ac.*-
@@ -1613,16 +1675,24 @@ class VictronGx extends utils.Adapter {
      * <Serial>-Ordner ab, deren Serial inzwischen unter einer ANDEREN BaseId aktiv ist - sowohl
      * gruppenlos\u2192Group- als auch Group\u2192Group-Umz\u00fcge (z.B. GX-seitiges Umh\u00e4ngen in eine andere
      * Group), siehe unten S10-Fix "groupless leftovers" + Group-migration-Erweiterung.
+     *
+     * S16-Fix: "aktive BaseId je Serial" wird jetzt NICHT mehr nur \u00fcber outputToInstance/
+     * findDeviceForOutput ermittelt (das erfasst nur Instances MIT Output), sondern \u00fcber ALLE
+     * DeviceInfo-Eintr\u00e4ge im deviceMap mit dieser Serial - als Set, nicht als Einzelwert. Grund:
+     * dieselbe Victron-Serial kann unter MEHREREN Typen/Instances parallel aktiv sein (z.B. ein
+     * physischer Schaltausgang als `switch.<Group>.<Serial>` MIT Output und gleichzeitig als reines
+     * Energiez\u00e4hler-Ger\u00e4t `acload.<Serial>` OHNE jeden Output) - beide BaseIds sind gleichzeitig
+     * aktiv und d\u00fcrfen nicht gegeneinander als "verwaist" gewertet werden. Die alte
+     * Einzelwert-Variante (`activeBaseIdBySerial.set(serial, baseId)`) lie\u00df den jeweils ZULETZT
+     * iterierten Output-Treffer gewinnen und l\u00f6schte dadurch die andere, weiterhin aktiv
+     * beschriebene BaseId.
      */
     private async runOrphanSweep(): Promise<void> {
         this.cleanupDoneOnce = true;
         this.log.info('Starting cleanup of orphaned output channels...');
 
-        // Aktive (BaseId, OutputKey)-Kombinationen aus dem laufenden outputToInstance-Zustand, plus
-        // (fuer Pass 2) die aktuelle BaseId je Serial - ein Serial hat h\u00f6chstens eine BaseId, alle
-        // seine OutputKeys teilen sich dieselbe Group/kein-Group-Entscheidung.
+        // Aktive (BaseId, OutputKey)-Kombinationen aus dem laufenden outputToInstance-Zustand (Pass 1).
         const activeKeys = new Set<string>();
-        const activeBaseIdBySerial = new Map<string, string>();
         for (const [serial, keyMap] of this.outputToInstance.entries()) {
             for (const [outputKey, route] of keyMap.entries()) {
                 const device = this.findDeviceForOutput(serial, route.instance);
@@ -1632,8 +1702,40 @@ class VictronGx extends utils.Adapter {
                 const baseId = this.getBaseId(device.type, device.instance, serial, device, true);
                 if (baseId) {
                     activeKeys.add(`${baseId}|${outputKey}`);
-                    activeBaseIdBySerial.set(serial, baseId);
                 }
+            }
+        }
+
+        // S16-Fix: alle aktuell aktiven BaseIds je Serial (fuer Pass 2+3) - ueber ALLE
+        // DeviceInfo-Eintraege im deviceMap mit dieser Serial, nicht nur ueber outputToInstance
+        // (siehe Klassenkommentar oben). Eine Serial kann mehrere gleichzeitig aktive BaseIds haben
+        // (z.B. switch.<Group>.<Serial> MIT Output + acload.<Serial> OHNE Output).
+        const activeBaseIdsBySerial = new Map<string, Set<string>>();
+        for (const device of this.deviceMap.values()) {
+            if (!device.serial || !SUPPORTS_OUTPUTS.has(device.type)) {
+                continue;
+            }
+            const baseId = this.getBaseId(device.type, device.instance, device.serial, device, true);
+            if (!baseId) {
+                continue;
+            }
+            let set = activeBaseIdsBySerial.get(device.serial);
+            if (!set) {
+                set = new Set();
+                activeBaseIdsBySerial.set(device.serial, set);
+            }
+            set.add(baseId);
+        }
+        for (const [serial, ids] of activeBaseIdsBySerial.entries()) {
+            if (ids.size > 1) {
+                const instances = Array.from(this.deviceMap.values())
+                    .filter(d => d.serial === serial && SUPPORTS_OUTPUTS.has(d.type))
+                    .map(d => `${d.type}/${d.instance}`);
+                this.log.info(
+                    `Sweep: serial ${serial} has ${ids.size} active base paths at once (${Array.from(ids).join(
+                        ', ',
+                    )}, instances: ${instances.join(', ')}) - keeping all of them.`,
+                );
             }
         }
 
@@ -1664,21 +1766,20 @@ class VictronGx extends utils.Adapter {
                 if (activeKeys.has(`${m[1]}|${m[2]}`)) {
                     continue;
                 }
-                await this.delObjectAsync(id, { recursive: true }).catch(() => {});
+                await this.delObjectAsync(id, { recursive: true })
+                    .then(() => this.invalidateCachesForPrefix(id))
+                    .catch(() => {});
                 deletedOutputs++;
             }
 
             // Pass 2: devices.<type>.<Serial>-Ordner (gruppenlos) UND devices.<type>.<Group>.<Serial>-
-            // Ordner (gruppiert), deren Serial mittlerweile unter einer ANDEREN BaseId aktiv ist -
-            // Karteileichen sowohl aus der Zeit vor S14 (gruppenlos \u2192 Group) als auch aus echten
-            // Group-zu-Group-Umz\u00fcgen am GX (z.B. Shelly von "Shelly_Test" nach "Shelly_Test_2"
-            // verschoben). Ein Serial hat laut activeBaseIdBySerial genau eine aktuell aktive BaseId
-            // (getBaseId liefert genau einen Pfad je Serial) - jeder andere gefundene Device-Folder
-            // mit derselben Serial im letzten Pfadsegment ist per Definition ein Umzugs-Rest. Bewusst
-            // auf SUPPORTS_OUTPUTS beschr\u00e4nkt (nur diese Typen kennen \u00fcberhaupt Group/BaseId-
-            // Migration \u00fcber outputToInstance) und auf Serials, die outputToInstance kennt - Ger\u00e4te
-            // ohne jede SwitchableOutput-Aktivit\u00e4t (z.B. reine Ac.*-Messger\u00e4te ohne Output) bleiben
-            // au\u00dferhalb dieses Sweeps (bekannte Grenze \u00a710.6, siehe README).
+            // Ordner (gruppiert), deren Serial mittlerweile unter KEINER aktuell aktiven BaseId mehr
+            // aktiv ist - Karteileichen sowohl aus der Zeit vor S14 (gruppenlos \u2192 Group) als auch aus
+            // echten Group-zu-Group-Umz\u00fcgen am GX (z.B. Shelly von "Shelly_Test" nach "Shelly_Test_2"
+            // verschoben). S16-Fix: eine Serial kann MEHRERE gleichzeitig aktive BaseIds haben (siehe
+            // activeBaseIdsBySerial/Klassenkommentar oben) - nur l\u00f6schen, wenn `id` in KEINER davon
+            // vorkommt. Ist die Serial \u00fcberhaupt nicht in deviceMap bekannt (Ger\u00e4t diese Session nie
+            // gesehen), lieber nichts anfassen (konservativ).
             for (const obj of allObjects.rows) {
                 const id = obj.id.replace(`${this.namespace}.`, '');
                 const parts = id.split('.');
@@ -1690,17 +1791,17 @@ class VictronGx extends utils.Adapter {
                     continue;
                 }
                 const serial = parts[parts.length - 1];
-                if (!this.outputToInstance.has(serial)) {
+                const activeBaseIds = activeBaseIdsBySerial.get(serial);
+                // Haertung: ein leeres Set wird wie ein fehlendes behandelt (konservativ ueberspringen)
+                // - kann nach aktuellem Aufbau von activeBaseIdsBySerial nicht vorkommen (ein Set wird
+                // nur erzeugt UND im selben Schritt befuellt), schuetzt aber gegen eine kuenftige
+                // Aenderung an dieser Konstruktion, die das Set versehentlich leer im Map belaesst.
+                if (!activeBaseIds || activeBaseIds.size === 0 || activeBaseIds.has(id)) {
                     continue;
                 }
-                const activeBaseId = activeBaseIdBySerial.get(serial);
-                // Ohne aufl\u00f6sbare aktive BaseId (z.B. findDeviceForOutput schl\u00e4gt fehl) lieber nichts
-                // anfassen (konservativ) - und der Sonderfall "Serial hatte nie eine Group" ist \u00fcber
-                // den Gleichheitsvergleich automatisch gesch\u00fctzt (siehe Funktionskommentar oben).
-                if (!activeBaseId || activeBaseId === id) {
-                    continue;
-                }
-                await this.delObjectAsync(id, { recursive: true }).catch(() => {});
+                await this.delObjectAsync(id, { recursive: true })
+                    .then(() => this.invalidateCachesForPrefix(id))
+                    .catch(() => {});
                 deletedFolders++;
             }
         } catch (e) {
@@ -1719,12 +1820,17 @@ class VictronGx extends utils.Adapter {
         // (devices.<type>.<Serial>) sehen syntaktisch identisch aus - beide genau 3 Segmente. Die
         // beiden werden über denselben BaseId-Vergleich wie in Pass 2 unterschieden: <GroupName>
         // bzw. <Serial> ist genau dann ein gruppenloser, aktiver Serial-Ordner, wenn die ID selbst
-        // in activeBaseIdBySerial auftaucht - der bleibt unangetastet, unabhängig von seiner
-        // Kinderzahl. Alles andere mit 0 verbleibenden Kindern ist ein Group-Container, der leer
-        // geworden ist.
+        // in activeBaseIdsBySerial (ueber alle Serials vereinigt) auftaucht - der bleibt unangetastet,
+        // unabhängig von seiner Kinderzahl. Alles andere mit 0 verbleibenden Kindern ist ein
+        // Group-Container, der leer geworden ist.
         let deletedGroups = 0;
         try {
-            const activeBaseIds = new Set(activeBaseIdBySerial.values());
+            const activeBaseIds = new Set<string>();
+            for (const ids of activeBaseIdsBySerial.values()) {
+                for (const id of ids) {
+                    activeBaseIds.add(id);
+                }
+            }
             const remaining = await this.getObjectListAsync({
                 startkey: `${this.namespace}.devices.`,
                 endkey: `${this.namespace}.devices.香`,
@@ -1743,7 +1849,9 @@ class VictronGx extends utils.Adapter {
                 if (hasChildren) {
                     continue;
                 }
-                await this.delObjectAsync(id, { recursive: true }).catch(() => {});
+                await this.delObjectAsync(id, { recursive: true })
+                    .then(() => this.invalidateCachesForPrefix(id))
+                    .catch(() => {});
                 deletedGroups++;
             }
         } catch (e) {
@@ -3167,7 +3275,10 @@ class VictronGx extends utils.Adapter {
         if (type !== 'system' && oldId !== newId && !this.loggedDevices.has(deleteKey)) {
             this.loggedDevices.add(deleteKey);
             void this.delObjectAsync(oldId, { recursive: true })
-                .then(() => this.log.debug(`Old channel deleted: ${oldId}`))
+                .then(() => {
+                    this.invalidateCachesForPrefix(oldId);
+                    this.log.debug(`Old channel deleted: ${oldId}`);
+                })
                 .catch(() => {});
         }
     }
