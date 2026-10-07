@@ -137,8 +137,11 @@ function newAdapter(seedObjects) {
 
 // Minimaler DeviceInfo-Eintrag - runOrphanSweep()/getBaseId() lesen nur type/instance/serial/group,
 // alle anderen DeviceInfo-Felder sind für diesen Test irrelevant (kein MQTT-Replay beteiligt).
+// baseIdCommitted defaultet auf true (Normalfall für alle Typen außer DEVICE_GROUP_RACE_TYPES
+// während der S14-Pufferung) - Szenario 4/5 überschreiben es gezielt auf false für das jeweils
+// "hängende" Gerät, siehe attemptOrphanSweep()-Härtung.
 function device(type, instance, serial, group) {
-    return { type, instance, serial, group: group || '' };
+    return { type, instance, serial, group: group || '', baseIdCommitted: true };
 }
 
 const failures = [];
@@ -242,10 +245,115 @@ async function scenarioGenuineOrphanRemoved() {
     );
 }
 
+async function scenarioDeferredUntilCommitted() {
+    console.log(
+        '\n########## Szenario 4: Sweep wird verschoben, solange ein Gerät noch baseIdCommitted=false hat ##########',
+    );
+    const serial = 'PENDING222';
+    const staleFolder = 'devices.switch.PENDING222';
+    const activeFolder = 'devices.switch.SomeGroup.PENDING222';
+    const adapter = newAdapter([
+        [staleFolder, { type: 'channel', common: { name: 'Switch' }, native: {} }],
+        [
+            `${staleFolder}.info.connected`,
+            { type: 'state', common: { name: 'Connected', type: 'boolean' }, native: {} },
+        ],
+        [activeFolder, { type: 'channel', common: { name: 'Switch' }, native: {} }],
+        [
+            `${activeFolder}.info.connected`,
+            { type: 'state', common: { name: 'Connected', type: 'boolean' }, native: {} },
+        ],
+    ]);
+    adapter.deviceMap.set('switch/80', device('switch', 80, serial, 'SomeGroup'));
+    // Ein ANDERES Gerät (beliebige Serial/Typ) hängt noch im S14-Puffer - muss den Sweep global
+    // verschieben, nicht nur für seine eigene Serial (siehe attemptOrphanSweep()).
+    const pendingDevice = device('acload', 81, '', '');
+    pendingDevice.baseIdCommitted = false;
+    adapter.deviceMap.set('acload/81', pendingDevice);
+    // Cache-Vergiftung wie in Szenario 3 - der Alt-Ordner wäre ohne die Härtung ein valider
+    // Lösch-Kandidat.
+    adapter.channelReady.add(staleFolder);
+    adapter.createdStates.add(`${staleFolder}.info.connected`);
+
+    adapter.attemptOrphanSweep();
+
+    check('Sweep läuft NICHT, solange ein Gerät noch baseIdCommitted=false hat', !adapter.cleanupDoneOnce);
+    check('Ordner bleibt während der Verschiebung unangetastet', adapter.objects.has(staleFolder));
+    const hasDeferredLog = adapter.logs.some(
+        ([lvl, m]) => lvl === 'debug' && typeof m === 'string' && m.includes('deferred'),
+    );
+    check('Debug-Log beim Verschieben', hasDeferredLog);
+
+    // Verschiebungs-Timer aufräumen, bevor wir den Retry manuell simulieren (kein reales 5s-Warten
+    // nötig - derselbe Zugriff auf cleanupTimer wie onUnload() ihn nutzt).
+    if (adapter.cleanupTimer) {
+        adapter.clearTimeout(adapter.cleanupTimer);
+        adapter.cleanupTimer = null;
+    }
+
+    pendingDevice.baseIdCommitted = true;
+    adapter.attemptOrphanSweep();
+    // attemptOrphanSweep() ruft runOrphanSweep() nur "void" (fire-and-forget) auf - kurz auf dessen
+    // Abschluss warten, bevor wir das Ergebnis prüfen.
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    check('Sweep läuft, nachdem alle Geräte committed sind', adapter.cleanupDoneOnce);
+    check('gruppenloser Alt-Ordner wird jetzt entfernt', !adapter.objects.has(staleFolder));
+}
+
+async function scenarioUpperBoundOverride() {
+    console.log(
+        '\n########## Szenario 5: Obergrenze erzwingt den Sweep trotz weiterhin unresolved Gerät ##########',
+    );
+    const serial = 'STUCK333';
+    const staleFolder = 'devices.switch.STUCK333';
+    const activeFolder = 'devices.switch.SomeGroup.STUCK333';
+    const adapter = newAdapter([
+        [staleFolder, { type: 'channel', common: { name: 'Switch' }, native: {} }],
+        [
+            `${staleFolder}.info.connected`,
+            { type: 'state', common: { name: 'Connected', type: 'boolean' }, native: {} },
+        ],
+        [activeFolder, { type: 'channel', common: { name: 'Switch' }, native: {} }],
+        [
+            `${activeFolder}.info.connected`,
+            { type: 'state', common: { name: 'Connected', type: 'boolean' }, native: {} },
+        ],
+    ]);
+    adapter.deviceMap.set('switch/90', device('switch', 90, serial, 'SomeGroup'));
+    const stuckDevice = device('acload', 91, '', '');
+    stuckDevice.baseIdCommitted = false;
+    adapter.deviceMap.set('acload/91', stuckDevice);
+    adapter.channelReady.add(staleFolder);
+    adapter.createdStates.add(`${staleFolder}.info.connected`);
+
+    adapter.attemptOrphanSweep();
+    check('Deadline wurde beim ersten Verschiebungsversuch gesetzt', adapter.cleanupDeadline !== null);
+    if (adapter.cleanupTimer) {
+        adapter.clearTimeout(adapter.cleanupTimer);
+        adapter.cleanupTimer = null;
+    }
+
+    // Obergrenze simulieren, ohne real DEVICE_QUIET_MS+10s zu warten - das Gerät bleibt bewusst
+    // unresolved (baseIdCommitted bleibt false).
+    adapter.cleanupDeadline = Date.now() - 1000;
+    adapter.attemptOrphanSweep();
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    check('Sweep läuft trotz weiterhin unresolved Gerät, sobald die Obergrenze erreicht ist', adapter.cleanupDoneOnce);
+    check('gruppenloser Alt-Ordner wird entfernt (Obergrenze hat gegriffen)', !adapter.objects.has(staleFolder));
+    const hasUpperBoundLog = adapter.logs.some(
+        ([lvl, m]) => lvl === 'info' && typeof m === 'string' && m.includes('upper bound'),
+    );
+    check('Info-Log wenn die Obergrenze greift', hasUpperBoundLog);
+}
+
 async function main() {
     await scenarioSplitSerialKept();
     await scenarioUnknownSerialKept();
     await scenarioGenuineOrphanRemoved();
+    await scenarioDeferredUntilCommitted();
+    await scenarioUpperBoundOverride();
 
     console.log(`\n${'='.repeat(60)}`);
     if (failures.length > 0) {
@@ -255,7 +363,7 @@ async function main() {
         }
         process.exitCode = 1;
     } else {
-        console.log('\n✅ Alle Checks OK (Szenarien 1-3).');
+        console.log('\n✅ Alle Checks OK (Szenarien 1-5).');
     }
 }
 

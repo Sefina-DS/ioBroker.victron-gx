@@ -1265,10 +1265,17 @@ class VictronGx extends utils.Adapter {
     private cleanupEnabled = false;
     private cleanupTimer: ioBroker.Timeout | null | undefined = null;
     private cleanupDoneOnce = false;
+    // S16-Fix Teil 2: gesetzt beim ersten Verschiebungsversuch (attemptOrphanSweep()), harte
+    // Obergrenze dafür - null, solange kein Verschiebungszyklus läuft.
+    private cleanupDeadline: number | null = null;
     // Ruhezeit: Sweep läuft erst, wenn seit dem letzten neu erkannten Kanal in outputToInstance
     // mindestens so lange nichts mehr reinkam - schützt Multi-Instance-Devices (Shelly Pro3),
     // deren Instances zeitlich gestaffelt reinkommen (§10.1).
     private readonly CLEANUP_QUIET_MS = 30_000;
+    // S16-Fix Teil 2: Wiederhol-Intervall, solange attemptOrphanSweep() auf ausstehende
+    // S14-Geräte-Commits wartet (siehe dort) - bewusst kurz, da nur ein Re-Check, kein Warten auf
+    // neue MQTT-Aktivität wie bei CLEANUP_QUIET_MS.
+    private readonly CLEANUP_RETRY_MS = 5_000;
     // S13: Key "<serial>|<outputKey>" -> noch nicht committeter Kanal (siehe PendingOutput).
     private pendingOutputs: Map<string, PendingOutput> = new Map();
     // Max. Wartezeit auf Settings/Group nach dem ersten Wert eines neuen Kanals, bevor ohne
@@ -1589,7 +1596,8 @@ class VictronGx extends utils.Adapter {
     /**
      * Wird bei jedem neu erkannten Output-Kanal aufgerufen (Message-Handler) sowie initial nach
      * dem Subscribe. Setzt den Ruhezeit-Timer zur\u00fcck; erst wenn CLEANUP_QUIET_MS ohne neuen Kanal
-     * verstrichen sind, l\u00e4uft der Sweep - aber nur einmal pro Adapter-Start.
+     * verstrichen sind, wird ein Sweep-Versuch unternommen (attemptOrphanSweep()) - aber nur einmal
+     * pro Adapter-Start (cleanupDoneOnce).
      */
     private armCleanupTimer(): void {
         if (!this.cleanupEnabled || this.cleanupDoneOnce) {
@@ -1600,8 +1608,46 @@ class VictronGx extends utils.Adapter {
         }
         this.cleanupTimer = this.setTimeout(() => {
             this.cleanupTimer = null;
-            void this.runOrphanSweep();
+            this.attemptOrphanSweep();
         }, this.CLEANUP_QUIET_MS);
+    }
+
+    /**
+     * S16-Fix Teil 2: Startet runOrphanSweep() erst, wenn kein DeviceInfo im deviceMap mehr
+     * baseIdCommitted===false hat (siehe DEVICE_GROUP_RACE_TYPES/bufferDeviceMessage()) - solange
+     * ein Ger\u00e4t noch im S14-Puffer h\u00e4ngt, kennt runOrphanSweep() dessen k\u00fcnftige Serial/BaseId
+     * noch nicht und k\u00f6nnte einen zu dieser Serial geh\u00f6renden, aus einer fr\u00fcheren Session
+     * persistierten Ordner f\u00e4lschlich als verwaist werten (Live-Fund 2026-10-07, siehe
+     * PROJEKTSTAND.md). Pr\u00fcft bei jedem Aufruf neu und verschiebt sich notfalls selbst alle
+     * CLEANUP_RETRY_MS - mit harter Obergrenze (DEVICE_QUIET_MS + 10s ab dem ERSTEN
+     * Verschiebungsversuch, nicht ab jedem Retry), damit ein Ger\u00e4t, das nie committed (z.B. tote
+     * MQTT-Instance ohne jede weitere Nachricht), den Sweep nicht dauerhaft blockiert.
+     */
+    private attemptOrphanSweep(): void {
+        if (this.cleanupDoneOnce) {
+            return;
+        }
+        const pendingDevice = Array.from(this.deviceMap.values()).find(d => !d.baseIdCommitted);
+        if (pendingDevice) {
+            if (this.cleanupDeadline === null) {
+                this.cleanupDeadline = Date.now() + this.DEVICE_QUIET_MS + 10_000;
+            }
+            if (Date.now() < this.cleanupDeadline) {
+                this.log.debug(
+                    `Orphan sweep deferred: ${pendingDevice.type}/${pendingDevice.instance} still buffering (baseIdCommitted=false)`,
+                );
+                this.cleanupTimer = this.setTimeout(() => {
+                    this.cleanupTimer = null;
+                    this.attemptOrphanSweep();
+                }, this.CLEANUP_RETRY_MS);
+                return;
+            }
+            this.log.info(
+                `Orphan sweep upper bound reached - running with ${pendingDevice.type}/${pendingDevice.instance} still uncommitted.`,
+            );
+        }
+        this.cleanupDeadline = null;
+        void this.runOrphanSweep();
     }
 
     /**
